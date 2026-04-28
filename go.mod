@@ -10,7 +10,7 @@ require (
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/fsnotify/fsnotify v1.9.0
-	golang.org/x/term v0.41.0
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -44,5 +44,6 @@ require (
 	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/term v0.41.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
 )
