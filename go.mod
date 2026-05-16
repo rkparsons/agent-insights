@@ -11,6 +11,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
+	github.com/vito/midterm v0.2.4
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -42,7 +43,6 @@ require (
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/vito/midterm v0.2.4 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yuin/goldmark v1.7.13 // indirect
 	github.com/yuin/goldmark-emoji v1.0.6 // indirect
