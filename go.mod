@@ -8,12 +8,12 @@ require (
 	charm.land/lipgloss/v2 v2.0.1
 	github.com/charmbracelet/colorprofile v0.4.2
 	github.com/charmbracelet/glamour v1.0.0
+	github.com/charmbracelet/ultraviolet v0.0.0-20260303162955-0b88c25f3fff
 	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/charmbracelet/x/vt v0.0.0-20260309091332-e8ca31595cc4
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/lucasb-eyer/go-colorful v1.3.0
-	github.com/vito/midterm v0.2.4
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -23,7 +23,6 @@ require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834 // indirect
-	github.com/charmbracelet/ultraviolet v0.0.0-20260303162955-0b88c25f3fff // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
 	github.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf // indirect
@@ -32,10 +31,6 @@ require (
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
-	github.com/danielgatis/go-ansicode v1.0.7 // indirect
-	github.com/danielgatis/go-iterator v0.0.1 // indirect
-	github.com/danielgatis/go-utf8 v1.0.0 // indirect
-	github.com/danielgatis/go-vte v1.0.8 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
