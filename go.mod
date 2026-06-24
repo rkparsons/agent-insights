@@ -11,6 +11,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
+	github.com/lucasb-eyer/go-colorful v1.3.0
 	github.com/vito/midterm v0.2.4
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -35,7 +36,6 @@ require (
 	github.com/danielgatis/go-vte v1.0.8 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
-	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.20 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
