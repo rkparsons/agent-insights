@@ -17,6 +17,12 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+// Local patched copy of bubbletea v2.0.2: scroll optimization force-disabled
+// to stop the renderer dragging the static left column when the right preview
+// column scrolls. Single behavioral change in cursed_renderer.go; see
+// third_party/bubbletea/README.md for the patch + update procedure.
+replace charm.land/bubbletea/v2 => ./third_party/bubbletea
+
 require (
 	github.com/alecthomas/chroma/v2 v2.20.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
