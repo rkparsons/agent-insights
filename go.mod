@@ -1,4 +1,4 @@
-module terminal-app
+module tmux-ctrl
 
 go 1.26
 
