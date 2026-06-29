@@ -76,6 +76,7 @@ type RepoResolver func(cwd string) string
 
 // Result is the output of Extract.
 type Result struct {
-	Reduced ReducedInput
-	Stats   FacetStats
+	Reduced  ReducedInput
+	Stats    FacetStats
+	Verbatim VerbatimIndex
 }

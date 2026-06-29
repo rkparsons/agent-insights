@@ -7,10 +7,12 @@ import "tmux-ctrl/internal/sources/claude"
 // stats. repo resolves the cwd to a repo identity.
 func Extract(events []claude.TranscriptEvent, canary claude.Canary, sessionID string, repo RepoResolver) Result {
 	sb := newStatsBuilder(sessionID, repo)
+	var vb verbatimBuilder
 	for _, ev := range events {
 		sb.add(ev)
+		vb.add(ev)
 	}
 	stats := sb.finish()
 	stats.Canary = canary
-	return Result{Stats: stats}
+	return Result{Stats: stats, Verbatim: vb.finish()}
 }
