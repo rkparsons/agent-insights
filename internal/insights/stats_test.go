@@ -70,3 +70,31 @@ func TestToolsAttributionEdits(t *testing.T) {
 		t.Fatalf("edits=%d +%d -%d files=%v", s.Edits, s.LinesAdded, s.LinesRemoved, s.FilesTouched)
 	}
 }
+
+func TestFrictionClassification(t *testing.T) {
+	rej := `The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit). To tell you how to proceed, the user said: use the other file`
+	rejNoReason := `The user doesn't want to proceed with this tool use. The tool use was rejected. STOP what you are doing and wait for the user to tell you how to proceed.`
+	in := `{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"boom: file not found"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"` + rej + `"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"` + rejNoReason + `"}]}}
+{"type":"user","message":{"content":[{"type":"text","text":"[Request interrupted by user]"}]}}
+{"type":"user","message":{"content":"please do X"}}
+{"type":"user","message":{"content":[{"type":"text","text":"<task-notification>\n<task-id>x</task-id>\nresult body"}]}}
+{"type":"user","message":{"content":[{"type":"text","text":"<system-reminder>ignore me"}]}}`
+	s := runExtract(t, in, noRepo).Stats
+	if s.ToolErrors != 1 {
+		t.Fatalf("ToolErrors = %d, want 1 (rejections excluded)", s.ToolErrors)
+	}
+	if s.Rejections != 2 {
+		t.Fatalf("Rejections = %d, want 2", s.Rejections)
+	}
+	if s.Interrupts != 1 {
+		t.Fatalf("Interrupts = %d, want 1", s.Interrupts)
+	}
+	if s.UserTurns != 1 {
+		t.Fatalf("UserTurns = %d, want 1 (synthetic/task-notif/rejection/interrupt excluded)", s.UserTurns)
+	}
+	if s.TaskNotifications != 1 {
+		t.Fatalf("TaskNotifications = %d, want 1", s.TaskNotifications)
+	}
+}

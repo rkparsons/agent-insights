@@ -49,6 +49,12 @@ type statsBuilder struct {
 	linesAdded     int
 	linesRemoved   int
 	filesSet       map[string]bool
+
+	toolErrors        int
+	rejections        int
+	interrupts        int
+	userTurns         int
+	taskNotifications int
 }
 
 func newStatsBuilder(sessionID string, repo RepoResolver) *statsBuilder {
@@ -104,6 +110,10 @@ func (b *statsBuilder) add(ev claude.TranscriptEvent) {
 		}
 	}
 
+	if ev.Type == "user" && ev.Message != nil {
+		b.addUserEvent(ev.Message)
+	}
+
 	if ev.ToolUseResult != nil && len(ev.ToolUseResult.StructuredPatch) > 0 {
 		if ev.ToolUseResult.FilePath != "" {
 			b.filesSet[ev.ToolUseResult.FilePath] = true
@@ -118,6 +128,50 @@ func (b *statsBuilder) add(ev claude.TranscriptEvent) {
 				}
 			}
 		}
+	}
+}
+
+// addUserEvent classifies a user line's blocks. Friction lives here: is_error
+// tool_results split into interrupt / rejection / genuine error; interrupt text
+// blocks (is_error-absent) counted too; real user prose counted once, excluding
+// synthetic/injected content, task-notifications, rejections, and interrupts.
+func (b *statsBuilder) addUserEvent(m *claude.Message) {
+	var textParts []string
+	for _, blk := range m.Content {
+		switch blk.Type {
+		case "tool_result":
+			body := blk.ToolResult
+			if blk.HasIsError && blk.IsError {
+				switch {
+				case isInterruptText(body):
+					b.interrupts++
+				case isRejectionText(body):
+					b.rejections++
+				default:
+					b.toolErrors++
+				}
+			} else if isInterruptText(body) {
+				b.interrupts++
+			}
+		case "text":
+			textParts = append(textParts, blk.Text)
+		}
+	}
+	joined := strings.TrimSpace(strings.Join(textParts, "\n"))
+	if joined == "" {
+		return
+	}
+	switch {
+	case isTaskNotification(joined):
+		b.taskNotifications++
+	case isInterruptText(joined):
+		b.interrupts++
+	case isRejectionText(joined):
+		b.rejections++
+	case isSyntheticUserText(joined):
+		// injected pseudo-user content: dropped
+	default:
+		b.userTurns++
 	}
 }
 
@@ -193,5 +247,11 @@ func (b *statsBuilder) finish() FacetStats {
 	s.LinesAdded = b.linesAdded
 	s.LinesRemoved = b.linesRemoved
 	s.FilesTouched = sortedKeys(b.filesSet)
+
+	s.ToolErrors = b.toolErrors
+	s.Rejections = b.rejections
+	s.Interrupts = b.interrupts
+	s.UserTurns = b.userTurns
+	s.TaskNotifications = b.taskNotifications
 	return s
 }
