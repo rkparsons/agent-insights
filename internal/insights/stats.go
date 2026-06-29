@@ -55,6 +55,8 @@ type statsBuilder struct {
 	interrupts        int
 	userTurns         int
 	taskNotifications int
+
+	userTurnFingerprints []string
 }
 
 func newStatsBuilder(sessionID string, repo RepoResolver) *statsBuilder {
@@ -172,6 +174,9 @@ func (b *statsBuilder) addUserEvent(m *claude.Message) {
 		// injected pseudo-user content: dropped
 	default:
 		b.userTurns++
+		if norm := normalizeFingerprintText(joined); !isTrivialTurn(norm) {
+			b.userTurnFingerprints = append(b.userTurnFingerprints, fingerprint(norm))
+		}
 	}
 }
 
@@ -253,5 +258,6 @@ func (b *statsBuilder) finish() FacetStats {
 	s.Interrupts = b.interrupts
 	s.UserTurns = b.userTurns
 	s.TaskNotifications = b.taskNotifications
+	s.UserTurnFingerprints = b.userTurnFingerprints
 	return s
 }

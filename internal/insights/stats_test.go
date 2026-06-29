@@ -98,3 +98,21 @@ func TestFrictionClassification(t *testing.T) {
 		t.Fatalf("TaskNotifications = %d, want 1", s.TaskNotifications)
 	}
 }
+
+func TestUserTurnFingerprints(t *testing.T) {
+	in := `{"type":"user","message":{"content":"Implement the parser for the config file please"}}
+{"type":"user","message":{"content":"yes"}}
+{"type":"user","message":{"content":"continue"}}
+{"type":"user","message":{"content":"Now also handle the error case in the loader"}}`
+	s := runExtract(t, in, noRepo).Stats
+	if len(s.UserTurnFingerprints) != 2 {
+		t.Fatalf("fingerprints = %d, want 2 (trivial 'yes'/'continue' skipped): %v", len(s.UserTurnFingerprints), s.UserTurnFingerprints)
+	}
+	if s.UserTurns != 4 {
+		t.Fatalf("UserTurns = %d, want 4 (trivial turns still count as turns)", s.UserTurns)
+	}
+	s2 := runExtract(t, in, noRepo).Stats
+	if s.UserTurnFingerprints[0] != s2.UserTurnFingerprints[0] {
+		t.Fatalf("fingerprint not stable/content-derived across sessions")
+	}
+}
