@@ -1,0 +1,55 @@
+{
+  "SessionID": "frictionful",
+  "Repo": "",
+  "Cwd": "/repo/app",
+  "GitBranch": "feat/x",
+  "Version": "2.1.195",
+  "AiTitle": "",
+  "Start": "2026-06-29T10:00:00Z",
+  "End": "2026-06-29T10:02:30Z",
+  "WallClock": 150000000000,
+  "ModelMix": {
+    "claude-opus-4-8": 2
+  },
+  "Tokens": {
+    "Input": 410,
+    "Output": 140,
+    "CacheCreation": 25,
+    "CacheReadPeak": 3100
+  },
+  "ToolCounts": {
+    "Bash": 1,
+    "Edit": 1
+  },
+  "ToolErrors": 1,
+  "Edits": 1,
+  "Writes": 0,
+  "LinesAdded": 0,
+  "LinesRemoved": 0,
+  "FilesTouched": null,
+  "SubagentFanout": 0,
+  "Skills": null,
+  "Plugins": null,
+  "Subagents": null,
+  "UserTurns": 2,
+  "AssistantTurns": 2,
+  "Interrupts": 1,
+  "Rejections": 1,
+  "TaskNotifications": 0,
+  "UserTurnFingerprints": [
+    "61b18f92d2a4544e",
+    "c839e92bec42ec65"
+  ],
+  "Canary": {
+    "UnknownLineTypes": {},
+    "UnknownBlockTypes": {},
+    "MalformedFields": {},
+    "MissingFields": {},
+    "OverlongLines": 0,
+    "VersionsSeen": [
+      "2.1.195"
+    ],
+    "Samples": null,
+    "Version": "2.1.195"
+  }
+}

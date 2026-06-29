@@ -1,0 +1,11 @@
+Session: clean_sh
+Title: (none)
+Project: /repo/app   Branch: main
+Duration: 1 min   Models: claude-opus-4-8
+User turns: 1   Assistant turns: 2   Tool errors: 0   Interrupts: 0   Rejections: 0
+Top tools: Read=1
+---
+[User]: What does the config loader do?
+[Assistant]: It reads YAML from ~/.config and validates it.
+[Tool: Read /repo/app/config.go]
+[Assistant]: Done — it loads config.yaml and validates required keys.

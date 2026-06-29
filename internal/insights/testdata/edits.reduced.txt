@@ -1,0 +1,10 @@
+Session: edits
+Title: (none)
+Project: /repo/app   Branch: feat/y
+Duration: 1 min   Models: claude-opus-4-8
+User turns: 1   Assistant turns: 2   Tool errors: 0   Interrupts: 0   Rejections: 0
+Top tools: Edit=1, Write=1
+---
+[User]: Create a logger and wire it into main
+[Tool: Write /repo/app/log.go]
+[Tool: Edit /repo/app/main.go]

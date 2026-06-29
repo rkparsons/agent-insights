@@ -1,0 +1,55 @@
+{
+  "SessionID": "task_notification",
+  "Repo": "",
+  "Cwd": "/repo/app",
+  "GitBranch": "main",
+  "Version": "2.1.195",
+  "AiTitle": "",
+  "Start": "2026-06-29T11:00:00Z",
+  "End": "2026-06-29T11:05:30Z",
+  "WallClock": 330000000000,
+  "ModelMix": {
+    "claude-opus-4-8": 2
+  },
+  "Tokens": {
+    "Input": 450,
+    "Output": 70,
+    "CacheCreation": 15,
+    "CacheReadPeak": 4000
+  },
+  "ToolCounts": {
+    "Agent": 1
+  },
+  "ToolErrors": 0,
+  "Edits": 0,
+  "Writes": 0,
+  "LinesAdded": 0,
+  "LinesRemoved": 0,
+  "FilesTouched": null,
+  "SubagentFanout": 1,
+  "Skills": null,
+  "Plugins": null,
+  "Subagents": [
+    "general-purpose"
+  ],
+  "UserTurns": 1,
+  "AssistantTurns": 2,
+  "Interrupts": 0,
+  "Rejections": 0,
+  "TaskNotifications": 1,
+  "UserTurnFingerprints": [
+    "5d9c6de048baaf27"
+  ],
+  "Canary": {
+    "UnknownLineTypes": {},
+    "UnknownBlockTypes": {},
+    "MalformedFields": {},
+    "MissingFields": {},
+    "OverlongLines": 0,
+    "VersionsSeen": [
+      "2.1.195"
+    ],
+    "Samples": null,
+    "Version": "2.1.195"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "SessionID": "edits",
+  "Repo": "",
+  "Cwd": "/repo/app",
+  "GitBranch": "feat/y",
+  "Version": "2.1.195",
+  "AiTitle": "",
+  "Start": "2026-06-29T12:00:00Z",
+  "End": "2026-06-29T12:01:05Z",
+  "WallClock": 65000000000,
+  "ModelMix": {
+    "claude-opus-4-8": 2
+  },
+  "Tokens": {
+    "Input": 410,
+    "Output": 140,
+    "CacheCreation": 20,
+    "CacheReadPeak": 2600
+  },
+  "ToolCounts": {
+    "Edit": 1,
+    "Write": 1
+  },
+  "ToolErrors": 0,
+  "Edits": 1,
+  "Writes": 1,
+  "LinesAdded": 4,
+  "LinesRemoved": 1,
+  "FilesTouched": [
+    "/repo/app/log.go",
+    "/repo/app/main.go"
+  ],
+  "SubagentFanout": 0,
+  "Skills": null,
+  "Plugins": null,
+  "Subagents": null,
+  "UserTurns": 1,
+  "AssistantTurns": 2,
+  "Interrupts": 0,
+  "Rejections": 0,
+  "TaskNotifications": 0,
+  "UserTurnFingerprints": [
+    "395d610789735e6b"
+  ],
+  "Canary": {
+    "UnknownLineTypes": {},
+    "UnknownBlockTypes": {},
+    "MalformedFields": {},
+    "MissingFields": {},
+    "OverlongLines": 0,
+    "VersionsSeen": [
+      "2.1.195"
+    ],
+    "Samples": null,
+    "Version": "2.1.195"
+  }
+}

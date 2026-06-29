@@ -1,0 +1,15 @@
+Session: friction
+Title: (none)
+Project: /repo/app   Branch: feat/x
+Duration: 3 min   Models: claude-opus-4-8
+User turns: 2   Assistant turns: 2   Tool errors: 1   Interrupts: 1   Rejections: 1
+Top tools: Bash=1, Edit=1
+---
+[User]: Add retry logic to the fetcher
+[Thinking]: I should build first to see the current state.
+[Tool: Bash go build ./...]
+[ToolError]: build failed: undefined: retry
+[Tool: Edit /repo/app/fetch.go]
+[Rejected]: use the existing backoff helper
+[Interrupt]
+[User]: use the backoff helper in util, not a new one
