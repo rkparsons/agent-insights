@@ -1,6 +1,7 @@
 package insights
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -27,5 +28,26 @@ func TestExtractIdentity(t *testing.T) {
 	}
 	if s.AiTitle != "Fix the thing" || s.Version != "2.1.195" || s.WallClock != 5*time.Minute {
 		t.Fatalf("title/version/wallclock wrong: title=%q version=%q wall=%v", s.AiTitle, s.Version, s.WallClock)
+	}
+}
+
+func TestTokensAndTurnsDedupByMessageID(t *testing.T) {
+	// one assistant MESSAGE split across 3 lines, identical usage on each
+	line := `{"type":"assistant","message":{"id":"msg_A","role":"assistant","model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":20,"cache_creation_input_tokens":5,"cache_read_input_tokens":100},"content":[{"type":"%s"}]}}`
+	in := fmt.Sprintf(line, "thinking") + "\n" + fmt.Sprintf(line, "text") + "\n" + fmt.Sprintf(line, "tool_use")
+	// a second distinct message with a higher cache_read
+	in += "\n" + `{"type":"assistant","message":{"id":"msg_B","role":"assistant","model":"claude-opus-4-8","usage":{"input_tokens":3,"output_tokens":4,"cache_creation_input_tokens":1,"cache_read_input_tokens":250},"content":[{"type":"text","text":"y"}]}}`
+	s := runExtract(t, in, noRepo).Stats
+	if s.AssistantTurns != 2 {
+		t.Fatalf("AssistantTurns = %d, want 2 (per message.id)", s.AssistantTurns)
+	}
+	if s.Tokens.Input != 13 || s.Tokens.Output != 24 || s.Tokens.CacheCreation != 6 {
+		t.Fatalf("token sums double-counted: %+v", s.Tokens)
+	}
+	if s.Tokens.CacheReadPeak != 250 {
+		t.Fatalf("CacheReadPeak = %d, want 250 (max not sum)", s.Tokens.CacheReadPeak)
+	}
+	if s.ModelMix["claude-opus-4-8"] != 2 {
+		t.Fatalf("ModelMix = %v, want opus:2", s.ModelMix)
 	}
 }

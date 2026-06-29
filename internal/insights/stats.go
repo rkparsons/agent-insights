@@ -19,10 +19,20 @@ type statsBuilder struct {
 	start    time.Time
 	end      time.Time
 	startSet bool
+
+	seenMsg        map[string]bool
+	assistantTurns int
+	modelMix       map[string]int
+	tokens         TokenUsage
 }
 
 func newStatsBuilder(sessionID string, repo RepoResolver) *statsBuilder {
-	return &statsBuilder{sessionID: sessionID, repo: repo}
+	return &statsBuilder{
+		sessionID: sessionID,
+		repo:      repo,
+		seenMsg:   map[string]bool{},
+		modelMix:  map[string]int{},
+	}
 }
 
 func (b *statsBuilder) add(ev claude.TranscriptEvent) {
@@ -45,6 +55,34 @@ func (b *statsBuilder) add(ev claude.TranscriptEvent) {
 		}
 		b.end = ev.Timestamp
 	}
+
+	if ev.Type == "assistant" && ev.Message != nil {
+		b.addAssistantMessage(ev.Message)
+	}
+}
+
+// addAssistantMessage accumulates per-message stats once per distinct message.id.
+// One assistant message spans multiple JSONL lines (one per content block) with
+// identical usage, so de-duping by id is required to avoid ~2.6-3.5x inflation.
+func (b *statsBuilder) addAssistantMessage(m *claude.Message) {
+	if m.ID != "" && b.seenMsg[m.ID] {
+		return
+	}
+	if m.ID != "" {
+		b.seenMsg[m.ID] = true
+	}
+	b.assistantTurns++
+	if m.Model != "" {
+		b.modelMix[m.Model]++
+	}
+	if m.Usage != nil {
+		b.tokens.Input += m.Usage.Input
+		b.tokens.Output += m.Usage.Output
+		b.tokens.CacheCreation += m.Usage.CacheCreation
+		if m.Usage.CacheRead > b.tokens.CacheReadPeak {
+			b.tokens.CacheReadPeak = m.Usage.CacheRead
+		}
+	}
 }
 
 func (b *statsBuilder) finish() FacetStats {
@@ -63,5 +101,8 @@ func (b *statsBuilder) finish() FacetStats {
 	if b.startSet {
 		s.WallClock = b.end.Sub(b.start)
 	}
+	s.AssistantTurns = b.assistantTurns
+	s.ModelMix = b.modelMix
+	s.Tokens = b.tokens
 	return s
 }
