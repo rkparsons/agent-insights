@@ -51,3 +51,22 @@ func TestTokensAndTurnsDedupByMessageID(t *testing.T) {
 		t.Fatalf("ModelMix = %v, want opus:2", s.ModelMix)
 	}
 }
+
+func TestToolsAttributionEdits(t *testing.T) {
+	in := `{"type":"assistant","attributionSkill":"superpowers:brainstorming","attributionPlugin":"superpowers","message":{"id":"m1","role":"assistant","usage":{"input_tokens":1,"output_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/a"}},{"type":"tool_use","name":"Agent","input":{"subagent_type":"Explore","description":"x"}}]}}
+{"type":"assistant","message":{"id":"m2","role":"assistant","usage":{"input_tokens":1,"output_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/a.go"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"ok"}]},"toolUseResult":{"filePath":"/a.go","type":"update","structuredPatch":[{"lines":["+x","+y","-z"]}]}}`
+	s := runExtract(t, in, noRepo).Stats
+	if s.ToolCounts["Read"] != 1 || s.ToolCounts["Agent"] != 1 || s.ToolCounts["Edit"] != 1 {
+		t.Fatalf("tool counts: %v", s.ToolCounts)
+	}
+	if s.SubagentFanout != 1 || len(s.Subagents) != 1 || s.Subagents[0] != "Explore" {
+		t.Fatalf("subagent: fan=%d names=%v", s.SubagentFanout, s.Subagents)
+	}
+	if len(s.Skills) != 1 || s.Skills[0] != "superpowers:brainstorming" || len(s.Plugins) != 1 || s.Plugins[0] != "superpowers" {
+		t.Fatalf("attribution: %v / %v", s.Skills, s.Plugins)
+	}
+	if s.Edits != 1 || s.LinesAdded != 2 || s.LinesRemoved != 1 || len(s.FilesTouched) != 1 {
+		t.Fatalf("edits=%d +%d -%d files=%v", s.Edits, s.LinesAdded, s.LinesRemoved, s.FilesTouched)
+	}
+}
