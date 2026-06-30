@@ -1,0 +1,55 @@
+{
+  "session_id": "marker_quote",
+  "repo": "",
+  "cwd": "/repo/insights",
+  "git_branch": "insights-generation",
+  "version": "2.1.195",
+  "ai_title": "",
+  "start": "2026-06-30T09:00:00Z",
+  "end": "2026-06-30T09:03:00Z",
+  "wall_clock": 180000000000,
+  "model_mix": {
+    "claude-opus-4-8": 2
+  },
+  "tokens": {
+    "input": 900,
+    "output": 160,
+    "cache_creation": 30,
+    "cache_read_peak": 6000
+  },
+  "tool_counts": {
+    "Read": 1
+  },
+  "tool_errors": 0,
+  "edits": 0,
+  "writes": 0,
+  "lines_added": 0,
+  "lines_removed": 0,
+  "files_touched": null,
+  "subagent_fanout": 0,
+  "skills": null,
+  "plugins": null,
+  "subagents": null,
+  "user_turns": 3,
+  "assistant_turns": 2,
+  "interrupts": 0,
+  "rejections": 0,
+  "task_notifications": 0,
+  "user_turn_fingerprints": [
+    "fdf24d02452eb5bc",
+    "ce4a4bcaaa62f0db",
+    "549f813c567e55fa"
+  ],
+  "canary": {
+    "unknown_line_types": {},
+    "unknown_block_types": {},
+    "malformed_fields": {},
+    "missing_fields": {},
+    "overlong_lines": 0,
+    "versions_seen": [
+      "2.1.195"
+    ],
+    "samples": null,
+    "version": "2.1.195"
+  }
+}

@@ -34,6 +34,26 @@ func TestReducerSpineAndLabels(t *testing.T) {
 	}
 }
 
+func TestReducerMarkerAnchoring(t *testing.T) {
+	out := runExtract(t, markerAnchorFixture, noRepo).Reduced.Text
+	for _, want := range []string{
+		"[Interrupt]",
+		"[Rejected]: use the helper",
+		"[User]: I think isInterruptText",
+		"[User]: Explain why a body",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	if n := strings.Count(out, "[Interrupt]"); n != 1 {
+		t.Errorf("[Interrupt] rows = %d, want 1 (mid-body quotes must not render as friction):\n%s", n, out)
+	}
+	if n := strings.Count(out, "[Rejected]"); n != 1 {
+		t.Errorf("[Rejected] rows = %d, want 1:\n%s", n, out)
+	}
+}
+
 func TestReducerBudgetKeepsSpineDropsProse(t *testing.T) {
 	var b strings.Builder
 	b.WriteString(`{"type":"user","message":{"content":"KEEP USER"}}` + "\n")

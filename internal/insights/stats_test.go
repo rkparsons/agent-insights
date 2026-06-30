@@ -99,6 +99,52 @@ func TestFrictionClassification(t *testing.T) {
 	}
 }
 
+// markerAnchorFixture mixes GENUINE friction (markers at the start of their body —
+// must stay counted) with MID-BODY quotes of the same markers (a transcript-inspecting
+// / meta turn that merely mentions them — must NOT be counted). This is the H3
+// regression: bare strings.Contains fabricates friction from the quotes.
+const markerAnchorFixture = `{"type":"user","timestamp":"2026-06-29T10:00:00Z","message":{"content":[{"type":"text","text":"[Request interrupted by user]"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"The user doesn't want to proceed with this tool use. The tool use was rejected. To tell you how to proceed, the user said: use the helper"}]}}
+{"type":"user","message":{"content":"I think isInterruptText is wrong: it flags [Request interrupted by user] mid-body too"}}
+{"type":"user","message":{"content":"Explain why a body like The user doesn't want to proceed with this tool use trips rejection detection"}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"9: interruptMarker = [Request interrupted by user (a constant in friction.go)"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"panic: parse error; note The user doesn't want to proceed with this tool use appeared in the log"}]}}`
+
+func TestFrictionMarkerAnchoring(t *testing.T) {
+	s := runExtract(t, markerAnchorFixture, noRepo).Stats
+	if s.Interrupts != 1 {
+		t.Errorf("Interrupts = %d, want 1 (only the prefix-0 text block; mid-body quotes must not count)", s.Interrupts)
+	}
+	if s.Rejections != 1 {
+		t.Errorf("Rejections = %d, want 1 (only the prefix-0 is_error tool_result)", s.Rejections)
+	}
+	if s.ToolErrors != 1 {
+		t.Errorf("ToolErrors = %d, want 1 (the is_error body that merely mentions the rejection marker)", s.ToolErrors)
+	}
+	if s.UserTurns != 2 {
+		t.Errorf("UserTurns = %d, want 2 (the two marker-quoting prose turns are kept)", s.UserTurns)
+	}
+	if len(s.UserTurnFingerprints) != 2 {
+		t.Errorf("fingerprints = %d, want 2 (kept turns are fingerprinted): %v", len(s.UserTurnFingerprints), s.UserTurnFingerprints)
+	}
+}
+
+// The tool_result-body call site passes an UNTRIMMED body, so the anchor must
+// tolerate leading whitespace before a genuine marker (the text-path body is
+// already trimmed). No such case exists in today's corpus, but the classifier
+// must not depend on that accident.
+func TestFrictionMarkerToleratesLeadingWhitespace(t *testing.T) {
+	in := `{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"\n  The user doesn't want to proceed with this tool use. The tool use was rejected. STOP what you are doing and wait for the user to tell you how to proceed."}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"  [Request interrupted by user]"}]}}`
+	s := runExtract(t, in, noRepo).Stats
+	if s.Rejections != 1 {
+		t.Errorf("Rejections = %d, want 1 (whitespace-led genuine rejection body)", s.Rejections)
+	}
+	if s.Interrupts != 1 {
+		t.Errorf("Interrupts = %d, want 1 (whitespace-led genuine interrupt body)", s.Interrupts)
+	}
+}
+
 func TestUserTurnFingerprints(t *testing.T) {
 	in := `{"type":"user","message":{"content":"Implement the parser for the config file please"}}
 {"type":"user","message":{"content":"yes"}}

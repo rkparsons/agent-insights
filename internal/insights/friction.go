@@ -20,9 +20,14 @@ var metaPrefixes = []string{
 	"Base directory for this skill:", "Result of calling the", "The following deferred tools",
 }
 
-func isInterruptText(s string) bool { return strings.Contains(s, interruptMarker) }
+// Genuine interrupts/rejections BEGIN with their marker (validated across the real
+// corpus: every genuine marker sits at offset 0, never after leading text). Anchoring
+// with HasPrefix — not a bare Contains — stops a body that merely *mentions* a marker
+// mid-text (a Read of this file, a turn discussing friction) from fabricating friction.
+// TrimSpace because the tool_result-body call site passes an untrimmed body.
+func isInterruptText(s string) bool { return strings.HasPrefix(strings.TrimSpace(s), interruptMarker) }
 
-func isRejectionText(s string) bool { return strings.Contains(s, rejectionPrefix) }
+func isRejectionText(s string) bool { return strings.HasPrefix(strings.TrimSpace(s), rejectionPrefix) }
 
 // rejectionReason returns the user's correction after "the user said:", or
 // ("", false) for the ~48% of rejections with no inline reason.

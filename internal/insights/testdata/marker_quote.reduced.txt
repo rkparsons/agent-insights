@@ -1,0 +1,12 @@
+Session: marker_q
+Title: (none)
+Project: /repo/insights   Branch: insights-generation
+Duration: 3 min   Models: claude-opus-4-8
+User turns: 3   Assistant turns: 2   Tool errors: 0   Interrupts: 0   Rejections: 0
+Top tools: Read=1
+---
+[User]: Look at friction.go and explain how interrupt and rejection detection works
+[Tool: Read /repo/insights/friction.go]
+[Assistant]: Detection fires only when a body begins with one of those two markers.
+[User]: Right, so a turn that merely mentions [Request interrupted by user] should never be flagged as an interrupt
+[User]: And quoting The user doesn't want to proceed with this tool use in prose must not become a rejection
