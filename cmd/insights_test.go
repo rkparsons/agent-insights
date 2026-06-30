@@ -16,6 +16,10 @@ func TestParseInsightsArgs(t *testing.T) {
 		{[]string{"analyze", "sess-1", "--force"}, "single", true, 5, false},
 		{[]string{"analyze"}, "", false, 0, true},
 		{[]string{"bogus"}, "", false, 0, true},
+		{[]string{"analyze", "--backfill", "sess-1"}, "", false, 0, true},
+		{[]string{"analyze", "--bogus-flag"}, "", false, 0, true},
+		{[]string{"analyze", "--threshold"}, "", false, 0, true},
+		{[]string{"analyze", "--timeout"}, "", false, 0, true},
 	}
 	for _, c := range cases {
 		mode, target, opts, err := parseInsightsArgs(c.args)
