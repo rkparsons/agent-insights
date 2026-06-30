@@ -83,11 +83,12 @@ func (j claudeJudge) Judge(ctx context.Context, in ReducedInput) (JudgedFields, 
 	if env.IsError {
 		return JudgedFields{}, fmt.Errorf("claude reported error: %s", env.Result)
 	}
-	if len(bytes.TrimSpace(env.StructuredOutput)) == 0 {
+	trimmed := bytes.TrimSpace(env.StructuredOutput)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return JudgedFields{}, errors.New("claude envelope missing structured_output")
 	}
 	var jf JudgedFields
-	if err := json.Unmarshal(env.StructuredOutput, &jf); err != nil {
+	if err := json.Unmarshal(trimmed, &jf); err != nil {
 		return JudgedFields{}, fmt.Errorf("parse structured_output: %w", err)
 	}
 	return jf, nil

@@ -78,6 +78,7 @@ func TestJudgeErrorBranches(t *testing.T) {
 		{"is_error true", []byte(`{"is_error":true,"result":"model failed"}`), nil},
 		{"missing structured_output", []byte(`{"is_error":false,"result":"x"}`), nil},
 		{"garbage structured_output", []byte(`{"is_error":false,"structured_output":"not-an-object"}`), nil},
+		{"null structured_output", []byte(`{"is_error":false,"structured_output":null}`), nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
