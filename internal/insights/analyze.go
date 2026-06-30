@@ -9,7 +9,8 @@ import (
 // Analyze produces one complete AgentSessionAnalysis for a session: it extracts the
 // deterministic stats + reduced input, asks the Judge for the model-judged fields,
 // validates evidence quotes against the transcript, and merges. A Judge error aborts
-// (no partial artifact). The caller's ctx governs the Judge timeout.
+// (no partial artifact). The caller's ctx governs the subprocess timeout; a context
+// with no deadline means no timeout — the step-6 caller must set one.
 func Analyze(
 	ctx context.Context,
 	events []claude.TranscriptEvent, canary claude.Canary,

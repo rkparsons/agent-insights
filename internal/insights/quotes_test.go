@@ -54,6 +54,29 @@ func TestValidatePreferences(t *testing.T) {
 	}
 }
 
+func TestValidatePreferenceNormalizedFallback(t *testing.T) {
+	// User corpus has irregular whitespace; the quote is the same words single-spaced,
+	// so exact ContainsUser fails and ContainsUserNormalized is the deciding factor.
+	vi := buildVI("always   follow\tthe   existing conventions here", "")
+	in := JudgedFields{StandingPreferences: []StandingPreference{
+		{Rule: "follow conventions", EvidenceQuote: "follow the existing conventions"},
+	}}
+	out := validateQuotes(in, vi)
+	if len(out.StandingPreferences) != 1 {
+		t.Fatalf("normalized user quote should be kept; got %d", len(out.StandingPreferences))
+	}
+}
+
+func TestValidateEmptyArraysNonNil(t *testing.T) {
+	out := validateQuotes(JudgedFields{}, buildVI("", ""))
+	if out.FrictionIncidents == nil {
+		t.Error("empty FrictionIncidents must be a non-nil slice ([] not null)")
+	}
+	if out.StandingPreferences == nil {
+		t.Error("empty StandingPreferences must be a non-nil slice ([] not null)")
+	}
+}
+
 func TestValidateNormalizedFallbackAndEmpty(t *testing.T) {
 	// Corpus has irregular whitespace; the quote is the same words single-spaced.
 	vi := buildVI("keep   the\tchanges   minimal please", "")
