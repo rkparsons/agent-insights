@@ -1,0 +1,99 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "underlying_goal",
+    "session_type",
+    "outcome",
+    "brief_summary",
+    "friction_incidents",
+    "standing_preferences"
+  ],
+  "properties": {
+    "underlying_goal": {
+      "type": "string",
+      "description": "What the user fundamentally wanted to achieve in this session."
+    },
+    "session_type": {
+      "type": "string",
+      "enum": [
+        "single_task",
+        "multi_task",
+        "iterative_refinement",
+        "exploration",
+        "quick_question"
+      ]
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "fully_achieved",
+        "mostly_achieved",
+        "partially_achieved",
+        "not_achieved",
+        "unclear"
+      ]
+    },
+    "brief_summary": {
+      "type": "string",
+      "description": "One sentence: what the user wanted and whether they got it."
+    },
+    "friction_incidents": {
+      "type": "array",
+      "description": "Discrete friction incidents. EMPTY ARRAY when the session had no friction.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "one_line"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "wrong_approach",
+              "buggy_code",
+              "misunderstood_request",
+              "excessive_changes",
+              "user_rejected_action",
+              "incomplete"
+            ]
+          },
+          "one_line": {
+            "type": "string",
+            "description": "The specific incident in one sentence."
+          },
+          "evidence_quote": {
+            "type": "string",
+            "description": "A short VERBATIM substring copied from the transcript that demonstrates the incident. Omit if no exact quote supports it."
+          },
+          "file": {
+            "type": "string",
+            "description": "Path the incident concerns, if applicable."
+          }
+        }
+      }
+    },
+    "standing_preferences": {
+      "type": "array",
+      "description": "Durable rules the user stated about HOW Claude should work (working style, conventions, process) — reusable across sessions, NOT one-off task steps. EMPTY ARRAY when the user stated none (the common case).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule", "evidence_quote"],
+        "properties": {
+          "rule": {
+            "type": "string",
+            "description": "The reusable working-preference, phrased as a standing rule."
+          },
+          "evidence_quote": {
+            "type": "string",
+            "description": "VERBATIM substring of the user's own words stating it. Required — if you cannot quote the user stating it, do not include it."
+          },
+          "scope": {
+            "type": "string",
+            "description": "Optional: where it applies (a repo/package/area), if the user scoped it; omit if general."
+          }
+        }
+      }
+    }
+  }
+}
