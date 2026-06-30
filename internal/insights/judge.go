@@ -3,6 +3,9 @@ package insights
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -39,4 +42,53 @@ func newAnalyzeCommand(ctx context.Context, model, schema string, stdin []byte) 
 	cmd.Stdin = bytes.NewReader(stdin)
 	cmd.Env = scrubbedEnv()
 	return cmd
+}
+
+// Judge produces the model-judged fields from a reduced transcript. Injected so
+// the merge/validation logic is testable with a fake and no real LLM.
+type Judge interface {
+	Judge(ctx context.Context, in ReducedInput) (JudgedFields, error)
+}
+
+// commandRunner runs the prepared claude command, feeding stdin and returning
+// stdout. Injected so the envelope parsing + error handling are unit-testable.
+type commandRunner func(ctx context.Context, stdin []byte) (stdout []byte, err error)
+
+type claudeJudge struct {
+	run    commandRunner
+	model  string
+	schema string
+}
+
+// claudeEnvelope is the `claude -p --output-format json` wrapper. structured_output
+// holds the schema object when --json-schema is used.
+type claudeEnvelope struct {
+	IsError          bool            `json:"is_error"`
+	Result           string          `json:"result"`
+	StructuredOutput json.RawMessage `json:"structured_output"`
+}
+
+func (j claudeJudge) Judge(ctx context.Context, in ReducedInput) (JudgedFields, error) {
+	out, err := j.run(ctx, []byte(in.Text))
+	if err != nil {
+		return JudgedFields{}, fmt.Errorf("claude run: %w", err)
+	}
+	if len(bytes.TrimSpace(out)) == 0 {
+		return JudgedFields{}, errors.New("claude returned empty output")
+	}
+	var env claudeEnvelope
+	if err := json.Unmarshal(out, &env); err != nil {
+		return JudgedFields{}, fmt.Errorf("parse claude envelope: %w", err)
+	}
+	if env.IsError {
+		return JudgedFields{}, fmt.Errorf("claude reported error: %s", env.Result)
+	}
+	if len(bytes.TrimSpace(env.StructuredOutput)) == 0 {
+		return JudgedFields{}, errors.New("claude envelope missing structured_output")
+	}
+	var jf JudgedFields
+	if err := json.Unmarshal(env.StructuredOutput, &jf); err != nil {
+		return JudgedFields{}, fmt.Errorf("parse structured_output: %w", err)
+	}
+	return jf, nil
 }
