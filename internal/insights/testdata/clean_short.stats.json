@@ -1,53 +1,53 @@
 {
-  "SessionID": "clean_short",
-  "Repo": "",
-  "Cwd": "/repo/app",
-  "GitBranch": "main",
-  "Version": "2.1.195",
-  "AiTitle": "",
-  "Start": "2026-06-29T09:00:00Z",
-  "End": "2026-06-29T09:01:00Z",
-  "WallClock": 60000000000,
-  "ModelMix": {
+  "session_id": "clean_short",
+  "repo": "",
+  "cwd": "/repo/app",
+  "git_branch": "main",
+  "version": "2.1.195",
+  "ai_title": "",
+  "start": "2026-06-29T09:00:00Z",
+  "end": "2026-06-29T09:01:00Z",
+  "wall_clock": 60000000000,
+  "model_mix": {
     "claude-opus-4-8": 2
   },
-  "Tokens": {
-    "Input": 220,
-    "Output": 90,
-    "CacheCreation": 15,
-    "CacheReadPeak": 2100
+  "tokens": {
+    "input": 220,
+    "output": 90,
+    "cache_creation": 15,
+    "cache_read_peak": 2100
   },
-  "ToolCounts": {
+  "tool_counts": {
     "Read": 1
   },
-  "ToolErrors": 0,
-  "Edits": 0,
-  "Writes": 0,
-  "LinesAdded": 0,
-  "LinesRemoved": 0,
-  "FilesTouched": null,
-  "SubagentFanout": 0,
-  "Skills": null,
-  "Plugins": null,
-  "Subagents": null,
-  "UserTurns": 1,
-  "AssistantTurns": 2,
-  "Interrupts": 0,
-  "Rejections": 0,
-  "TaskNotifications": 0,
-  "UserTurnFingerprints": [
+  "tool_errors": 0,
+  "edits": 0,
+  "writes": 0,
+  "lines_added": 0,
+  "lines_removed": 0,
+  "files_touched": null,
+  "subagent_fanout": 0,
+  "skills": null,
+  "plugins": null,
+  "subagents": null,
+  "user_turns": 1,
+  "assistant_turns": 2,
+  "interrupts": 0,
+  "rejections": 0,
+  "task_notifications": 0,
+  "user_turn_fingerprints": [
     "e5dd3d9344922bea"
   ],
-  "Canary": {
-    "UnknownLineTypes": {},
-    "UnknownBlockTypes": {},
-    "MalformedFields": {},
-    "MissingFields": {},
-    "OverlongLines": 0,
-    "VersionsSeen": [
+  "canary": {
+    "unknown_line_types": {},
+    "unknown_block_types": {},
+    "malformed_fields": {},
+    "missing_fields": {},
+    "overlong_lines": 0,
+    "versions_seen": [
       "2.1.195"
     ],
-    "Samples": null,
-    "Version": "2.1.195"
+    "samples": null,
+    "version": "2.1.195"
   }
 }

@@ -1,55 +1,55 @@
 {
-  "SessionID": "task_notification",
-  "Repo": "",
-  "Cwd": "/repo/app",
-  "GitBranch": "main",
-  "Version": "2.1.195",
-  "AiTitle": "",
-  "Start": "2026-06-29T11:00:00Z",
-  "End": "2026-06-29T11:05:30Z",
-  "WallClock": 330000000000,
-  "ModelMix": {
+  "session_id": "task_notification",
+  "repo": "",
+  "cwd": "/repo/app",
+  "git_branch": "main",
+  "version": "2.1.195",
+  "ai_title": "",
+  "start": "2026-06-29T11:00:00Z",
+  "end": "2026-06-29T11:05:30Z",
+  "wall_clock": 330000000000,
+  "model_mix": {
     "claude-opus-4-8": 2
   },
-  "Tokens": {
-    "Input": 450,
-    "Output": 70,
-    "CacheCreation": 15,
-    "CacheReadPeak": 4000
+  "tokens": {
+    "input": 450,
+    "output": 70,
+    "cache_creation": 15,
+    "cache_read_peak": 4000
   },
-  "ToolCounts": {
+  "tool_counts": {
     "Agent": 1
   },
-  "ToolErrors": 0,
-  "Edits": 0,
-  "Writes": 0,
-  "LinesAdded": 0,
-  "LinesRemoved": 0,
-  "FilesTouched": null,
-  "SubagentFanout": 1,
-  "Skills": null,
-  "Plugins": null,
-  "Subagents": [
+  "tool_errors": 0,
+  "edits": 0,
+  "writes": 0,
+  "lines_added": 0,
+  "lines_removed": 0,
+  "files_touched": null,
+  "subagent_fanout": 1,
+  "skills": null,
+  "plugins": null,
+  "subagents": [
     "general-purpose"
   ],
-  "UserTurns": 1,
-  "AssistantTurns": 2,
-  "Interrupts": 0,
-  "Rejections": 0,
-  "TaskNotifications": 1,
-  "UserTurnFingerprints": [
+  "user_turns": 1,
+  "assistant_turns": 2,
+  "interrupts": 0,
+  "rejections": 0,
+  "task_notifications": 1,
+  "user_turn_fingerprints": [
     "5d9c6de048baaf27"
   ],
-  "Canary": {
-    "UnknownLineTypes": {},
-    "UnknownBlockTypes": {},
-    "MalformedFields": {},
-    "MissingFields": {},
-    "OverlongLines": 0,
-    "VersionsSeen": [
+  "canary": {
+    "unknown_line_types": {},
+    "unknown_block_types": {},
+    "malformed_fields": {},
+    "missing_fields": {},
+    "overlong_lines": 0,
+    "versions_seen": [
       "2.1.195"
     ],
-    "Samples": null,
-    "Version": "2.1.195"
+    "samples": null,
+    "version": "2.1.195"
   }
 }

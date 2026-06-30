@@ -1,57 +1,57 @@
 {
-  "SessionID": "edits",
-  "Repo": "",
-  "Cwd": "/repo/app",
-  "GitBranch": "feat/y",
-  "Version": "2.1.195",
-  "AiTitle": "",
-  "Start": "2026-06-29T12:00:00Z",
-  "End": "2026-06-29T12:01:05Z",
-  "WallClock": 65000000000,
-  "ModelMix": {
+  "session_id": "edits",
+  "repo": "",
+  "cwd": "/repo/app",
+  "git_branch": "feat/y",
+  "version": "2.1.195",
+  "ai_title": "",
+  "start": "2026-06-29T12:00:00Z",
+  "end": "2026-06-29T12:01:05Z",
+  "wall_clock": 65000000000,
+  "model_mix": {
     "claude-opus-4-8": 2
   },
-  "Tokens": {
-    "Input": 410,
-    "Output": 140,
-    "CacheCreation": 20,
-    "CacheReadPeak": 2600
+  "tokens": {
+    "input": 410,
+    "output": 140,
+    "cache_creation": 20,
+    "cache_read_peak": 2600
   },
-  "ToolCounts": {
+  "tool_counts": {
     "Edit": 1,
     "Write": 1
   },
-  "ToolErrors": 0,
-  "Edits": 1,
-  "Writes": 1,
-  "LinesAdded": 4,
-  "LinesRemoved": 1,
-  "FilesTouched": [
+  "tool_errors": 0,
+  "edits": 1,
+  "writes": 1,
+  "lines_added": 4,
+  "lines_removed": 1,
+  "files_touched": [
     "/repo/app/log.go",
     "/repo/app/main.go"
   ],
-  "SubagentFanout": 0,
-  "Skills": null,
-  "Plugins": null,
-  "Subagents": null,
-  "UserTurns": 1,
-  "AssistantTurns": 2,
-  "Interrupts": 0,
-  "Rejections": 0,
-  "TaskNotifications": 0,
-  "UserTurnFingerprints": [
+  "subagent_fanout": 0,
+  "skills": null,
+  "plugins": null,
+  "subagents": null,
+  "user_turns": 1,
+  "assistant_turns": 2,
+  "interrupts": 0,
+  "rejections": 0,
+  "task_notifications": 0,
+  "user_turn_fingerprints": [
     "395d610789735e6b"
   ],
-  "Canary": {
-    "UnknownLineTypes": {},
-    "UnknownBlockTypes": {},
-    "MalformedFields": {},
-    "MissingFields": {},
-    "OverlongLines": 0,
-    "VersionsSeen": [
+  "canary": {
+    "unknown_line_types": {},
+    "unknown_block_types": {},
+    "malformed_fields": {},
+    "missing_fields": {},
+    "overlong_lines": 0,
+    "versions_seen": [
       "2.1.195"
     ],
-    "Samples": null,
-    "Version": "2.1.195"
+    "samples": null,
+    "version": "2.1.195"
   }
 }

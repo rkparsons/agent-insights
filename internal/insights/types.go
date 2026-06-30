@@ -15,51 +15,51 @@ import (
 // over distinct message.id; CacheReadPeak is the max (summing re-reads the
 // growing cached prefix and inflates ~95-238x).
 type TokenUsage struct {
-	Input         int
-	Output        int
-	CacheCreation int
-	CacheReadPeak int
+	Input         int `json:"input"`
+	Output        int `json:"output"`
+	CacheCreation int `json:"cache_creation"`
+	CacheReadPeak int `json:"cache_read_peak"`
 }
 
 // AgentSessionStats is the deterministic half of an AgentSessionAnalysis. The integrator merges
 // it with the skill's judged fields.
 type AgentSessionStats struct {
-	SessionID string
-	Repo      string // userconfig.LookupRepo(cwd) path; "" if unmatched
-	Cwd       string
-	GitBranch string
-	Version   string // last observed transcript version
-	AiTitle   string
+	SessionID string `json:"session_id"`
+	Repo      string `json:"repo"` // userconfig.LookupRepo(cwd) path; "" if unmatched
+	Cwd       string `json:"cwd"`
+	GitBranch string `json:"git_branch"`
+	Version   string `json:"version"` // last observed transcript version
+	AiTitle   string `json:"ai_title"`
 
-	Start     time.Time
-	End       time.Time
-	WallClock time.Duration
+	Start     time.Time     `json:"start"`
+	End       time.Time     `json:"end"`
+	WallClock time.Duration `json:"wall_clock"`
 
-	ModelMix   map[string]int // model -> distinct-message count
-	Tokens     TokenUsage
-	ToolCounts map[string]int // tool_use name -> count (per block)
-	ToolErrors int            // is_error blocks that are NOT rejection/interrupt
+	ModelMix   map[string]int `json:"model_mix"` // model -> distinct-message count
+	Tokens     TokenUsage     `json:"tokens"`
+	ToolCounts map[string]int `json:"tool_counts"` // tool_use name -> count (per block)
+	ToolErrors int            `json:"tool_errors"` // is_error blocks that are NOT rejection/interrupt
 
-	Edits        int // Edit tool_use attempts
-	Writes       int // Write tool_use attempts
-	LinesAdded   int // structuredPatch additions (successes)
-	LinesRemoved int // structuredPatch deletions (successes)
-	FilesTouched []string
+	Edits        int      `json:"edits"`         // Edit tool_use attempts
+	Writes       int      `json:"writes"`        // Write tool_use attempts
+	LinesAdded   int      `json:"lines_added"`   // structuredPatch additions (successes)
+	LinesRemoved int      `json:"lines_removed"` // structuredPatch deletions (successes)
+	FilesTouched []string `json:"files_touched"`
 
-	SubagentFanout int // Agent tool_use count
-	Skills         []string
-	Plugins        []string
-	Subagents      []string // distinct Agent input.subagent_type
+	SubagentFanout int      `json:"subagent_fanout"` // Agent tool_use count
+	Skills         []string `json:"skills"`
+	Plugins        []string `json:"plugins"`
+	Subagents      []string `json:"subagents"` // distinct Agent input.subagent_type
 
-	UserTurns         int
-	AssistantTurns    int // distinct message.id count
-	Interrupts        int
-	Rejections        int
-	TaskNotifications int
+	UserTurns         int `json:"user_turns"`
+	AssistantTurns    int `json:"assistant_turns"` // distinct message.id count
+	Interrupts        int `json:"interrupts"`
+	Rejections        int `json:"rejections"`
+	TaskNotifications int `json:"task_notifications"`
 
-	UserTurnFingerprints []string
+	UserTurnFingerprints []string `json:"user_turn_fingerprints"`
 
-	Canary claude.Canary
+	Canary claude.Canary `json:"canary"`
 }
 
 // ReducedInput is the stdin payload for the analysis skill.

@@ -32,9 +32,8 @@ func TestAnalysisJSONShape(t *testing.T) {
 	if strings.Contains(s, `"JudgedFields"`) {
 		t.Errorf("JudgedFields not flattened: %s", s)
 	}
-	// Stats nests under "stats" with Go-default (PascalCase) keys in step 5 (the
-	// on-disk casing is a step-6 decision; AgentSessionStats stays tagless here).
-	if !strings.Contains(s, `"SessionID":"s1"`) {
+	// Stats nests under "stats" with snake_case keys (finalized in step 6).
+	if !strings.Contains(s, `"session_id":"s1"`) {
 		t.Errorf("nested stats missing: %s", s)
 	}
 }
