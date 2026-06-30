@@ -2,7 +2,6 @@ package insights
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"tmux-ctrl/internal/sources/claude"
@@ -29,12 +28,7 @@ func RunBackfill(ctx context.Context, repo RepoResolver, judge Judge, opts Optio
 	}
 
 	var sum RunSummary
-	seen := map[string]bool{} // dedup same id across project dirs (resume copies)
 	for _, ref := range dedupNewest(refs) {
-		if seen[ref.SessionID] {
-			continue
-		}
-		seen[ref.SessionID] = true
 		sum.Scanned++
 
 		if !opts.Force {
@@ -69,8 +63,11 @@ func RunBackfill(ctx context.Context, repo RepoResolver, judge Judge, opts Optio
 		rep, err := analyzeSession(sctx, ref, events, canary, repo, judge)
 		cancel()
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				return sum, err // user abort: do not record, resume cleanly next run
+			// The real Judge surfaces exec failures as *exec.ExitError("signal: killed"),
+			// not a context sentinel, so we cannot use errors.Is on the judge error to
+			// distinguish user-abort from per-session timeout. Branch on the parent ctx instead.
+			if ctx.Err() != nil { // parent canceled (user abort) — leave unrecorded for clean resume
+				return sum, ctx.Err()
 			}
 			recordErrored(&sum, &manifest, ref, err)
 			continue

@@ -2,6 +2,9 @@ package insights
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -56,6 +59,71 @@ func TestRunBackfillResumeSkips(t *testing.T) {
 	}
 	if sum.Analyzed != 0 || sum.SkippedIncremental != 1 || sum.SkippedGate != 1 {
 		t.Errorf("resume should skip everything, got %+v", sum)
+	}
+}
+
+func TestRunBackfillCanceledNotRecorded(t *testing.T) {
+	projects := t.TempDir()
+	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
+	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	writeSession(t, projects, "proj", "abrt", 6)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // user abort before processing
+	judge := fakeJudge{err: context.Canceled}
+	sum, err := RunBackfill(ctx, noRepo, judge, Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute})
+	if err == nil {
+		t.Error("want non-nil error on canceled parent ctx")
+	}
+	if sum.Errored != 0 {
+		t.Errorf("canceled session must not be recorded as errored: %+v", sum)
+	}
+	m, _ := loadManifest()
+	if _, ok := m["abrt"]; ok {
+		t.Error("canceled session must leave no manifest entry")
+	}
+}
+
+func TestRunBackfillReprocessesOnNewerMtime(t *testing.T) {
+	projects := t.TempDir()
+	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
+	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	writeSession(t, projects, "proj", "grow", 6)
+	judge := fakeJudge{fields: substantialJudged()}
+	opts := Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute}
+	if _, err := RunBackfill(context.Background(), noRepo, judge, opts); err != nil {
+		t.Fatal(err)
+	}
+	// bump the transcript mtime beyond the stamped decode-time value
+	p := filepath.Join(projects, "proj", "grow.jsonl")
+	future := time.Now().Add(time.Hour)
+	if err := os.Chtimes(p, future, future); err != nil {
+		t.Fatal(err)
+	}
+	sum, err := RunBackfill(context.Background(), noRepo, judge, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.Analyzed != 1 || sum.SkippedIncremental != 0 {
+		t.Errorf("a newer transcript mtime must re-process, got %+v", sum)
+	}
+}
+
+func TestRunBackfillRecordsErrored(t *testing.T) {
+	projects := t.TempDir()
+	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
+	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	writeSession(t, projects, "proj", "boom", 6)
+	judge := fakeJudge{err: errors.New("judge failed")}
+	sum, err := RunBackfill(context.Background(), noRepo, judge, Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute})
+	if err != nil {
+		t.Fatalf("loop should continue past errors, not return: %v", err)
+	}
+	if sum.Errored != 1 {
+		t.Errorf("want Errored=1, got %+v", sum)
+	}
+	m, _ := loadManifest()
+	if e, ok := m["boom"]; !ok || e.Outcome != "errored" {
+		t.Errorf("want errored manifest entry, got %+v ok=%v", e, ok)
 	}
 }
 
