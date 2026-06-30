@@ -1,5 +1,7 @@
 package insights
 
+import "time"
+
 // FrictionIncident is one discrete friction incident judged by the skill, after
 // quote validation. QuoteUnverified is set when the LLM supplied an evidence quote
 // that did not validate verbatim and was therefore cleared.
@@ -38,4 +40,8 @@ type JudgedFields struct {
 type AgentSessionAnalysis struct {
 	Stats        AgentSessionStats `json:"stats"`
 	JudgedFields                   // embedded
+
+	// TranscriptMtime is the decode-time transcript mtime, stamped by the
+	// orchestrator (not the producer) so incremental detection is race-free.
+	TranscriptMtime time.Time `json:"transcript_mtime"`
 }
