@@ -8,7 +8,7 @@ import (
 	"tmux-ctrl/internal/sources/claude"
 )
 
-func runReducedBudget(t *testing.T, in string, repo RepoResolver, budget int) Result {
+func runReducedBudget(t *testing.T, in string, repo RepoResolver, budget int) SessionExtraction {
 	t.Helper()
 	ev, c := claude.DecodeTranscript(strings.NewReader(in))
 	return extractWithBudget(ev, c, "s", repo, budget)

@@ -1,6 +1,6 @@
 // Package insights interprets a decoded Claude Code transcript into the
-// deterministic half of a SessionFacet: a token-budgeted ReducedInput (for the
-// LLM facet skill) and a FacetStats struct (exact numbers an LLM must never
+// deterministic half of an AgentSessionAnalysis: a token-budgeted ReducedInput (for the
+// LLM analysis skill) and an AgentSessionStats struct (exact numbers an LLM must never
 // guess). The decoder/format lives in sources/claude; this package never parses
 // raw JSON.
 package insights
@@ -21,9 +21,9 @@ type TokenUsage struct {
 	CacheReadPeak int
 }
 
-// FacetStats is the deterministic half of a SessionFacet. The integrator merges
+// AgentSessionStats is the deterministic half of an AgentSessionAnalysis. The integrator merges
 // it with the skill's judged fields.
-type FacetStats struct {
+type AgentSessionStats struct {
 	SessionID string
 	Repo      string // userconfig.LookupRepo(cwd) path; "" if unmatched
 	Cwd       string
@@ -62,7 +62,7 @@ type FacetStats struct {
 	Canary claude.Canary
 }
 
-// ReducedInput is the stdin payload for the facet skill.
+// ReducedInput is the stdin payload for the analysis skill.
 type ReducedInput struct {
 	Text          string
 	Chars         int
@@ -74,9 +74,9 @@ type ReducedInput struct {
 // decoupled from userconfig; the caller wires LookupRepo).
 type RepoResolver func(cwd string) string
 
-// Result is the output of Extract.
-type Result struct {
+// SessionExtraction is the output of Extract.
+type SessionExtraction struct {
 	Reduced  ReducedInput
-	Stats    FacetStats
+	Stats    AgentSessionStats
 	Verbatim VerbatimIndex
 }

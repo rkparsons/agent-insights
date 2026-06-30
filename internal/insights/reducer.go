@@ -135,7 +135,7 @@ func toolKey(blk claude.ContentBlock) string {
 
 // finish assembles the header + spine (always) + budget-filled prose, in
 // chronological order. The spine is never trimmed by budget.
-func (b *reducerBuilder) finish(stats FacetStats, budget int) ReducedInput {
+func (b *reducerBuilder) finish(stats AgentSessionStats, budget int) ReducedInput {
 	header := buildHeader(stats)
 	avail := budget - len(header)
 
@@ -187,7 +187,7 @@ func (b *reducerBuilder) finish(stats FacetStats, budget int) ReducedInput {
 	return ReducedInput{Text: text, Chars: len(text), KeptEvents: len(kept), DroppedEvents: dropped}
 }
 
-func buildHeader(s FacetStats) string {
+func buildHeader(s AgentSessionStats) string {
 	id := s.SessionID
 	if len(id) > 8 {
 		id = id[:8]

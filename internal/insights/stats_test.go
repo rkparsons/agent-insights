@@ -9,7 +9,7 @@ import (
 	"tmux-ctrl/internal/sources/claude"
 )
 
-func runExtract(t *testing.T, in string, repo RepoResolver) Result {
+func runExtract(t *testing.T, in string, repo RepoResolver) SessionExtraction {
 	t.Helper()
 	ev, c := claude.DecodeTranscript(strings.NewReader(in))
 	return Extract(ev, c, "s", repo)

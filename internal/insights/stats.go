@@ -20,7 +20,7 @@ func sortedKeys(m map[string]bool) []string {
 	return out
 }
 
-// statsBuilder accumulates FacetStats across one pass over the decoded events.
+// statsBuilder accumulates AgentSessionStats across one pass over the decoded events.
 type statsBuilder struct {
 	sessionID string
 	repo      RepoResolver
@@ -222,8 +222,8 @@ func (b *statsBuilder) addAssistantMessage(m *claude.Message) {
 	}
 }
 
-func (b *statsBuilder) finish() FacetStats {
-	s := FacetStats{
+func (b *statsBuilder) finish() AgentSessionStats {
+	s := AgentSessionStats{
 		SessionID: b.sessionID,
 		Cwd:       b.cwd,
 		GitBranch: b.gitBranch,
