@@ -1,0 +1,25 @@
+package insights
+
+import (
+	"context"
+
+	"tmux-ctrl/internal/sources/claude"
+)
+
+// Analyze produces one complete AgentSessionAnalysis for a session: it extracts the
+// deterministic stats + reduced input, asks the Judge for the model-judged fields,
+// validates evidence quotes against the transcript, and merges. A Judge error aborts
+// (no partial artifact). The caller's ctx governs the Judge timeout.
+func Analyze(
+	ctx context.Context,
+	events []claude.TranscriptEvent, canary claude.Canary,
+	sessionID string, repo RepoResolver, judge Judge,
+) (AgentSessionAnalysis, error) {
+	ext := Extract(events, canary, sessionID, repo)
+	judged, err := judge.Judge(ctx, ext.Reduced)
+	if err != nil {
+		return AgentSessionAnalysis{}, err
+	}
+	validated := validateQuotes(judged, ext.Verbatim)
+	return AgentSessionAnalysis{Stats: ext.Stats, JudgedFields: validated}, nil
+}
