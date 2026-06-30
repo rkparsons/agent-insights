@@ -137,5 +137,8 @@ func writeEvalArtifacts(dir, localManifestPath string, rep EvalReport, runs []se
 	if err := writeCardsMarkdown(filepath.Join(dir, "light-eval-cards.md"), rep.Cards); err != nil {
 		return err
 	}
+	if err := os.MkdirAll(filepath.Dir(localManifestPath), 0o755); err != nil {
+		return err
+	}
 	return writeJSONFile(localManifestPath, buildManifest(runs))
 }

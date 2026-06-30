@@ -56,7 +56,9 @@ func TestWriteEvalArtifactsRedacts(t *testing.T) {
 		t.Error("local manifest should retain the real id for reproducibility")
 	}
 	// Hashing is stable.
-	if hashSessionID(secretID) != hashSessionID(secretID) {
+	h1 := hashSessionID(secretID)
+	h2 := hashSessionID(secretID)
+	if h1 != h2 {
 		t.Error("hash unstable")
 	}
 }
