@@ -93,3 +93,25 @@ func (j claudeJudge) Judge(ctx context.Context, in ReducedInput) (JudgedFields, 
 	}
 	return jf, nil
 }
+
+// NewClaudeJudge returns a Judge that shells out to `claude -p` under subscription
+// auth (Opus 4.8, embedded schema). The caller's ctx governs the timeout.
+func NewClaudeJudge() Judge {
+	j := claudeJudge{model: analysisModel, schema: analysisSchema}
+	j.run = func(ctx context.Context, stdin []byte) ([]byte, error) {
+		out, err := newAnalyzeCommand(ctx, j.model, j.schema, stdin).Output()
+		if err != nil {
+			var ee *exec.ExitError
+			if errors.As(err, &ee) {
+				stderr := string(ee.Stderr)
+				if len(stderr) > 2000 {
+					stderr = stderr[:2000] + "…"
+				}
+				return out, fmt.Errorf("claude exit %d: %s", ee.ExitCode(), stderr)
+			}
+			return out, err
+		}
+		return out, nil
+	}
+	return j
+}

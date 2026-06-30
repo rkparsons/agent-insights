@@ -89,3 +89,19 @@ func TestJudgeErrorBranches(t *testing.T) {
 		})
 	}
 }
+
+func TestNewClaudeJudgeConfigured(t *testing.T) {
+	j, ok := NewClaudeJudge().(claudeJudge)
+	if !ok {
+		t.Fatal("NewClaudeJudge did not return a claudeJudge")
+	}
+	if j.model != analysisModel {
+		t.Errorf("model = %q, want %q", j.model, analysisModel)
+	}
+	if j.schema == "" {
+		t.Error("schema is empty")
+	}
+	if j.run == nil {
+		t.Error("runner is nil")
+	}
+}
