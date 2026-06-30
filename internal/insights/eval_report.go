@@ -108,6 +108,9 @@ func assembleReport(runs []sessionRun) EvalReport {
 		{"validation_fired ≤5%", rep.ValidationFiredRate, 0.05, rep.ValidationFiredRate <= 0.05},
 		{"modal_outcome_majority (all)", boolToF(allModalMajority(rep.Sessions)), 1, allModalMajority(rep.Sessions)},
 	}
+	if len(runs) == 0 {
+		rep.HardFailReasons = append(rep.HardFailReasons, "no sessions evaluated (empty run set)")
+	}
 	rep.HardFail = len(rep.HardFailReasons) > 0
 	return rep
 }
@@ -121,10 +124,20 @@ func addHardOrMeta(rep *EvalReport, isMeta bool, msg string) {
 }
 
 // Verdict renders the provisional gate result. PASS is always provisional on the
-// human recognition pass (false-friction/recall/borderline adjudication).
+// human recognition pass. Failing soft floors are surfaced in the headline — a
+// fabricating pipeline produces no cards, so the soft-floor table is its only signal.
 func (r EvalReport) Verdict() string {
 	if r.HardFail {
 		return fmt.Sprintf("FAIL (hard axes): %v", r.HardFailReasons)
+	}
+	var concerns []string
+	for _, sf := range r.SoftFloors {
+		if !sf.Pass {
+			concerns = append(concerns, sf.Name)
+		}
+	}
+	if len(concerns) > 0 {
+		return fmt.Sprintf("PASS (provisional — %d contested cards pending human adjudication; %d soft-floor concern(s): %v)", len(r.Cards), len(concerns), concerns)
 	}
 	return fmt.Sprintf("PASS (provisional — %d contested cards pending human adjudication)", len(r.Cards))
 }
@@ -141,7 +154,7 @@ func allModalMajority(scores []SessionScore) bool {
 func detectableEffect(cleanRuns int) string {
 	p5 := 1 - math.Pow(0.95, float64(cleanRuns))
 	p1 := 1 - math.Pow(0.99, float64(cleanRuns))
-	return fmt.Sprintf("%d clean runs: ~%.0f%% chance to catch a 5%%/run fabrication rate, ~%.0f%% for 1%%", cleanRuns, p5*100, p1*100)
+	return fmt.Sprintf("%d clean runs: ~%.0f%% chance to catch a 5%%/run false-friction rate, ~%.0f%% for 1%%", cleanRuns, p5*100, p1*100)
 }
 
 // ratio treats 0/0 as 1 — for "valid %" metrics (nothing to check = nothing failed).

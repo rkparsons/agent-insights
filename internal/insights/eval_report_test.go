@@ -53,3 +53,36 @@ func TestAssembleReportAggregatesAndSpend(t *testing.T) {
 		t.Errorf("detectable effect should be reported: %q", rep.DetectableEffect)
 	}
 }
+
+func TestVerdictSurfacesSoftFloorBreach(t *testing.T) {
+	// A run with high raw fabrication: schema-valid (no hard fail) but trips the
+	// raw_fabrication soft floor. The verdict headline must surface the concern.
+	sr := sessionRun{
+		Stats: AgentSessionStats{Cwd: "/work/client-project"}, Cell: "zero-extra", ZeroFriction: true,
+		Repeats: []RepeatResult{{
+			Raw: jf("fully_achieved"), Validated: jf("fully_achieved"),
+			RawQuotes: []quoteCheck{{Kind: "friction", Quote: "x", Verbatim: false}},
+		}},
+	}
+	rep := assembleReport([]sessionRun{sr})
+	if rep.HardFail {
+		t.Fatal("high fabrication is a soft-floor concern, not a hard fail")
+	}
+	if rep.RawFabricationRate <= 0.02 {
+		t.Fatalf("expected raw_fabrication above the floor, got %v", rep.RawFabricationRate)
+	}
+	v := rep.Verdict()
+	if !strings.Contains(v, "soft-floor concern") || !strings.Contains(v, "raw_fabrication") {
+		t.Errorf("verdict should surface the failing soft floor, got %q", v)
+	}
+}
+
+func TestAssembleReportEmptyFailsClosed(t *testing.T) {
+	rep := assembleReport(nil)
+	if !rep.HardFail {
+		t.Fatal("an empty run set must fail closed, not pass vacuously")
+	}
+	if !strings.Contains(rep.Verdict(), "FAIL") {
+		t.Errorf("empty run verdict should be FAIL, got %q", rep.Verdict())
+	}
+}
