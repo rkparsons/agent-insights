@@ -28,20 +28,20 @@ func cellsByID(cs []curatedSession) map[string]string {
 
 func TestCurateDeterministicAndStratified(t *testing.T) {
 	pool := []sessionStat{
-		stat("o", 999, 0, 0, 0, 0, 0, "client-project", "/h", 50_000_000), // outlier (max turns)
+		stat("o", 999, 0, 0, 0, 0, 0, "client-project", "/h", 50_000_000),   // outlier (max turns)
 		stat("m", 30, 0, 0, 0, 1, 0, "x", "/work/insights-gen", 100), // meta (cwd)
 		stat("zs", 3, 0, 0, 0, 0, 0, "client-project", "/h", 100),           // zero short
 		stat("zq", 6, 0, 0, 0, 0, 0, "client-project", "/h", 100),           // zero quick_question
 		stat("ze", 20, 0, 0, 0, 0, 0, "client-project", "/h", 100),          // zero exploration
 		stat("zi", 20, 0, 0, 0, 4, 1, "client-project", "/h", 100),          // zero implementation
 		stat("zl", 60, 0, 0, 0, 0, 0, "client-project", "/h", 100),          // zero long
-		stat("zx1", 25, 0, 0, 0, 0, 0, "client-project", "/h", 100),         // zero extra
-		stat("zx2", 26, 0, 0, 0, 0, 0, "client-project", "/h", 100),         // zero extra
+		stat("zx1", 25, 0, 0, 0, 0, 0, "client-project", "/h", 100),         // gap fill
+		stat("zx2", 26, 0, 0, 0, 0, 0, "client-project", "/h", 100),         // gap fill
 		stat("fm", 30, 2, 0, 0, 1, 0, "client-project", "/h", 100),          // frictionful medium
 		stat("fl", 70, 0, 1, 0, 1, 0, "client-project", "/h", 100),          // frictionful long
 		stat("u", 40, 1, 0, 0, 0, 0, "", "/h", 100),                  // unmatched repo + friction
-		stat("g1", 15, 0, 0, 0, 1, 0, "client-project", "/h", 100),          // gap fill
-		stat("g2", 16, 0, 0, 0, 1, 0, "client-project", "/h", 100),          // gap fill
+		stat("g1", 15, 0, 0, 0, 1, 0, "client-project", "/h", 100),          // zero impl (lower id than zi)
+		stat("g2", 16, 0, 0, 0, 1, 0, "client-project", "/h", 100),          // zero extra
 	}
 
 	got := curate(pool)
