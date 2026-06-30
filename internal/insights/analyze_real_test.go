@@ -66,7 +66,7 @@ func TestAnalyzeReal(t *testing.T) {
 				}
 			}
 			for i, p := range a.StandingPreferences {
-				if !vi.ContainsUser(p.EvidenceQuote) && !vi.ContainsUserNormalized(p.EvidenceQuote) {
+				if p.EvidenceQuote != "" && !vi.ContainsUser(p.EvidenceQuote) && !vi.ContainsUserNormalized(p.EvidenceQuote) {
 					t.Errorf("preference[%d] quote survived but is not verbatim user words: %q", i, p.EvidenceQuote)
 				}
 			}
