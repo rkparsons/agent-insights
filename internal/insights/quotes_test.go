@@ -19,7 +19,7 @@ func TestValidateFriction(t *testing.T) {
 		{Type: "incomplete", OneLine: "left work", EvidenceQuote: ""},                                                 // no quote
 		{Type: "buggy_code", OneLine: "tiny", EvidenceQuote: "the bug"},                                               // too short (<12)
 	}}
-	out := validateQuotes(in, vi)
+	out, _ := validateQuotes(in, vi)
 	if len(out.FrictionIncidents) != 4 {
 		t.Fatalf("friction count = %d, want 4 (none dropped)", len(out.FrictionIncidents))
 	}
@@ -45,7 +45,7 @@ func TestValidatePreferences(t *testing.T) {
 		{Rule: "paraphrase", EvidenceQuote: "be consistent with the codebase always"},  // not in corpus
 		{Rule: "short", EvidenceQuote: "do it"},                                        // too short
 	}}
-	out := validateQuotes(in, vi)
+	out, _ := validateQuotes(in, vi)
 	if len(out.StandingPreferences) != 1 {
 		t.Fatalf("pref count = %d, want 1 (only the verbatim user one kept)", len(out.StandingPreferences))
 	}
@@ -61,14 +61,14 @@ func TestValidatePreferenceNormalizedFallback(t *testing.T) {
 	in := JudgedFields{StandingPreferences: []StandingPreference{
 		{Rule: "follow conventions", EvidenceQuote: "follow the existing conventions"},
 	}}
-	out := validateQuotes(in, vi)
+	out, _ := validateQuotes(in, vi)
 	if len(out.StandingPreferences) != 1 {
 		t.Fatalf("normalized user quote should be kept; got %d", len(out.StandingPreferences))
 	}
 }
 
 func TestValidateEmptyArraysNonNil(t *testing.T) {
-	out := validateQuotes(JudgedFields{}, buildVI("", ""))
+	out, _ := validateQuotes(JudgedFields{}, buildVI("", ""))
 	if out.FrictionIncidents == nil {
 		t.Error("empty FrictionIncidents must be a non-nil slice ([] not null)")
 	}
@@ -86,12 +86,31 @@ func TestValidateNormalizedFallbackAndEmpty(t *testing.T) {
 		},
 		StandingPreferences: []StandingPreference{},
 	}
-	out := validateQuotes(in, vi)
+	out, _ := validateQuotes(in, vi)
 	if out.FrictionIncidents[0].QuoteUnverified {
 		t.Error("reflowed-whitespace quote should verify via normalized fallback")
 	}
 	// Empty preferences must remain a non-nil slice ([] not null).
 	if out.StandingPreferences == nil {
 		t.Error("empty preferences should be non-nil slice")
+	}
+}
+
+func TestValidateQuotesReportsDroppedPreferences(t *testing.T) {
+	// buildVI(userText, claudeText) is the existing helper at the top of quotes_test.go:
+	// userText lands in BOTH corpora, claudeText in the full corpus only.
+	vi := buildVI("always follow the existing conventions in the package", "")
+	j := JudgedFields{
+		StandingPreferences: []StandingPreference{
+			{Rule: "kept", EvidenceQuote: "follow the existing conventions"},              // in user corpus, >=12 runes
+			{Rule: "dropped", EvidenceQuote: "this phrase never appears anywhere at all"}, // not in corpus
+		},
+	}
+	got, rep := validateQuotes(j, vi)
+	if len(got.StandingPreferences) != 1 {
+		t.Fatalf("want 1 surviving preference, got %d", len(got.StandingPreferences))
+	}
+	if rep.DroppedPreferences != 1 {
+		t.Errorf("want DroppedPreferences=1, got %d", rep.DroppedPreferences)
 	}
 }

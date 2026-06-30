@@ -49,7 +49,7 @@ func TestAnalyzeReal(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 
-			a, err := Analyze(ctx, ev, c, strings.TrimSuffix(name, ".jsonl"), repo, judge)
+			a, _, err := Analyze(ctx, ev, c, strings.TrimSuffix(name, ".jsonl"), repo, judge)
 			if err != nil {
 				t.Fatalf("Analyze: %v", err)
 			}

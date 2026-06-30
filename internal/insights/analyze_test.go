@@ -45,7 +45,7 @@ func TestAnalyzeMergesValidatesDropsAndFlags(t *testing.T) {
 		},
 	}}
 
-	a, err := Analyze(context.Background(), ev, c, "sess1", noRepo, judge)
+	a, _, err := Analyze(context.Background(), ev, c, "sess1", noRepo, judge)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestAnalyzeMergesValidatesDropsAndFlags(t *testing.T) {
 
 func TestAnalyzePropagatesJudgeError(t *testing.T) {
 	ev, c := claude.DecodeTranscript(strings.NewReader(`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi there friend"}]}}`))
-	_, err := Analyze(context.Background(), ev, c, "s", noRepo, fakeJudge{err: context.DeadlineExceeded})
+	_, _, err := Analyze(context.Background(), ev, c, "s", noRepo, fakeJudge{err: context.DeadlineExceeded})
 	if err == nil {
 		t.Error("expected judge error to propagate")
 	}

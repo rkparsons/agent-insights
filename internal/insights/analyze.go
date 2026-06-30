@@ -15,12 +15,12 @@ func Analyze(
 	ctx context.Context,
 	events []claude.TranscriptEvent, canary claude.Canary,
 	sessionID string, repo RepoResolver, judge Judge,
-) (AgentSessionAnalysis, error) {
+) (AgentSessionAnalysis, ValidationReport, error) {
 	ext := Extract(events, canary, sessionID, repo)
 	judged, err := judge.Judge(ctx, ext.Reduced)
 	if err != nil {
-		return AgentSessionAnalysis{}, err
+		return AgentSessionAnalysis{}, ValidationReport{}, err
 	}
-	validated := validateQuotes(judged, ext.Verbatim)
-	return AgentSessionAnalysis{Stats: ext.Stats, JudgedFields: validated}, nil
+	validated, report := validateQuotes(judged, ext.Verbatim)
+	return AgentSessionAnalysis{Stats: ext.Stats, JudgedFields: validated}, report, nil
 }

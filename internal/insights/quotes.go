@@ -10,12 +10,20 @@ func longEnough(quote string) bool {
 	return len([]rune(quote)) >= minQuoteRunes
 }
 
+// ValidationReport carries run-level observability the artifact cannot: the count
+// of standing preferences dropped for a non-verbatim quote (silent data loss). The
+// flagged-friction count is recoverable from the artifact's quote_unverified flags,
+// so it is deliberately not duplicated here.
+type ValidationReport struct {
+	DroppedPreferences int
+}
+
 // validateQuotes applies the anti-fabrication policy. Friction quotes are checked
 // against the full corpus and flagged-and-cleared when not verbatim (the incident
 // survives — a quoteless incident is schema-valid). Preference quotes are checked
 // against the user corpus and the whole preference dropped when not verbatim (a
 // preference without the user's own words violates its contract).
-func validateQuotes(j JudgedFields, vi VerbatimIndex) JudgedFields {
+func validateQuotes(j JudgedFields, vi VerbatimIndex) (JudgedFields, ValidationReport) {
 	out := j
 
 	fr := make([]FrictionIncident, 0, len(j.FrictionIncidents))
@@ -43,5 +51,5 @@ func validateQuotes(j JudgedFields, vi VerbatimIndex) JudgedFields {
 	}
 	out.StandingPreferences = pr
 
-	return out
+	return out, ValidationReport{DroppedPreferences: len(j.StandingPreferences) - len(pr)}
 }
