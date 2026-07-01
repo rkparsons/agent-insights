@@ -54,6 +54,21 @@ func TestReducerMarkerAnchoring(t *testing.T) {
 	}
 }
 
+func TestReducerStripsStructuredOutputEnforce(t *testing.T) {
+	out := runExtract(t, enforceMarkerFixture, noRepo).Reduced.Text
+	if strings.Contains(out, "You MUST call the StructuredOutput tool") {
+		t.Errorf("injected [structured-output-enforce] leaked into reduced output:\n%s", out)
+	}
+	for _, want := range []string{
+		"[User]: analyze this agent session please",
+		"[User]: Why does [structured-output-enforce] leak",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing genuine turn %q in:\n%s", want, out)
+		}
+	}
+}
+
 func TestReducerBudgetKeepsSpineDropsProse(t *testing.T) {
 	var b strings.Builder
 	b.WriteString(`{"type":"user","message":{"content":"KEEP USER"}}` + "\n")

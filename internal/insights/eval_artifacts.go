@@ -14,6 +14,16 @@ func hashSessionID(id string) string {
 	return fmt.Sprintf("%x", sum)[:12]
 }
 
+// redactRepo reduces the repo (a full absolute path from resolveRepo — producer
+// design) to its basename for the committed artifact: the repo identity is
+// stratification-relevant (F7) but the home path is not, so only the name is kept.
+func redactRepo(repo string) string {
+	if repo == "" {
+		return ""
+	}
+	return filepath.Base(repo)
+}
+
 type redactedFriction struct {
 	Type    string `json:"type"`
 	OneLine string `json:"one_line"`
@@ -51,7 +61,7 @@ func redactRuns(runs []sessionRun) []redactedAnalysis {
 	out := make([]redactedAnalysis, 0, len(runs))
 	for _, sr := range runs {
 		ra := redactedAnalysis{
-			SessionHash: hashSessionID(sr.Stats.SessionID), Cell: sr.Cell, Repo: sr.Stats.Repo,
+			SessionHash: hashSessionID(sr.Stats.SessionID), Cell: sr.Cell, Repo: redactRepo(sr.Stats.Repo),
 			AiTitle: sr.Stats.AiTitle, AssistantTurns: sr.Stats.AssistantTurns,
 			ToolErrors: sr.Stats.ToolErrors, Interrupts: sr.Stats.Interrupts, Rejections: sr.Stats.Rejections,
 			ToolCounts: sr.Stats.ToolCounts, WallClockNS: int64(sr.Stats.WallClock),

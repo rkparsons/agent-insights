@@ -1,11 +1,32 @@
 package insights
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestRedactRunsBasenamesRepoPath(t *testing.T) {
+	// resolveRepo returns the repo's full PATH (producer design); the committed
+	// artifact must carry only the basename, never the home path (F7 privacy).
+	runs := []sessionRun{
+		{Stats: AgentSessionStats{Repo: "/Users/rp/Developer/personal/home-cluster"}, Repeats: []RepeatResult{repeat(jf("fully_achieved"))}},
+		{Stats: AgentSessionStats{Repo: ""}, Repeats: []RepeatResult{repeat(jf("fully_achieved"))}},
+	}
+	got := redactRuns(runs)
+	if got[0].Repo != "home-cluster" {
+		t.Errorf("repo = %q, want basename %q", got[0].Repo, "home-cluster")
+	}
+	if got[1].Repo != "" {
+		t.Errorf("empty repo must stay empty, got %q", got[1].Repo)
+	}
+	blob, _ := json.Marshal(got)
+	if strings.Contains(string(blob), "/Users/") {
+		t.Errorf("redacted analyses leak a home path: %s", blob)
+	}
+}
 
 func TestWriteEvalArtifactsRedacts(t *testing.T) {
 	const secretID = "aaaa1111-bbbb-2222-cccc-333344445555"

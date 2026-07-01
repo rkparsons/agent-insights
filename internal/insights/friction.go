@@ -13,11 +13,16 @@ const (
 
 // metaPrefixes are injected pseudo-user content that must be stripped — they are
 // not what the user actually said. <task-notification> is deliberately absent.
+// [structured-output-enforce] is the harness's enforcement nudge injected when the
+// model skips the StructuredOutput tool; corpus-validated as the only bracketed
+// enforcement marker, appearing prefix-0 only in meta projects (37 turns, 0
+// non-meta), so stripping it never touches genuine user prose.
 var metaPrefixes = []string{
 	"<ide_opened_file", "<ide_selection", "<command-name", "<command-message",
 	"<command-args", "<command-stdout", "<local-command-stdout", "<local-command-caveat",
 	"<system-reminder", "<bash-", "<user-prompt-submit", "Caveat: The messages below",
 	"Base directory for this skill:", "Result of calling the", "The following deferred tools",
+	"[structured-output-enforce]",
 }
 
 // Genuine interrupts/rejections BEGIN with their marker (validated across the real

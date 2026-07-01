@@ -77,6 +77,23 @@ func TestVerdictSurfacesSoftFloorBreach(t *testing.T) {
 	}
 }
 
+func TestAssembleReportFoldsMetaButWithholdsMetaCards(t *testing.T) {
+	// F3: a contested meta session still folds into Sessions + the aggregate metrics,
+	// but its cards are withheld from the human pass (display-only).
+	inc := FrictionIncident{Type: "wrong_approach", OneLine: "x", EvidenceQuote: "q"}
+	meta := runWith(AgentSessionStats{Cwd: "/work/insights-gen"}, "meta", jf("unclear", inc), jf("unclear", inc))
+	rep := assembleReport([]sessionRun{meta})
+	if len(rep.Sessions) != 1 || !rep.Sessions[0].IsMeta {
+		t.Fatalf("meta session must fold into Sessions (metrics), got %d sessions", len(rep.Sessions))
+	}
+	if !rep.Sessions[0].Contested {
+		t.Fatal("meta session should be scored contested (folded into the metrics)")
+	}
+	if len(rep.Cards) != 0 {
+		t.Errorf("meta cards = %d, want 0 (withheld from the human pass)", len(rep.Cards))
+	}
+}
+
 func TestAssembleReportEmptyFailsClosed(t *testing.T) {
 	rep := assembleReport(nil)
 	if !rep.HardFail {

@@ -145,6 +145,24 @@ func TestFrictionMarkerToleratesLeadingWhitespace(t *testing.T) {
 	}
 }
 
+// enforceMarkerFixture mixes a GENUINE user turn, the injected
+// [structured-output-enforce] marker (a synthetic pseudo-user turn the harness
+// injects when the model skips the StructuredOutput tool — must be dropped, it is
+// not what the user said), and a turn that merely MENTIONS the marker mid-body (a
+// transcript-inspecting/meta turn — must be KEPT). Corpus-validated: the marker
+// only ever appears prefix-0 in meta projects (37 turns, 0 non-meta); no genuine
+// user turn begins with it.
+const enforceMarkerFixture = `{"type":"user","message":{"content":"analyze this agent session please"}}
+{"type":"user","message":{"content":[{"type":"text","text":"[structured-output-enforce] You MUST call the StructuredOutput tool to complete this request. Call this tool now."}]}}
+{"type":"user","message":{"content":"Why does [structured-output-enforce] leak into the corpus as fabricated friction?"}}`
+
+func TestStructuredOutputEnforceStripped(t *testing.T) {
+	s := runExtract(t, enforceMarkerFixture, noRepo).Stats
+	if s.UserTurns != 2 {
+		t.Errorf("UserTurns = %d, want 2 (genuine turn + mid-body mention kept; injected [structured-output-enforce] dropped)", s.UserTurns)
+	}
+}
+
 func TestUserTurnFingerprints(t *testing.T) {
 	in := `{"type":"user","message":{"content":"Implement the parser for the config file please"}}
 {"type":"user","message":{"content":"yes"}}

@@ -77,8 +77,13 @@ func contested(sr sessionRun, sc SessionScore) (bool, []string) {
 }
 
 // buildCards renders one card per contested claim, grouped by session. Returns nil
-// for an uncontested session.
+// for an uncontested session, and for a meta/insights-dev session: it still folds
+// into the metrics (F3), but its cards are withheld from the human pass (empty title
+// + structured-output-as-friction are low recognition value) — display-only.
 func buildCards(sr sessionRun, sc SessionScore) []Card {
+	if sc.IsMeta {
+		return nil
+	}
 	ok, reasons := contested(sr, sc)
 	if !ok {
 		return nil
@@ -95,14 +100,17 @@ func buildCards(sr sessionRun, sc SessionScore) []Card {
 		cards = append(cards, Card{Title: title, Opening: open, Claim: "Outcome across repeats: " + strings.Join(os, ", "), ContestedReason: reason})
 	}
 
+	// Dedup at type level, not exact (type, one_line): the model rephrases one_line
+	// each repeat, so exact-keying lets every rephrasing of the same incident spawn a
+	// card (one session produced ~20). One representative card per friction type keeps
+	// the human pass tractable and matches the Jaccard stability metric's granularity.
 	seen := map[string]bool{}
 	for _, rr := range sr.Repeats {
 		for _, inc := range rr.Validated.FrictionIncidents {
-			key := inc.Type + "|" + inc.OneLine
-			if seen[key] {
+			if seen[inc.Type] {
 				continue
 			}
-			seen[key] = true
+			seen[inc.Type] = true
 			cards = append(cards, Card{Title: title, Opening: open, Claim: fmt.Sprintf("Friction [%s]: %s", inc.Type, inc.OneLine), Quote: inc.EvidenceQuote, ContestedReason: reason})
 		}
 	}
