@@ -17,7 +17,7 @@ func RunInsights(args []string) {
 	mode, target, opts, err := parseInsightsArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", err)
-		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights analyze <session-id|path> | --backfill [--force] [--retry-errored] [--threshold N] [--timeout 10m]")
+		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights analyze <session-id|path> | --backfill [--force] [--dry-run] [--threshold N] [--timeout 10m]")
 		os.Exit(2)
 	}
 
@@ -29,6 +29,23 @@ func RunInsights(args []string) {
 	repo := insights.NewRepoResolver(&cfg)
 	judge := insights.NewClaudeJudge()
 
+	// Backfill prints the pre-run split before spending; --dry-run stops there.
+	if mode == "backfill" {
+		plan, planErr := insights.BackfillPlan(opts)
+		if planErr != nil {
+			fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", planErr)
+			os.Exit(1)
+		}
+		label := "insights:"
+		if opts.DryRun {
+			label = "insights (dry-run):"
+		}
+		fmt.Fprintf(os.Stderr, "%s %d to process · %d already done · %d gated\n", label, plan.ToProcess, plan.Done, plan.Gated)
+		if opts.DryRun {
+			return
+		}
+	}
+
 	var sum insights.RunSummary
 	switch mode {
 	case "single":
@@ -38,6 +55,9 @@ func RunInsights(args []string) {
 	}
 	fmt.Fprintf(os.Stderr, "insights: scanned=%d analyzed=%d skipped-incremental=%d skipped-gate=%d errored=%d dropped-preferences=%d\n",
 		sum.Scanned, sum.Analyzed, sum.SkippedIncremental, sum.SkippedGate, sum.Errored, sum.DroppedPreferences)
+	if sum.Parked {
+		fmt.Fprintf(os.Stderr, "insights: parked — %d done · %d remaining · re-run the same command to continue\n", sum.Analyzed, sum.Remaining)
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", err)
 		os.Exit(1)
@@ -60,8 +80,8 @@ func parseInsightsArgs(args []string) (mode, target string, opts insights.Option
 			backfill = true
 		case a == "--force":
 			opts.Force = true
-		case a == "--retry-errored":
-			opts.RetryErrored = true
+		case a == "--dry-run":
+			opts.DryRun = true
 		case a == "--threshold":
 			if i+1 >= len(rest) {
 				return "", "", opts, fmt.Errorf("--threshold needs a value")
@@ -88,6 +108,9 @@ func parseInsightsArgs(args []string) (mode, target string, opts insights.Option
 			}
 			target = a
 		}
+	}
+	if opts.DryRun && !backfill {
+		return "", "", opts, fmt.Errorf("--dry-run requires --backfill")
 	}
 	if backfill {
 		if target != "" {

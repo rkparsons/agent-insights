@@ -132,10 +132,10 @@ func TestBackfillSkipStaleGateOnThresholdChange(t *testing.T) {
 	mt := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	ref := claude.TranscriptRef{SessionID: "s", Mtime: mt}
 	m := map[string]ManifestEntry{"s": {SessionID: "s", TranscriptMtime: mt, Outcome: "gated", Threshold: 5}}
-	if _, skip := backfillSkip(ref, m, 5, false); !skip {
+	if _, skip := backfillSkip(ref, m, 5); !skip {
 		t.Error("same threshold should skip")
 	}
-	if _, skip := backfillSkip(ref, m, 3, false); skip {
+	if _, skip := backfillSkip(ref, m, 3); skip {
 		t.Error("lower threshold should re-evaluate (not skip)")
 	}
 }

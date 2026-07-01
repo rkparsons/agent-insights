@@ -15,7 +15,7 @@ type Options struct {
 	MinAssistantTurns int
 	Timeout           time.Duration
 	Force             bool
-	RetryErrored      bool
+	DryRun            bool // backfill only: count the plan and print it, spend nothing
 }
 
 // RunSummary is the end-of-run tally surfaced to the user.
@@ -26,6 +26,9 @@ type RunSummary struct {
 	SkippedGate        int
 	Errored            int
 	DroppedPreferences int
+
+	Parked    bool // stopped early on a consecutive-failure run of judge calls
+	Remaining int  // sessions still needing analysis when the run stopped (parked runs)
 }
 
 // RunSingle analyzes one explicitly named session (id or path). It bypasses the gate

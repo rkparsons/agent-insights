@@ -8,8 +8,10 @@ import (
 )
 
 // RunBackfill scans every top-level transcript, applies incremental + gate skips, and
-// analyzes the substantial, not-yet-done sessions. Resumable across the pruning race
-// via the stamped analysis files + the gated/errored manifest; lock-guarded against a
+// analyzes the substantial, not-yet-done sessions. "Done" is a current analysis file, so
+// a re-run reprocesses every not-done session — window-interrupted and previously-errored
+// alike (no flag). It parks cleanly after consecutiveFailureLimit judge failures in a row
+// so a hit usage window doesn't grind through per-session timeouts. Lock-guarded against a
 // concurrent run.
 func RunBackfill(ctx context.Context, repo RepoResolver, judge Judge, opts Options) (RunSummary, error) {
 	lock, err := AcquireLock()
@@ -27,19 +29,19 @@ func RunBackfill(ctx context.Context, repo RepoResolver, judge Judge, opts Optio
 		return RunSummary{}, err
 	}
 
+	refs = dedupNewest(refs)
 	var sum RunSummary
-	for _, ref := range dedupNewest(refs) {
+	consecutiveFailures := 0
+	for _, ref := range refs {
 		sum.Scanned++
 
 		if !opts.Force {
-			if reason, skip := backfillSkip(ref, manifest, opts.MinAssistantTurns, opts.RetryErrored); skip {
+			if reason, skip := backfillSkip(ref, manifest, opts.MinAssistantTurns); skip {
 				switch reason {
 				case "incremental":
 					sum.SkippedIncremental++
 				case "gate":
 					sum.SkippedGate++
-				case "errored":
-					sum.Errored++
 				}
 				continue
 			}
@@ -70,12 +72,80 @@ func RunBackfill(ctx context.Context, repo RepoResolver, judge Judge, opts Optio
 				return sum, ctx.Err()
 			}
 			recordErrored(&sum, &manifest, ref, err)
+			consecutiveFailures++
+			if consecutiveFailures >= consecutiveFailureLimit {
+				// The usage window is likely hit; park cleanly rather than grind through
+				// every remaining session's timeout. A re-run finishes what is left.
+				sum.Parked = true
+				sum.Remaining = countRemaining(refs, manifest, opts)
+				return sum, nil
+			}
 			continue
 		}
+		consecutiveFailures = 0
 		sum.Analyzed++
 		sum.DroppedPreferences += rep.DroppedPreferences
 	}
 	return sum, nil
+}
+
+// consecutiveFailureLimit parks the backfill after this many judge failures in a row —
+// the signature of a hit usage window (rate-limited claude -p calls fail or hang).
+const consecutiveFailureLimit = 3
+
+// countRemaining reports how many deduped sessions still need analysis: neither done (a
+// current analysis file) nor gated at the current threshold. Errored sessions count as
+// remaining. Read-only over the analysis files + in-memory manifest; no transcript decode.
+func countRemaining(refs []claude.TranscriptRef, manifest map[string]ManifestEntry, opts Options) int {
+	_, _, pending := planCounts(refs, manifest, opts)
+	return pending
+}
+
+// planCounts classifies each deduped ref by the cheap pre-decode signals: done (current
+// analysis file), gated (manifest entry at this threshold), or pending (everything else —
+// including previously-errored and never-seen sessions). Under --force nothing is skipped,
+// so every session is pending. No transcript decode, so pending is an upper bound: a
+// never-seen session that turns out trivial gates only once actually decoded.
+func planCounts(refs []claude.TranscriptRef, manifest map[string]ManifestEntry, opts Options) (done, gated, pending int) {
+	for _, ref := range refs {
+		if !opts.Force {
+			if reason, skip := backfillSkip(ref, manifest, opts.MinAssistantTurns); skip {
+				switch reason {
+				case "incremental":
+					done++
+				case "gate":
+					gated++
+				}
+				continue
+			}
+		}
+		pending++
+	}
+	return done, gated, pending
+}
+
+// BackfillCounts is the pre-run split surfaced by BackfillPlan.
+type BackfillCounts struct {
+	ToProcess int // sessions lacking a current analysis file and not gated (upper bound; see planCounts)
+	Done      int // sessions with a current analysis file
+	Gated     int // sessions recorded gated at the current threshold
+}
+
+// BackfillPlan classifies every top-level session by the cheap pre-decode signals and
+// returns the counts, spending nothing: no transcript decode, no Judge. It answers "how
+// many are left" between usage windows and backs the `--dry-run` / pre-run summary.
+// Lock-free — a concurrent run only shifts the snapshot.
+func BackfillPlan(opts Options) (BackfillCounts, error) {
+	refs, err := claude.WalkTranscripts()
+	if err != nil {
+		return BackfillCounts{}, err
+	}
+	manifest, err := loadManifest()
+	if err != nil {
+		return BackfillCounts{}, err
+	}
+	done, gated, pending := planCounts(dedupNewest(refs), manifest, opts)
+	return BackfillCounts{ToProcess: pending, Done: done, Gated: gated}, nil
 }
 
 func recordErrored(sum *RunSummary, manifest *map[string]ManifestEntry, ref claude.TranscriptRef, err error) {
@@ -85,9 +155,10 @@ func recordErrored(sum *RunSummary, manifest *map[string]ManifestEntry, ref clau
 	_ = appendManifest(e)
 }
 
-// backfillSkip implements the pre-decode skip rule. analyzed-fresh wins; then a gated
-// entry at the same threshold; then an errored entry unless retrying.
-func backfillSkip(ref claude.TranscriptRef, m map[string]ManifestEntry, threshold int, retryErrored bool) (string, bool) {
+// backfillSkip implements the pre-decode skip rule. analyzed-fresh (a current analysis
+// file) wins; then a gated entry at the same threshold. Errored sessions are NOT skipped:
+// they have no analysis file, so they are simply "not done" and get retried next run.
+func backfillSkip(ref claude.TranscriptRef, m map[string]ManifestEntry, threshold int) (string, bool) {
 	if analyzedFresh(ref.SessionID, ref.Mtime) {
 		return "incremental", true
 	}
@@ -95,15 +166,8 @@ func backfillSkip(ref claude.TranscriptRef, m map[string]ManifestEntry, threshol
 	if !ok || e.TranscriptMtime.Before(ref.Mtime) {
 		return "", false
 	}
-	switch e.Outcome {
-	case "gated":
-		if e.Threshold == threshold {
-			return "gate", true
-		}
-	case "errored":
-		if !retryErrored {
-			return "errored", true
-		}
+	if e.Outcome == "gated" && e.Threshold == threshold {
+		return "gate", true
 	}
 	return "", false
 }
