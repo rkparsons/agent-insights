@@ -14,7 +14,7 @@ func TestNewAnalyzeCommandArgvAndEnv(t *testing.T) {
 	cmd := newAnalyzeCommand(context.Background(), "claude-opus-4-8", `{"x":1}`, []byte("reduced input"))
 
 	args := strings.Join(cmd.Args, "\x00")
-	for _, want := range []string{"claude", "-p", "/analyzing-agent-sessions", "--output-format", "json", "--json-schema", `{"x":1}`, "--model", "claude-opus-4-8"} {
+	for _, want := range []string{"claude", "-p", "/analyzing-agent-sessions", "--output-format", "json", "--json-schema", `{"x":1}`, "--model", "claude-opus-4-8", "--no-session-persistence"} {
 		if !strings.Contains(args, want) {
 			t.Errorf("argv missing %q; got %v", want, cmd.Args)
 		}

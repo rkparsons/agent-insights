@@ -38,7 +38,13 @@ func newAnalyzeCommand(ctx context.Context, model, schema string, stdin []byte) 
 	cmd := exec.CommandContext(ctx, "claude", "-p", analysisSkillCommand,
 		"--output-format", "json",
 		"--json-schema", schema,
-		"--model", model)
+		"--model", model,
+		// Nested analysis calls must NOT persist their own session transcripts —
+		// otherwise the backfill litters ~/.claude/projects with analyzer exhaust
+		// (one 1-turn structured-output session per analyzed session), which then
+		// re-enters the scan as gated noise. The analysis still returns structured
+		// output on stdout; only the on-disk session record is suppressed.
+		"--no-session-persistence")
 	cmd.Stdin = bytes.NewReader(stdin)
 	cmd.Env = scrubbedEnv()
 	return cmd
