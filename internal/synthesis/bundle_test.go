@@ -1,6 +1,7 @@
 package synthesis
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -90,5 +91,46 @@ func TestComputeSignalsBelowFloorOmitted(t *testing.T) {
 		if s.Kind == "high_read" {
 			t.Errorf("high_read emitted with only 2 members (< floor): %+v", s)
 		}
+	}
+}
+
+func TestComputeSignalsZeroHeavyFrictionDensity(t *testing.T) {
+	var g []insights.AgentSessionAnalysis
+	for i := 0; i < 27; i++ { // clean: zero friction, some assistant turns
+		a := analysisWith("/Users/dev/Developer/client-project", "/Users/dev/Developer/client-project")
+		a.Stats.SessionID = "clean" + string(rune('a'+i%26)) + string(rune('a'+i/26))
+		a.Stats.AssistantTurns = 10
+		g = append(g, a)
+	}
+	for i := 0; i < 3; i++ { // frictional outliers: density 0.5 each
+		a := analysisWith("/Users/dev/Developer/client-project", "/Users/dev/Developer/client-project")
+		a.Stats.SessionID = "fric" + string(rune('a'+i))
+		a.Stats.AssistantTurns = 10
+		a.Stats.Rejections = 5
+		g = append(g, a)
+	}
+	// Sanity: clean sessions have zero friction, outliers have nonzero density.
+	for _, a := range g {
+		total := a.Stats.Interrupts + a.Stats.Rejections + a.Stats.ToolErrors
+		if strings.HasPrefix(a.Stats.SessionID, "clean") && total != 0 {
+			t.Fatalf("session %s: expected zero friction, got %d", a.Stats.SessionID, total)
+		}
+		if strings.HasPrefix(a.Stats.SessionID, "fric") && total == 0 {
+			t.Fatalf("session %s: expected nonzero friction", a.Stats.SessionID)
+		}
+	}
+	var fd *OppSignal
+	for i, s := range computeSignals(g) {
+		_ = i
+		if s.Kind == "friction_density" {
+			s := s
+			fd = &s
+		}
+	}
+	if fd == nil {
+		t.Fatal("friction_density signal suppressed when p90 collapses to 0")
+	}
+	if fd.Magnitude != 3 {
+		t.Errorf("friction_density magnitude = %d, want 3", fd.Magnitude)
 	}
 }

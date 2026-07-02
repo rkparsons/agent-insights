@@ -145,13 +145,13 @@ func computeSignals(group []insights.AgentSessionAnalysis) []OppSignal {
 			turns = 1
 		}
 		d := float64(a.Stats.Interrupts+a.Stats.Rejections+a.Stats.ToolErrors) / float64(turns)
-		if r >= readP90 && readP90 > 0 {
+		if r >= readP90 && r > 0 {
 			highRead = append(highRead, a.Stats.SessionID)
 		}
-		if d >= densP90 && densP90 > 0 {
+		if d >= densP90 && d > 0 {
 			fricDensity = append(fricDensity, a.Stats.SessionID)
 		}
-		if a.SessionType == "single_task" && len(a.Stats.Skills) == 0 && r >= readP90 && readP90 > 0 {
+		if a.SessionType == "single_task" && len(a.Stats.Skills) == 0 && r >= readP90 && r > 0 {
 			unskilled = append(unskilled, a.Stats.SessionID)
 		}
 	}
