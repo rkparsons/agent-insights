@@ -10,6 +10,12 @@ import (
 
 func synthesisDir() string { return filepath.Join(insights.InsightsDir(), "synthesis") }
 
+// Store writes both the .md and .json for a repo synthesis. The .md is the
+// shareable artifact and is privacy-scanned before write (see scanReport in
+// RunSynthesize). The .json is the local source-of-truth, parallel to the
+// analyses pool, and intentionally retains session-ids (needed for the
+// membership-stability metric) — it is not a shareable artifact and is not
+// privacy-scanned.
 func Store(s RepoSynthesis, md string, date string) error {
 	dir := filepath.Join(synthesisDir(), s.Repo)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

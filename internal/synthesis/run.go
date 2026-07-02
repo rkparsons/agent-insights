@@ -56,7 +56,9 @@ func RunSynthesize(ctx context.Context, syn Synthesizer, opts Options) (Summary,
 	date := time.Now().UTC().Format("2006-01-02")
 	for _, k := range keys {
 		adopt := NewAdoptChecker(repoPathFor(groups[k]))
-		rs, report, err := Synthesize(ctx, k, groups[k], syn, adopt)
+		rctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+		rs, report, err := Synthesize(rctx, k, groups[k], syn, adopt)
+		cancel()
 		if err != nil {
 			sum.Skipped++
 			fmt.Fprintf(os.Stderr, "synthesis: %s skipped: %v\n", k, err)

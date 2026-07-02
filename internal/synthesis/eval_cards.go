@@ -14,7 +14,8 @@ type Card struct {
 // recommendation, so a reviewer can confirm the theme is real without re-deriving it.
 func Cards(s RepoSynthesis, bundle EvidenceBundle) []Card {
 	var cards []Card
-	for _, t := range s.Themes {
+	for ti := range s.Themes {
+		t := s.Themes[ti]
 		if t.SessionCount == 0 {
 			continue
 		}
@@ -26,7 +27,7 @@ func Cards(s RepoSynthesis, bundle EvidenceBundle) []Card {
 		rec := ""
 		for _, r := range s.Recommendations {
 			for _, ref := range r.ThemeRefs {
-				if ref >= 0 && ref < len(s.Themes) && s.Themes[ref].Title == t.Title {
+				if ref == ti {
 					rec = r.Statement
 				}
 			}

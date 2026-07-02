@@ -71,6 +71,9 @@ func validateAndCount(b EvidenceBundle, raw RawSynthesis) (themes []Theme, unthe
 		if hasQuantitativeClaim(rt.Summary) {
 			hard = append(hard, "theme summary contains a number: "+rt.Title)
 		}
+		if hasQuantitativeClaim(rt.Title) {
+			hard = append(hard, "theme title contains a number: "+rt.Title)
+		}
 		switch rt.Kind {
 		case "friction":
 			breakdown := map[string]int{}

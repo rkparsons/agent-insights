@@ -126,6 +126,34 @@ func TestPrefCountDistinct(t *testing.T) {
 	}
 }
 
+// TestRankThemesWithinKind is a regression for a bug where all themes were
+// ranked in one global ordering: friction scores as a fraction (~0.11) while
+// opportunity scores as a raw session count (~15), so an opportunity theme
+// stole Rank 1 and "## Top friction themes" started at "2.". Each kind must
+// rank independently starting at Rank 1.
+func TestRankThemesWithinKind(t *testing.T) {
+	themes := []Theme{
+		{Kind: "friction", Title: "minor friction", IncidentCount: 5},
+		{Kind: "opportunity", Title: "big opportunity", SessionCount: 15},
+		{Kind: "friction", Title: "major friction", IncidentCount: 18},
+	}
+	rankThemes(themes, 100)
+
+	byTitle := map[string]Theme{}
+	for _, t := range themes {
+		byTitle[t.Title] = t
+	}
+	if got := byTitle["major friction"].Rank; got != 1 {
+		t.Errorf("major friction rank = %d, want 1 (highest incident count within friction)", got)
+	}
+	if got := byTitle["minor friction"].Rank; got != 2 {
+		t.Errorf("minor friction rank = %d, want 2", got)
+	}
+	if got := byTitle["big opportunity"].Rank; got != 1 {
+		t.Errorf("big opportunity rank = %d, want 1 (only opportunity theme, ranked within its own kind)", got)
+	}
+}
+
 func TestSynthesizeQuantitativeClaimInRecommendation(t *testing.T) {
 	group := []insights.AgentSessionAnalysis{frictionAnalysis("s1", "investigate the existing pattern first", "apps/api/a.ts")}
 	fake := fakeSynth{raw: RawSynthesis{

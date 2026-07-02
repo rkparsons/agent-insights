@@ -83,20 +83,25 @@ func Synthesize(ctx context.Context, repoKey string, group []insights.AgentSessi
 // rankThemes assigns Rank (1 = top). Friction: normalized incident_count desc.
 // Opportunity: session_count desc. Friction and opportunity are ranked within their kind.
 func rankThemes(themes []Theme, analyzed int) {
-	score := func(t Theme) float64 {
-		if t.Kind == "friction" && analyzed > 0 {
+	rankKind := func(kind string, score func(Theme) float64) {
+		var idx []int
+		for i := range themes {
+			if themes[i].Kind == kind {
+				idx = append(idx, i)
+			}
+		}
+		sort.SliceStable(idx, func(a, b int) bool { return score(themes[idx[a]]) > score(themes[idx[b]]) })
+		for rank, i := range idx {
+			themes[i].Rank = rank + 1
+		}
+	}
+	rankKind("friction", func(t Theme) float64 {
+		if analyzed > 0 {
 			return float64(t.IncidentCount) / float64(analyzed)
 		}
-		return float64(t.SessionCount)
-	}
-	idx := make([]int, len(themes))
-	for i := range idx {
-		idx[i] = i
-	}
-	sort.SliceStable(idx, func(a, b int) bool { return score(themes[idx[a]]) > score(themes[idx[b]]) })
-	for rank, i := range idx {
-		themes[i].Rank = rank + 1
-	}
+		return 0
+	})
+	rankKind("opportunity", func(t Theme) float64 { return float64(t.SessionCount) })
 }
 
 func isPorF(b EvidenceBundle, id string) bool {

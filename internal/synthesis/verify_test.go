@@ -74,6 +74,23 @@ func TestValidateRejectsOverlapAndBadIDs(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsNumberInThemeTitle(t *testing.T) {
+	b := bundleFixture()
+	raw := RawSynthesis{Themes: []RawTheme{
+		{Title: "Wrong approach in 40% of sessions", Kind: "friction", EvidenceIDs: []string{"F1"}},
+	}}
+	_, _, hard := validateAndCount(b, raw)
+	found := false
+	for _, h := range hard {
+		if strings.Contains(h, "theme title contains a number") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected hard error for numeric claim in theme title, got %v", hard)
+	}
+}
+
 func TestValidateFrictionOverGeneralized(t *testing.T) {
 	b := EvidenceBundle{Friction: []FrictionItem{
 		{ID: "F1", Type: "wrong_approach", SessionID: "s1"},

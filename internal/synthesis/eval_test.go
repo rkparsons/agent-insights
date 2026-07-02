@@ -169,6 +169,33 @@ func TestCardsDetectPlantedLeak(t *testing.T) {
 	}
 }
 
+// TestCardsMatchByThemeIndexNotTitle is a regression for a bug where a
+// recommendation was attached to a card by comparing theme titles: two themes
+// sharing a title would cross-attach a recommendation meant for the other
+// one. Matching must use the theme's own slice index.
+func TestCardsMatchByThemeIndexNotTitle(t *testing.T) {
+	s := RepoSynthesis{
+		Repo: "client-project",
+		Themes: []Theme{
+			{Title: "Duplicate name", Kind: "friction", SessionCount: 3},
+			{Title: "Duplicate name", Kind: "friction", SessionCount: 5},
+		},
+		Recommendations: []Recommendation{
+			{Type: "workflow_tip", Statement: "applies only to theme index 1", ThemeRefs: []int{1}},
+		},
+	}
+	cards := Cards(s, EvidenceBundle{})
+	if len(cards) != 2 {
+		t.Fatalf("cards = %v, want 2", cards)
+	}
+	if cards[0].ProposedRec != "" {
+		t.Errorf("card for theme index 0 got ProposedRec %q, want empty (rec targets index 1 only)", cards[0].ProposedRec)
+	}
+	if cards[1].ProposedRec != "applies only to theme index 1" {
+		t.Errorf("card for theme index 1 got ProposedRec %q, want the targeted recommendation", cards[1].ProposedRec)
+	}
+}
+
 func TestCardsSkipZeroSessionThemes(t *testing.T) {
 	s := RepoSynthesis{Repo: "client-project", Themes: []Theme{{Title: "empty", SessionCount: 0}}}
 	if cards := Cards(s, EvidenceBundle{}); len(cards) != 0 {
