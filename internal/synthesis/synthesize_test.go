@@ -110,6 +110,22 @@ func TestSynthesizeClaudeMdRuleAcceptsPrefEvidence(t *testing.T) {
 	}
 }
 
+func TestPrefCountDistinct(t *testing.T) {
+	group := []insights.AgentSessionAnalysis{prefAnalysis("s1", "no bloat", "please avoid bloat in this codebase")}
+	fake := fakeSynth{raw: RawSynthesis{
+		Recommendations: []RawRec{{Type: "claude_md_rule", Statement: "Avoid unnecessary bloat", EvidenceIDs: []string{"P1", "P1"}}},
+	}}
+	adopt := func(r Recommendation) string { return "unknown" }
+
+	rs, _, err := Synthesize(context.Background(), "client-project", group, fake, adopt)
+	if err != nil {
+		t.Fatalf("Synthesize: %v", err)
+	}
+	if got := rs.Meta.PrefCountByRec[0]; got != 1 {
+		t.Errorf("PrefCountByRec[0] = %d, want 1 (P1 cited twice must count once)", got)
+	}
+}
+
 func TestSynthesizeQuantitativeClaimInRecommendation(t *testing.T) {
 	group := []insights.AgentSessionAnalysis{frictionAnalysis("s1", "investigate the existing pattern first", "apps/api/a.ts")}
 	fake := fakeSynth{raw: RawSynthesis{

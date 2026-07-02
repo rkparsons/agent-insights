@@ -75,18 +75,23 @@ func validateAndCount(b EvidenceBundle, raw RawSynthesis) (themes []Theme, unthe
 		case "friction":
 			breakdown := map[string]int{}
 			sessions := map[string]bool{}
+			seen := map[string]bool{}
 			for _, id := range rt.EvidenceIDs {
 				f, ok := fByID[id]
 				if !ok {
 					hard = append(hard, "friction theme "+rt.Title+" references non-friction/out-of-range id "+id)
 					continue
 				}
+				if seen[id] {
+					continue
+				}
+				seen[id] = true
 				usedF[id]++
 				breakdown[f.Type]++
 				sessions[f.SessionID] = true
 				th.SessionIDs = append(th.SessionIDs, f.SessionID)
 			}
-			th.IncidentCount = len(rt.EvidenceIDs)
+			th.IncidentCount = len(seen)
 			th.SessionCount = len(sessions)
 			th.TypeBreakdown = breakdown
 			th.OverGeneralized = len(breakdown) > 2
@@ -100,11 +105,11 @@ func validateAndCount(b EvidenceBundle, raw RawSynthesis) (themes []Theme, unthe
 					hard = append(hard, "opportunity theme "+rt.Title+" references out-of-range signal "+id)
 				}
 			}
-			nS := 0
+			sSeen := map[string]bool{}
 			sessions := map[string]bool{}
 			for _, id := range rt.EvidenceIDs {
 				if sByID[id] {
-					nS++
+					sSeen[id] = true
 				} else if _, ok := fByID[id]; !ok {
 					hard = append(hard, "opportunity theme "+rt.Title+" references out-of-range id "+id)
 				}
@@ -117,7 +122,7 @@ func validateAndCount(b EvidenceBundle, raw RawSynthesis) (themes []Theme, unthe
 					}
 				}
 			}
-			if !hasG && nS < 4 {
+			if !hasG && len(sSeen) < 4 {
 				hard = append(hard, "opportunity theme "+rt.Title+" has no G signal and < 4 success anchors")
 			}
 			th.SessionCount = len(sessions)

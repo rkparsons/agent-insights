@@ -1,6 +1,9 @@
 package synthesis
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestQuoteGuard(t *testing.T) {
 	pool := newQuoteIndex([]string{"try not to duplicate too much existing code", "No bloat please"})
@@ -117,6 +120,55 @@ func TestValidateOpportunityThemeAnchoring(t *testing.T) {
 	}}
 	if _, _, hard := validateAndCount(b, underAnchored); len(hard) == 0 {
 		t.Error("expected hard error: opportunity theme with no G signal and < 4 success anchors")
+	}
+}
+
+func TestValidateFrictionCountsDistinctValidIDs(t *testing.T) {
+	b := bundleFixture()
+	raw := RawSynthesis{Themes: []RawTheme{
+		{Title: "Dup", Kind: "friction", EvidenceIDs: []string{"F1", "F1", "F2", "F99"}},
+	}}
+	themes, _, hard := validateAndCount(b, raw)
+	if themes[0].IncidentCount != 2 {
+		t.Errorf("IncidentCount = %d, want 2 (distinct valid ids F1,F2)", themes[0].IncidentCount)
+	}
+	foundOutOfRange, foundPartition := false, false
+	for _, h := range hard {
+		if strings.Contains(h, "out-of-range id F99") {
+			foundOutOfRange = true
+		}
+		if strings.Contains(h, "partition violated") {
+			foundPartition = true
+		}
+	}
+	if !foundOutOfRange {
+		t.Errorf("expected hard error for out-of-range id F99, got %v", hard)
+	}
+	if foundPartition {
+		t.Errorf("did not expect partition-violated error from a duplicate id within one theme, got %v", hard)
+	}
+}
+
+func TestValidateOpportunityRejectsDuplicateS(t *testing.T) {
+	b := bundleFixture()
+	b.Success = []SuccessItem{{ID: "S1", SessionID: "s1"}}
+	raw := RawSynthesis{Themes: []RawTheme{
+		{Title: "Fake anchors", Kind: "opportunity", SignalRefs: nil, EvidenceIDs: []string{"S1", "S1", "S1", "S1"}},
+	}}
+	_, _, hard := validateAndCount(b, raw)
+	if len(hard) == 0 {
+		t.Error("expected hard error: duplicate S id must not satisfy the >= 4 distinct success anchors requirement")
+	}
+}
+
+func TestQuoteGuardNormalizedWhitespace(t *testing.T) {
+	qi := newQuoteIndex([]string{"investigate the existing pattern first"})
+	kept, dropped := qi.filter([]string{"investigate  the   existing   pattern first"})
+	if len(kept) != 1 {
+		t.Errorf("kept = %v, want the whitespace-variant quote kept via normalized match", kept)
+	}
+	if dropped != 0 {
+		t.Errorf("dropped = %d, want 0", dropped)
 	}
 }
 

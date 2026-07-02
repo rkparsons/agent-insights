@@ -136,13 +136,15 @@ func distinctSessions(b EvidenceBundle, ids []string) int {
 }
 
 func countP(b EvidenceBundle, ids []string) int {
-	n := 0
+	prefIDs := map[string]bool{}
+	for _, p := range b.Prefs {
+		prefIDs[p.ID] = true
+	}
+	seen := map[string]bool{}
 	for _, id := range ids {
-		for _, p := range b.Prefs {
-			if p.ID == id {
-				n++
-			}
+		if prefIDs[id] {
+			seen[id] = true
 		}
 	}
-	return n
+	return len(seen)
 }
