@@ -39,3 +39,56 @@ func TestScanReportCatchesLeak(t *testing.T) {
 		t.Error("scanReport must flag a /Users/ path")
 	}
 }
+
+func TestRenderUnthemedFrictionWithoutFrictionThemes(t *testing.T) {
+	s := sampleSynthesis()
+	s.Themes = []Theme{{Title: "Batching opportunity", Kind: "opportunity", SessionCount: 4}}
+	s.Meta.UnthemedFriction = 5
+	md := Render(s)
+	if strings.Contains(md, "## Top friction themes") {
+		t.Error("no friction themes exist; heading must not render")
+	}
+	if !strings.Contains(md, "5 friction incidents are unthemed") {
+		t.Error("unthemed-friction residual must surface even with zero friction themes")
+	}
+}
+
+func TestRenderRedactsQuantitativeClaims(t *testing.T) {
+	s := sampleSynthesis()
+	s.Recommendations = []Recommendation{{Type: "claude_md_rule", Statement: "Do this because it worked in 40% of sessions",
+		SessionCount: 15, AlreadyAdopted: "no"}}
+	s.Meta.ValidationErrors = []string{"recommendation statement contains a number: Do this because it worked in 40% of sessions"}
+	md := Render(s)
+	if strings.Contains(md, "40%") {
+		t.Error("LLM-authored quantitative claim leaked into rendered recommendation/footer")
+	}
+	if !strings.Contains(md, "[redacted]") {
+		t.Error("expected [redacted] placeholder in place of the quantitative claim")
+	}
+}
+
+func TestRenderAlreadyAdoptedBranch(t *testing.T) {
+	s := sampleSynthesis()
+	s.Recommendations = []Recommendation{
+		{Type: "claude_md_rule", Statement: "Fresh rec", SessionCount: 15, AlreadyAdopted: "no"},
+		{Type: "workflow_tip", Statement: "Adopted rec", SessionCount: 8, AlreadyAdopted: "yes"},
+	}
+	md := Render(s)
+	if !strings.Contains(md, "## Already in place (reinforce?)") {
+		t.Error("missing already-adopted heading")
+	}
+	adoptedIdx := strings.Index(md, "## Already in place (reinforce?)")
+	recsIdx := strings.Index(md, "## Recommendations")
+	if recsIdx < 0 || adoptedIdx < recsIdx {
+		t.Fatal("expected Recommendations section before Already-in-place section")
+	}
+	if strings.Contains(md[:adoptedIdx], "Adopted rec") {
+		t.Error("already-adopted recommendation must not render under ## Recommendations")
+	}
+	if !strings.Contains(md[adoptedIdx:], "Adopted rec") {
+		t.Error("already-adopted recommendation must render under ## Already in place (reinforce?)")
+	}
+	if strings.Contains(md[adoptedIdx:], "Fresh rec") {
+		t.Error("fresh recommendation must not render under ## Already in place (reinforce?)")
+	}
+}

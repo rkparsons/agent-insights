@@ -16,15 +16,18 @@ func Render(s RepoSynthesis) string {
 	if len(friction) > 0 {
 		b.WriteString("## Top friction themes\n\n")
 		for _, t := range friction {
-			fmt.Fprintf(&b, "%d. **%s** — %d incidents across %d sessions. %s\n", t.Rank, t.Title, t.IncidentCount, t.SessionCount, t.Summary)
+			fmt.Fprintf(&b, "%d. **%s** — %d incidents across %d sessions. %s\n", t.Rank, redactNumbers(t.Title), t.IncidentCount, t.SessionCount, redactNumbers(t.Summary))
 		}
-		fmt.Fprintf(&b, "\n_Per-theme session counts overlap and do not sum to the total; %d friction incidents are unthemed._\n\n", s.Meta.UnthemedFriction)
+		b.WriteString("\n")
+	}
+	if s.Meta.UnthemedFriction > 0 {
+		fmt.Fprintf(&b, "_Per-theme session counts overlap and do not sum to the total; %d friction incidents are unthemed._\n\n", s.Meta.UnthemedFriction)
 	}
 	opps := themesByKind(s.Themes, "opportunity")
 	if len(opps) > 0 {
 		b.WriteString("## Workflow opportunities\n\n")
 		for _, t := range opps {
-			fmt.Fprintf(&b, "- **%s** (%d sessions). %s\n", t.Title, t.SessionCount, t.Summary)
+			fmt.Fprintf(&b, "- **%s** (%d sessions). %s\n", redactNumbers(t.Title), t.SessionCount, redactNumbers(t.Summary))
 		}
 		b.WriteString("\n")
 	}
@@ -32,24 +35,32 @@ func Render(s RepoSynthesis) string {
 	if len(newRecs) > 0 {
 		b.WriteString("## Recommendations\n\n")
 		for _, r := range newRecs {
-			fmt.Fprintf(&b, "- `[%s]` %s (evidence: %d sessions)\n", r.Type, r.Statement, r.SessionCount)
+			fmt.Fprintf(&b, "- `[%s]` %s (evidence: %d sessions)\n", r.Type, redactNumbers(r.Statement), r.SessionCount)
 		}
 		b.WriteString("\n")
 	}
 	if len(adopted) > 0 {
 		b.WriteString("## Already in place (reinforce?)\n\n")
 		for _, r := range adopted {
-			fmt.Fprintf(&b, "- `[%s]` %s\n", r.Type, r.Statement)
+			fmt.Fprintf(&b, "- `[%s]` %s\n", r.Type, redactNumbers(r.Statement))
 		}
 		b.WriteString("\n")
 	}
 	if len(s.Meta.ValidationErrors) > 0 {
 		b.WriteString("## Validation warnings\n\n")
 		for _, e := range s.Meta.ValidationErrors {
-			fmt.Fprintf(&b, "- %s\n", e)
+			fmt.Fprintf(&b, "- %s\n", redactNumbers(e))
 		}
 	}
 	return b.String()
+}
+
+// redactNumbers strips LLM-authored quantitative claims (the same numberClaim
+// pattern hasQuantitativeClaim flags in verify.go) from any string the render
+// interpolates verbatim from the LLM. Go-computed integer fields are never routed
+// through this — they render as-is.
+func redactNumbers(s string) string {
+	return numberClaim.ReplaceAllString(s, "[redacted]")
 }
 
 func themesByKind(ts []Theme, kind string) []Theme {
