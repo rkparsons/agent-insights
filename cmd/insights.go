@@ -8,16 +8,33 @@ import (
 	"time"
 
 	"tmux-ctrl/internal/insights"
+	"tmux-ctrl/internal/synthesis"
 	"tmux-ctrl/internal/userconfig"
 )
 
 // RunInsights dispatches `tmux-ctrl insights ...`. Mirrors RunHookHandler /
 // RunStatusExplain: a thin os.Args branch over the insights package.
 func RunInsights(args []string) {
+	if len(args) > 0 && args[0] == "synthesize" {
+		sopts, serr := parseSynthesizeArgs(args[1:])
+		if serr != nil {
+			fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", serr)
+			fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights synthesize [--repo <repo-key>] [--min-sessions N] [--dry-run]")
+			os.Exit(2)
+		}
+		sum, err := synthesis.RunSynthesize(context.Background(), synthesis.NewClaudeSynthesizer(), sopts)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "insights synthesize: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "synthesis: %d repos · %d written · %d skipped\n", sum.Repos, sum.Written, sum.Skipped)
+		return
+	}
+
 	mode, target, opts, err := parseInsightsArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", err)
-		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights analyze <session-id|path> | --backfill [--force] [--dry-run] [--threshold N] [--timeout 10m]")
+		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights analyze <session-id|path> | --backfill [--force] [--dry-run] [--threshold N] [--timeout 10m] | synthesize [--repo <repo-key>] [--min-sessions N] [--dry-run]")
 		os.Exit(2)
 	}
 
@@ -122,4 +139,34 @@ func parseInsightsArgs(args []string) (mode, target string, opts insights.Option
 		return "", "", opts, fmt.Errorf("analyze needs a <session-id|path> or --backfill")
 	}
 	return "single", target, opts, nil
+}
+
+// parseSynthesizeArgs parses `synthesize [--repo <repo-key>] [--min-sessions N] [--dry-run]`.
+func parseSynthesizeArgs(args []string) (synthesis.Options, error) {
+	var o synthesis.Options
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--dry-run":
+			o.DryRun = true
+		case "--repo":
+			i++
+			if i >= len(args) {
+				return o, fmt.Errorf("--repo needs a value")
+			}
+			o.Repo = args[i]
+		case "--min-sessions":
+			i++
+			if i >= len(args) {
+				return o, fmt.Errorf("--min-sessions needs a value")
+			}
+			n, err := strconv.Atoi(args[i])
+			if err != nil {
+				return o, fmt.Errorf("--min-sessions: %w", err)
+			}
+			o.MinSessions = n
+		default:
+			return o, fmt.Errorf("unknown flag %q", args[i])
+		}
+	}
+	return o, nil
 }

@@ -47,3 +47,16 @@ func TestParseInsightsArgs(t *testing.T) {
 		}
 	}
 }
+
+func TestParseSynthesizeArgs(t *testing.T) {
+	o, err := parseSynthesizeArgs([]string{"--repo", "client-project", "--min-sessions", "5", "--dry-run"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Repo != "client-project" || o.MinSessions != 5 || !o.DryRun {
+		t.Errorf("parsed = %+v", o)
+	}
+	if _, err := parseSynthesizeArgs([]string{"--bogus"}); err == nil {
+		t.Error("expected error on unknown flag")
+	}
+}
