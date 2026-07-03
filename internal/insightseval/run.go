@@ -11,6 +11,7 @@ import (
 
 type FreezeReport struct {
 	Manifest     Manifest     `json:"manifest"`
+	FreezeStats  FreezeStats  `json:"freeze_stats"`
 	Benchmark    Benchmark    `json:"benchmark"`
 	Issues       FreezeIssues `json:"issues"`
 	GroundTruth  int          `json:"ground_truth_files"`
@@ -45,7 +46,7 @@ func RunFreeze(dataDir string) (FreezeReport, error) {
 	}
 
 	frozenAt := time.Now().UTC()
-	rep.Manifest, err = FreezeCorpus(dataDir, byID, frozenAt)
+	rep.Manifest, rep.FreezeStats, err = FreezeCorpus(dataDir, byID, frozenAt)
 	if err != nil {
 		return rep, fmt.Errorf("corpus: %w", err)
 	}
