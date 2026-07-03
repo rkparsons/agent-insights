@@ -31,11 +31,12 @@ func TestAssertFrozenFindsGapsAndSkews(t *testing.T) {
 	writeAnalysisStub(t, insightsDir, "skewed", mt)
 
 	b := Benchmark{Buckets: map[string]BucketPopulations{
-		"myrepo": {AsConsumed: []string{"ok", "skewed", "missing"}},
+		"myrepo": {AsConsumed: []string{"ok", "skewed", "missing", "unanalyzed"}},
 	}}
 	m := Manifest{Entries: []ManifestEntry{
 		{SessionID: "ok", Mtime: mt},
 		{SessionID: "skewed", Mtime: mt.Add(time.Hour)}, // transcript grew after analysis
+		{SessionID: "unanalyzed", Mtime: mt},            // has manifest entry but no analysis stub
 	}}
 	iss := AssertFrozen(b, m, []string{"myrepo: reconstructed 3 analyses, report says 4"})
 	if !slices.Equal(iss.Gaps, []string{"myrepo/missing"}) {
@@ -43,6 +44,12 @@ func TestAssertFrozenFindsGapsAndSkews(t *testing.T) {
 	}
 	if !slices.Equal(iss.Skews, []string{"myrepo/skewed"}) {
 		t.Fatalf("skews = %v", iss.Skews)
+	}
+	// "unanalyzed" has manifest entry but no analysis stub; this is not a skew.
+	for _, id := range []string{"unanalyzed"} {
+		if slices.Contains(iss.Gaps, "myrepo/"+id) || slices.Contains(iss.Skews, "myrepo/"+id) {
+			t.Fatalf("unanalyzed should not appear in gaps or skews, got gaps=%v skews=%v", iss.Gaps, iss.Skews)
+		}
 	}
 	if iss.Clean() {
 		t.Fatal("issues present but Clean() = true")
