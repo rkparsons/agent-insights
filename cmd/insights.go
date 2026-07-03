@@ -15,6 +15,10 @@ import (
 // RunInsights dispatches `tmux-ctrl insights ...`. Mirrors RunHookHandler /
 // RunStatusExplain: a thin os.Args branch over the insights package.
 func RunInsights(args []string) {
+	if len(args) > 0 && args[0] == "eval" {
+		RunInsightsEval(args[1:])
+		return
+	}
 	if len(args) > 0 && args[0] == "synthesize" {
 		sopts, serr := parseSynthesizeArgs(args[1:])
 		if serr != nil {
@@ -34,7 +38,7 @@ func RunInsights(args []string) {
 	mode, target, opts, err := parseInsightsArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", err)
-		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights analyze <session-id|path> | --backfill [--force] [--dry-run] [--threshold N] [--timeout 10m] | synthesize [--repo <repo-key>] [--min-sessions N] [--dry-run]")
+		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights analyze <session-id|path> | --backfill [--force] [--dry-run] [--threshold N] [--timeout 10m] | synthesize [--repo <repo-key>] [--min-sessions N] [--dry-run] | eval freeze [--data <dir>]")
 		os.Exit(2)
 	}
 

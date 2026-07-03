@@ -1,0 +1,78 @@
+package insightseval
+
+import (
+	"fmt"
+	"path/filepath"
+	"time"
+
+	"tmux-ctrl/internal/insights"
+	"tmux-ctrl/internal/synthesis"
+)
+
+type FreezeReport struct {
+	Manifest     Manifest     `json:"manifest"`
+	Benchmark    Benchmark    `json:"benchmark"`
+	Issues       FreezeIssues `json:"issues"`
+	GroundTruth  int          `json:"ground_truth_files"`
+	PoolCopied   int          `json:"pool_files"`
+	ConfigCopied int          `json:"config_files"`
+	PoolSkipped  bool         `json:"pool_skipped"`
+}
+
+// RunFreeze executes the full freeze: scaffold, ground-truth copy, corpus +
+// sidechains, benchmark reconstruction (from the frozen ground truth, so
+// re-runs never depend on live synthesis state), assertions, then — only when
+// clean — the baseline pool. benchmark.json is written even when dirty, for
+// inspection; the pool is the one artifact gated on cleanliness.
+func RunFreeze(dataDir string) (FreezeReport, error) {
+	var rep FreezeReport
+	if err := EnsureRepoScaffold(dataDir); err != nil {
+		return rep, err
+	}
+	n, err := CopyGroundTruth(dataDir)
+	if err != nil {
+		return rep, fmt.Errorf("ground truth: %w", err)
+	}
+	rep.GroundTruth = n
+
+	analyses, err := synthesis.LoadAnalyses()
+	if err != nil {
+		return rep, fmt.Errorf("load pool: %w", err)
+	}
+	byID := make(map[string]insights.AgentSessionAnalysis, len(analyses))
+	for _, a := range analyses {
+		byID[a.Stats.SessionID] = a
+	}
+
+	frozenAt := time.Now().UTC()
+	rep.Manifest, err = FreezeCorpus(dataDir, byID, frozenAt)
+	if err != nil {
+		return rep, fmt.Errorf("corpus: %w", err)
+	}
+
+	truths, err := loadGroundTruth(filepath.Join(dataDir, "ground-truth"))
+	if err != nil {
+		return rep, fmt.Errorf("read frozen ground truth: %w", err)
+	}
+	var problems []string
+	rep.Benchmark, problems = BuildBenchmark(frozenAt, analyses, truths)
+	rep.Issues = AssertFrozen(rep.Benchmark, rep.Manifest, problems)
+	if err := writeJSON(filepath.Join(dataDir, "benchmark.json"), rep.Benchmark); err != nil {
+		return rep, fmt.Errorf("benchmark: %w", err)
+	}
+
+	if rep.Issues.Clean() {
+		rep.PoolCopied, err = CopyBaselinePool(dataDir)
+		if err != nil {
+			return rep, fmt.Errorf("baseline pool: %w", err)
+		}
+	} else {
+		rep.PoolSkipped = true
+	}
+
+	rep.ConfigCopied, err = SnapshotConfig(dataDir, rep.Benchmark.Buckets)
+	if err != nil {
+		return rep, fmt.Errorf("config snapshot: %w", err)
+	}
+	return rep, nil
+}
