@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -115,5 +116,75 @@ func TestRunFreezeSkewSkipsPool(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(data, "baseline-pool")); !os.IsNotExist(err) {
 		t.Fatal("baseline-pool must not exist after a skewed freeze")
+	}
+}
+
+// TestRunFreezeGapRecordedNotBlocking covers a ground-truth-referenced
+// session whose raw transcript was pruned before the freeze ever ran (so it
+// can never gain a manifest entry): the gap must be recorded, not block the
+// pool.
+func TestRunFreezeGapRecordedNotBlocking(t *testing.T) {
+	data := buildFixtureWorld(t)
+
+	// second session: in the pool (and in the ground-truth window) but its
+	// live transcript was pruned before this freeze -- no manifest entry is
+	// ever possible for it.
+	aPruned := insights.AgentSessionAnalysis{
+		Stats: insights.AgentSessionStats{
+			SessionID: "s-pruned", Repo: "/Users/x/Developer/myrepo",
+			Start: time.Date(2026, 6, 26, 9, 0, 0, 0, time.UTC),
+		},
+		TranscriptMtime: time.Date(2026, 6, 26, 10, 0, 0, 0, time.UTC),
+	}
+	if err := insights.WriteAnalysis(aPruned); err != nil {
+		t.Fatal(err)
+	}
+	insightsDir := os.Getenv("TMUX_CTRL_INSIGHTS_DIR")
+	truth := synthesis.RepoSynthesis{
+		Repo:        "myrepo",
+		GeneratedAt: time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC),
+		Window:      synthesis.Window{From: "2026-06-25", To: "2026-06-26", AnalyzedCount: 2},
+	}
+	raw, err := json.Marshal(truth)
+	if err != nil {
+		t.Fatal(err)
+	}
+	truthDir := filepath.Join(insightsDir, "synthesis", "myrepo")
+	if err := os.WriteFile(filepath.Join(truthDir, "2026-07-02.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := RunFreeze(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Issues.Blocking() {
+		t.Fatalf("gap-only issues must not block: %+v", rep.Issues)
+	}
+	if !slices.Contains(rep.Issues.Gaps, "myrepo/s-pruned") {
+		t.Fatalf("Issues.Gaps = %v, want myrepo/s-pruned", rep.Issues.Gaps)
+	}
+	if rep.PoolSkipped {
+		t.Fatal("gap-only freeze must still write the baseline pool")
+	}
+	for _, p := range []string{
+		filepath.Join(data, "baseline-pool", "v1", "s1.json"),
+		filepath.Join(data, "baseline-pool", "v1", "s-pruned.json"),
+	} {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("pool not written: %s: %v", p, err)
+		}
+	}
+
+	var onDisk Benchmark
+	rawBench, err := os.ReadFile(filepath.Join(data, "benchmark.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(rawBench, &onDisk); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(onDisk.Buckets["myrepo"].Gaps, "s-pruned") {
+		t.Fatalf("benchmark.json bucket gaps = %v, want [s-pruned] (repo prefix stripped)", onDisk.Buckets["myrepo"].Gaps)
 	}
 }

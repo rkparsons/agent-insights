@@ -3,6 +3,7 @@ package insightseval
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"tmux-ctrl/internal/insights"
@@ -22,9 +23,11 @@ type FreezeReport struct {
 
 // RunFreeze executes the full freeze: scaffold, ground-truth copy, corpus +
 // sidechains, benchmark reconstruction (from the frozen ground truth, so
-// re-runs never depend on live synthesis state), assertions, then — only when
-// clean — the baseline pool. benchmark.json is written even when dirty, for
-// inspection; the pool is the one artifact gated on cleanliness.
+// re-runs never depend on live synthesis state), assertions, then — unless a
+// blocking issue (skew or count mismatch) was found — the baseline pool.
+// benchmark.json is written even when dirty, for inspection; the pool is the
+// one artifact gated on Blocking(). Gaps (transcripts pruned before the
+// freeze ever ran) are recorded into their bucket but never gate the pool.
 func RunFreeze(dataDir string) (FreezeReport, error) {
 	var rep FreezeReport
 	if err := EnsureRepoScaffold(dataDir); err != nil {
@@ -58,11 +61,12 @@ func RunFreeze(dataDir string) (FreezeReport, error) {
 	var problems []string
 	rep.Benchmark, problems = BuildBenchmark(frozenAt, analyses, truths)
 	rep.Issues = AssertFrozen(rep.Benchmark, rep.Manifest, problems)
+	recordGaps(rep.Benchmark, rep.Issues.Gaps)
 	if err := writeJSON(filepath.Join(dataDir, "benchmark.json"), rep.Benchmark); err != nil {
 		return rep, fmt.Errorf("benchmark: %w", err)
 	}
 
-	if rep.Issues.Clean() {
+	if !rep.Issues.Blocking() {
 		rep.PoolCopied, err = CopyBaselinePool(dataDir)
 		if err != nil {
 			return rep, fmt.Errorf("baseline pool: %w", err)
@@ -76,4 +80,20 @@ func RunFreeze(dataDir string) (FreezeReport, error) {
 		return rep, fmt.Errorf("config snapshot: %w", err)
 	}
 	return rep, nil
+}
+
+// recordGaps copies gap ids ("<repo>/<id>", already sorted by AssertFrozen)
+// into their bucket's Gaps field with the repo prefix stripped, so
+// benchmark.json durably records transcripts pruned before the freeze ever
+// ran — a no-gaps gate can never pass once a transcript is gone.
+func recordGaps(b Benchmark, gaps []string) {
+	for _, g := range gaps {
+		repo, id, ok := strings.Cut(g, "/")
+		if !ok {
+			continue
+		}
+		bp := b.Buckets[repo]
+		bp.Gaps = append(bp.Gaps, id)
+		b.Buckets[repo] = bp
+	}
 }

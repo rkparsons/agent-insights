@@ -17,6 +17,7 @@ type BucketPopulations struct {
 	RepoPath           string   `json:"repo_path"`
 	AsConsumed         []string `json:"as_consumed"`
 	Scoring            []string `json:"scoring"`
+	Gaps               []string `json:"gaps"`
 	WindowFrom         string   `json:"window_from"`
 	WindowTo           string   `json:"window_to"`
 	ExpectedAnalyzed   int      `json:"expected_analyzed"`

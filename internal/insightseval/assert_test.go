@@ -61,3 +61,29 @@ func TestAssertFrozenFindsGapsAndSkews(t *testing.T) {
 		t.Fatalf("want clean, got %+v", clean)
 	}
 }
+
+func TestFreezeIssuesBlocking(t *testing.T) {
+	cases := []struct {
+		name    string
+		issues  FreezeIssues
+		blocked bool
+	}{
+		{"none", FreezeIssues{}, false},
+		{"gaps only", FreezeIssues{Gaps: []string{"myrepo/pruned"}}, false},
+		{"skews", FreezeIssues{Skews: []string{"myrepo/skewed"}}, true},
+		{"count mismatches", FreezeIssues{CountMismatches: []string{"myrepo: mismatch"}}, true},
+		{"gaps and skews", FreezeIssues{Gaps: []string{"myrepo/pruned"}, Skews: []string{"myrepo/skewed"}}, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.issues.Blocking(); got != c.blocked {
+				t.Fatalf("Blocking() = %v, want %v", got, c.blocked)
+			}
+		})
+	}
+	// gaps-only is not Clean() (Clean still requires all three empty) even
+	// though it is non-blocking.
+	if (FreezeIssues{Gaps: []string{"myrepo/pruned"}}).Clean() {
+		t.Fatal("gaps-only issues must not be Clean()")
+	}
+}

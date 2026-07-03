@@ -16,6 +16,13 @@ func (i FreezeIssues) Clean() bool {
 	return len(i.Gaps) == 0 && len(i.Skews) == 0 && len(i.CountMismatches) == 0
 }
 
+// Blocking reports whether the baseline pool must be withheld. Gaps
+// (transcripts pruned before the freeze ever ran) are recorded but never
+// blocking — a no-gaps gate can never pass once a transcript is gone.
+func (i FreezeIssues) Blocking() bool {
+	return len(i.Skews) > 0 || len(i.CountMismatches) > 0
+}
+
 // AssertFrozen verifies every benchmark id has a frozen corpus entry (gaps) and
 // that the frozen transcript's mtime equals the pool analysis's stamped mtime
 // (skews — the judged fields never saw content appended after analysis).

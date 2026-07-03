@@ -43,10 +43,10 @@ func RunInsightsEval(args []string) {
 		fmt.Fprintf(os.Stderr, "freeze: %s · as_consumed=%d scoring=%d (report says %d, resolved=%v)\n",
 			repo, len(bp.AsConsumed), len(bp.Scoring), bp.ExpectedAnalyzed, bp.Resolved)
 	}
-	if !rep.Issues.Clean() {
-		for _, g := range rep.Issues.Gaps {
-			fmt.Fprintf(os.Stderr, "freeze: GAP %s (transcript already pruned)\n", g)
-		}
+	for _, g := range rep.Issues.Gaps {
+		fmt.Fprintf(os.Stderr, "freeze: GAP %s (transcript pruned before freeze; recorded in benchmark.json)\n", g)
+	}
+	if rep.Issues.Blocking() {
 		for _, s := range rep.Issues.Skews {
 			fmt.Fprintf(os.Stderr, "freeze: SKEW %s (re-judge: tmux-ctrl insights analyze <id>, then re-run freeze)\n", s)
 		}
@@ -55,6 +55,10 @@ func RunInsightsEval(args []string) {
 		}
 		fmt.Fprintln(os.Stderr, "freeze: ISSUES FOUND — baseline-pool/v1 NOT written; resolve and re-run")
 		os.Exit(1)
+	}
+	if len(rep.Issues.Gaps) > 0 {
+		fmt.Fprintf(os.Stderr, "freeze: clean apart from %d recorded gaps · baseline-pool/v1 written (%d analyses)\n", len(rep.Issues.Gaps), rep.PoolCopied)
+		return
 	}
 	fmt.Fprintf(os.Stderr, "freeze: clean · baseline-pool/v1 written (%d analyses)\n", rep.PoolCopied)
 }
