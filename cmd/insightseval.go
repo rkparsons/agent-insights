@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"tmux-ctrl/internal/insightseval"
 )
@@ -39,7 +40,8 @@ func RunInsightsEval(args []string) {
 	}
 	fmt.Fprintf(os.Stderr, "freeze: %d sessions · %d sidechains · %d ground-truth files · %d config files\n",
 		len(rep.Manifest.Entries), len(rep.Manifest.Sidechains), rep.GroundTruth, rep.ConfigCopied)
-	for repo, bp := range rep.Benchmark.Buckets {
+	for _, repo := range sortedBucketKeys(rep.Benchmark.Buckets) {
+		bp := rep.Benchmark.Buckets[repo]
 		fmt.Fprintf(os.Stderr, "freeze: %s · as_consumed=%d scoring=%d (report says %d, resolved=%v)\n",
 			repo, len(bp.AsConsumed), len(bp.Scoring), bp.ExpectedAnalyzed, bp.Resolved)
 	}
@@ -53,7 +55,8 @@ func RunInsightsEval(args []string) {
 		for _, c := range rep.Issues.CountMismatches {
 			fmt.Fprintf(os.Stderr, "freeze: COUNT MISMATCH %s\n", c)
 		}
-		fmt.Fprintln(os.Stderr, "freeze: ISSUES FOUND — baseline-pool/v1 NOT written; resolve and re-run")
+		v1Exists := dirExists(filepath.Join(dataDir, "baseline-pool", "v1"))
+		fmt.Fprintln(os.Stderr, "freeze: "+poolNotWrittenMessage(v1Exists))
 		os.Exit(1)
 	}
 	if len(rep.Issues.Gaps) > 0 {
@@ -61,4 +64,31 @@ func RunInsightsEval(args []string) {
 		return
 	}
 	fmt.Fprintf(os.Stderr, "freeze: clean · baseline-pool/v1 written (%d analyses)\n", rep.PoolCopied)
+}
+
+// sortedBucketKeys returns the bucket repo keys in sorted order, for
+// deterministic CLI output (Go map iteration order is randomized).
+func sortedBucketKeys(buckets map[string]insightseval.BucketPopulations) []string {
+	keys := make([]string, 0, len(buckets))
+	for k := range buckets {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// poolNotWrittenMessage reports on a blocked freeze whether baseline-pool/v1
+// is truly absent (never written) or merely retained, unchanged, from an
+// earlier clean run — a later run going Blocking() does not erase it.
+func poolNotWrittenMessage(v1Exists bool) string {
+	if v1Exists {
+		return "ISSUES FOUND — baseline-pool/v1 retained from a prior clean run (not re-written); resolve and re-run"
+	}
+	return "ISSUES FOUND — baseline-pool/v1 NOT written; resolve and re-run"
+}
+
+// dirExists reports whether path exists and is a directory.
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
