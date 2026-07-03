@@ -40,6 +40,21 @@ func TestBuildBundleIdsAndRelativize(t *testing.T) {
 	}
 }
 
+func TestBuildBundleWindowIsChronological(t *testing.T) {
+	// SessionID order is the REVERSE of Start order: the later-starting session
+	// ("aaa") sorts first by SessionID, so a SessionID sort yields From>To.
+	early := frictionAnalysis("zzz", "q", "apps/x.ts")
+	early.Stats.Start = time.Date(2026, 6, 24, 0, 0, 0, 0, time.UTC)
+	late := frictionAnalysis("aaa", "q", "apps/y.ts")
+	late.Stats.Start = time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)
+
+	b := BuildBundle("client-project", []insights.AgentSessionAnalysis{early, late})
+
+	if b.From != "2026-06-24" || b.To != "2026-06-30" {
+		t.Errorf("window = %s–%s, want 2026-06-24–2026-06-30 (chronological, From<=To)", b.From, b.To)
+	}
+}
+
 func TestBuildBundleRedactsHomePath(t *testing.T) {
 	g := []insights.AgentSessionAnalysis{frictionAnalysis("aaa", "q", "/Users/dev/secret/notes.txt")}
 	b := BuildBundle("client-project", g)

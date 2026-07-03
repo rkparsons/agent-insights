@@ -58,11 +58,18 @@ type EvidenceBundle struct {
 }
 
 // BuildBundle turns a repo's analyses into an EvidenceBundle: typed-id items sorted
-// deterministically by session_id, Go-computed inefficiency signals, and context
-// rollups, with file paths relativized/redacted for privacy.
+// deterministically by Start then session_id, Go-computed inefficiency signals, and
+// context rollups, with file paths relativized/redacted for privacy. Sorting by Start
+// (session_id only breaks ties) makes From/To — taken from the first/last element — the
+// true chronological window bounds, not whatever order session_ids happened to fall in.
 func BuildBundle(repoKey string, group []insights.AgentSessionAnalysis) EvidenceBundle {
 	sorted := append([]insights.AgentSessionAnalysis(nil), group...)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Stats.SessionID < sorted[j].Stats.SessionID })
+	sort.Slice(sorted, func(i, j int) bool {
+		if !sorted[i].Stats.Start.Equal(sorted[j].Stats.Start) {
+			return sorted[i].Stats.Start.Before(sorted[j].Stats.Start)
+		}
+		return sorted[i].Stats.SessionID < sorted[j].Stats.SessionID
+	})
 
 	b := EvidenceBundle{Repo: repoKey, AnalyzedCount: len(sorted), SessionCount: len(sorted)}
 	b.Context = ContextRollup{Skills: map[string]int{}, SessionTypes: map[string]int{}, ToolMix: map[string]int{}}
