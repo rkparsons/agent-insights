@@ -10,6 +10,9 @@ import (
 
 func synthesisDir() string { return filepath.Join(insights.InsightsDir(), "synthesis") }
 
+// Dir returns the synthesis artifacts root (exported for the eval freeze).
+func Dir() string { return synthesisDir() }
+
 // Store writes both the .md and .json for a repo synthesis. The .md is the
 // shareable artifact and is privacy-scanned before write (see scanReport in
 // RunSynthesize). The .json is the local source-of-truth, parallel to the

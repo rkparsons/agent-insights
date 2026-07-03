@@ -91,13 +91,13 @@ func TestCuratePredicates(t *testing.T) {
 	if isZeroFriction(AgentSessionStats{ToolErrors: 1}) {
 		t.Error("tool error → frictionful")
 	}
-	if !isMeta(AgentSessionStats{Cwd: "/x/facet-spike"}) {
+	if !IsMeta(AgentSessionStats{Cwd: "/x/facet-spike"}) {
 		t.Error("facet cwd → meta")
 	}
-	if !isMeta(AgentSessionStats{Skills: []string{"analyzing-agent-sessions"}}) {
+	if !IsMeta(AgentSessionStats{Skills: []string{"analyzing-agent-sessions"}}) {
 		t.Error("analyzing skill → meta")
 	}
-	if isMeta(AgentSessionStats{Cwd: "/work/client-project"}) {
+	if IsMeta(AgentSessionStats{Cwd: "/work/client-project"}) {
 		t.Error("plain cwd → not meta")
 	}
 }

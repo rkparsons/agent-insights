@@ -58,15 +58,17 @@ func newAdoptCheckerFromFiles(paths []string) AdoptChecker {
 	}
 }
 
-// NewAdoptChecker greps the repo's and the global CLAUDE.md/settings/skills corpus.
-func NewAdoptChecker(repoPath string) AdoptChecker {
+// AdoptPaths returns the exact files the already-adopted check greps, in order:
+// repo CLAUDE.md, global CLAUDE.md, global settings.json, then repo-local and
+// global skill/command markdown. Exported so the eval freeze can snapshot the
+// same corpus the checker reads.
+func AdoptPaths(repoPath string) []string {
 	home, _ := os.UserHomeDir()
 	paths := []string{
 		filepath.Join(repoPath, "CLAUDE.md"),
 		filepath.Join(home, ".claude", "CLAUDE.md"),
 		filepath.Join(home, ".claude", "settings.json"),
 	}
-	// include repo-local and global skill/command markdown
 	for _, root := range []string{filepath.Join(repoPath, ".claude"), filepath.Join(home, ".claude", "skills")} {
 		_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 			if err == nil && !d.IsDir() && strings.HasSuffix(p, ".md") {
@@ -75,5 +77,10 @@ func NewAdoptChecker(repoPath string) AdoptChecker {
 			return nil
 		})
 	}
-	return newAdoptCheckerFromFiles(paths)
+	return paths
+}
+
+// NewAdoptChecker greps the repo's and the global CLAUDE.md/settings/skills corpus.
+func NewAdoptChecker(repoPath string) AdoptChecker {
+	return newAdoptCheckerFromFiles(AdoptPaths(repoPath))
 }

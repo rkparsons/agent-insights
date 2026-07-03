@@ -30,7 +30,10 @@ func isZeroFriction(s AgentSessionStats) bool {
 
 func isFrictionful(s AgentSessionStats) bool { return !isZeroFriction(s) }
 
-func isMeta(s AgentSessionStats) bool {
+// IsMeta reports whether a session is about the insights pipeline itself (cwd/repo
+// mentions insights/facet, or it ran the analysis skill). Meta sessions invert
+// eval findings, so benchmark scoring populations exclude them.
+func IsMeta(s AgentSessionStats) bool {
 	hay := strings.ToLower(s.Cwd + " " + s.Repo)
 	if strings.Contains(hay, "insights") || strings.Contains(hay, "facet") {
 		return true
@@ -105,7 +108,7 @@ func anyStats(AgentSessionStats) bool      { return true }
 // corpus snapshot.
 func evalCells() []cellSpec {
 	return []cellSpec{
-		{"meta", 1, isMeta},
+		{"meta", 1, IsMeta},
 		{"zero-short", 1, all(isZeroFriction, isShort)},
 		{"zero-quickq", 1, all(isZeroFriction, isQuickQ)},
 		{"zero-explore", 1, all(isZeroFriction, isExplore)},

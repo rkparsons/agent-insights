@@ -74,7 +74,7 @@ type SessionScore struct {
 }
 
 func scoreSession(sr sessionRun) SessionScore {
-	s := SessionScore{Cell: sr.Cell, IsMeta: isMeta(sr.Stats), NumRepeats: len(sr.Repeats), SchemaValid: true, SurvivorOK: true}
+	s := SessionScore{Cell: sr.Cell, IsMeta: IsMeta(sr.Stats), NumRepeats: len(sr.Repeats), SchemaValid: true, SurvivorOK: true}
 
 	outcomeCounts := map[string]int{}
 	var counts []int
