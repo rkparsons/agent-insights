@@ -71,7 +71,7 @@ func RunFreeze(dataDir string) (FreezeReport, error) {
 	if err != nil {
 		return rep, fmt.Errorf("load existing benchmark: %w", err)
 	}
-	reuseBenchmark := hasBenchmark && allBucketsResolved(existingBenchmark)
+	reuseBenchmark := hasBenchmark && len(existingBenchmark.Buckets) > 0 && allBucketsResolved(existingBenchmark)
 
 	var problems []string
 	if reuseBenchmark {

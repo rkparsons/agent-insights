@@ -403,3 +403,50 @@ func TestRunFreezeSkewResolvedByRejudgeThenPoolWritten(t *testing.T) {
 		t.Fatalf("baseline-pool/v1/s1.json not written: %v", err)
 	}
 }
+
+// TestRunFreezeDoesNotReuseEmptyBenchmark covers finding H: a zero-bucket
+// benchmark.json would be vacuously "resolved" by allBucketsResolved, but
+// an empty benchmark should never be reused — ground-truth analyses present
+// now must cause a rebuild.
+func TestRunFreezeDoesNotReuseEmptyBenchmark(t *testing.T) {
+	data := buildFixtureWorld(t)
+
+	// Write an empty benchmark.json manually (simulates a previous buggy
+	// freeze that produced zero buckets)
+	emptyBench := Benchmark{
+		FrozenAt: time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC),
+		Buckets:  map[string]BucketPopulations{},
+		Statuses: map[string]string{},
+	}
+	raw, err := json.Marshal(emptyBench)
+	if err != nil {
+		t.Fatal(err)
+	}
+	benchPath := filepath.Join(data, "benchmark.json")
+	if err := os.MkdirAll(filepath.Dir(benchPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(benchPath, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := RunFreeze(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep.Issues.Clean() {
+		t.Fatalf("freeze must be clean: %+v", rep.Issues)
+	}
+	// The key invariant: even with an existing (vacuously-resolved) empty
+	// benchmark, a rebuild must happen when ground-truth is present, and buckets
+	// must be populated.
+	if len(rep.Benchmark.Buckets) == 0 {
+		t.Fatal("benchmark.json must be rebuilt with populated buckets (ground-truth present)")
+	}
+	if _, ok := rep.Benchmark.Buckets["myrepo"]; !ok {
+		t.Fatalf("myrepo bucket missing: %v", rep.Benchmark.Buckets)
+	}
+	if !rep.Benchmark.Buckets["myrepo"].Resolved {
+		t.Fatalf("myrepo bucket must be resolved: %+v", rep.Benchmark.Buckets["myrepo"])
+	}
+}

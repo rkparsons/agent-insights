@@ -148,7 +148,11 @@ func FreezeCorpus(dataDir string, byID map[string]insights.AgentSessionAnalysis,
 	if err != nil {
 		return m, stats, err
 	}
-	for _, sc := range scs {
+	// A resume can copy an entire project dir (sidechains included) into a
+	// second project dir, so the same parent+filename can surface twice; collapse
+	// to one ref before freezing, newest Mtime wins — mirroring
+	// dedupeTranscriptRefs's documented newest-wins resolution.
+	for _, sc := range dedupeSidechainRefs(scs) {
 		name := filepath.Base(sc.Path)
 		key := sc.Parent + "\x00" + name
 		if prev, ok := existingSidechains[key]; ok {
@@ -191,6 +195,23 @@ func dedupeTranscriptRefs(refs []claude.TranscriptRef) []claude.TranscriptRef {
 	}
 	out := make([]claude.TranscriptRef, 0, len(bySession))
 	for _, r := range bySession {
+		out = append(out, r)
+	}
+	return out
+}
+
+// dedupeSidechainRefs collapses refs sharing a (parent, filename) key to one,
+// newest Mtime wins.
+func dedupeSidechainRefs(refs []sidechainRef) []sidechainRef {
+	byKey := make(map[string]sidechainRef, len(refs))
+	for _, r := range refs {
+		key := r.Parent + "\x00" + filepath.Base(r.Path)
+		if prev, ok := byKey[key]; !ok || r.Mtime.After(prev.Mtime) {
+			byKey[key] = r
+		}
+	}
+	out := make([]sidechainRef, 0, len(byKey))
+	for _, r := range byKey {
 		out = append(out, r)
 	}
 	return out

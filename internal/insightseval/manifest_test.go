@@ -417,3 +417,71 @@ func TestFreezeCorpusFreezesAgentMetaSidechains(t *testing.T) {
 		}
 	}
 }
+
+// TestFreezeCorpusDedupesSameSidechainAcrossProjectDirs covers finding E: a
+// resume can copy an entire project dir with sidechains into a second project
+// dir, surfacing the same parent+filename twice. FreezeCorpus must collapse to
+// one entry (newest content), not duplicate or hard-fail.
+func TestFreezeCorpusDedupesSameSidechainAcrossProjectDirs(t *testing.T) {
+	projects := t.TempDir()
+	data := t.TempDir()
+	projA := filepath.Join(projects, "-Users-x-Developer-myrepo")
+	projB := filepath.Join(projects, "-Users-x-Developer-myrepo-resume")
+	if err := os.MkdirAll(filepath.Join(projA, "sess-1", "subagents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(projB, "sess-1", "subagents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
+
+	mustWrite := func(p, s string) {
+		t.Helper()
+		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite(filepath.Join(projA, "sess-1.jsonl"), `{"a":1}`)
+	mustWrite(filepath.Join(projB, "sess-1.jsonl"), `{"a":1}`)
+
+	older := time.Date(2026, 6, 20, 10, 0, 0, 0, time.UTC)
+	newer := time.Date(2026, 6, 25, 10, 0, 0, 0, time.UTC)
+	oldSidechain := filepath.Join(projA, "sess-1", "subagents", "agent-x.jsonl")
+	newSidechain := filepath.Join(projB, "sess-1", "subagents", "agent-x.jsonl")
+	mustWrite(oldSidechain, `{"sub":"old"}`)
+	mustWrite(newSidechain, `{"sub":"new-and-different"}`)
+	if err := os.Chtimes(oldSidechain, older, older); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(newSidechain, newer, newer); err != nil {
+		t.Fatal(err)
+	}
+
+	frozenAt := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
+	m, _, err := FreezeCorpus(data, nil, frozenAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	var got SidechainEntry
+	for _, sc := range m.Sidechains {
+		if sc.ParentSessionID == "sess-1" && sc.File == "agent-x.jsonl" {
+			count++
+			got = sc
+		}
+	}
+	if count != 1 {
+		t.Fatalf("agent-x.jsonl sidechain entries = %d, want 1 (deduped)", count)
+	}
+	if !got.Mtime.Equal(newer) {
+		t.Fatalf("Mtime = %v, want newest %v", got.Mtime, newer)
+	}
+	sha, err := frozenSHA(filepath.Join(data, "corpus-sidechains", "sess-1", "agent-x.jsonl.gz"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSum := sha256.Sum256([]byte(`{"sub":"new-and-different"}`))
+	if sha != hex.EncodeToString(wantSum[:]) {
+		t.Fatalf("frozen content sha = %s, want newest-content sha", sha)
+	}
+}
