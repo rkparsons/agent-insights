@@ -53,17 +53,8 @@ func copyFileRaw(src, dst string) error {
 	return os.Rename(tmpName, dst)
 }
 
-// copyTree copies every file under srcRoot accepted by keep into dstRoot,
-// preserving relative paths. A missing srcRoot copies nothing.
-//
-// WalkDir Lstats entries, so a symlinked directory (e.g. a stow-managed
-// ~/.claude/skills/* entry) arrives as a non-dir leaf. We resolve it and
-// recurse manually — recursing on the symlink path itself would re-Lstat the
-// same non-dir leaf forever, since WalkDir never follows symlinks even when
-// given one directly as its root. keep still sees paths relative to the
-// ORIGINAL root, not the resolved target, so prefix filters keep working.
-// A broken symlink (target Stat fails) is skipped silently.
-func copyTree(srcRoot, dstRoot string, keep func(rel string) bool) (int, error) {
+// copyTreeVisited is the recursive implementation of copyTree with cycle detection.
+func copyTreeVisited(srcRoot, dstRoot string, keep func(string) bool, visited map[string]bool) (int, error) {
 	n := 0
 	err := filepath.WalkDir(srcRoot, func(p string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil || d.IsDir() {
@@ -83,9 +74,14 @@ func copyTree(srcRoot, dstRoot string, keep func(rel string) bool) (int, error) 
 				if evalErr != nil {
 					return nil
 				}
-				sub, subErr := copyTree(target, filepath.Join(dstRoot, rel), func(inner string) bool {
+				// Skip if we've already visited this target (cycle detection)
+				if visited[target] {
+					return nil
+				}
+				visited[target] = true
+				sub, subErr := copyTreeVisited(target, filepath.Join(dstRoot, rel), func(inner string) bool {
 					return keep(filepath.Join(rel, inner))
-				})
+				}, visited)
 				if subErr != nil {
 					return subErr
 				}
@@ -107,6 +103,29 @@ func copyTree(srcRoot, dstRoot string, keep func(rel string) bool) (int, error) 
 		return n, nil
 	}
 	return n, err
+}
+
+// copyTree copies every file under srcRoot accepted by keep into dstRoot,
+// preserving relative paths. A missing srcRoot copies nothing.
+//
+// WalkDir Lstats entries, so a symlinked directory (e.g. a stow-managed
+// ~/.claude/skills/* entry) arrives as a non-dir leaf. We resolve it and
+// recurse manually — recursing on the symlink path itself would re-Lstat the
+// same non-dir leaf forever, since WalkDir never follows symlinks even when
+// given one directly as its root. keep still sees paths relative to the
+// ORIGINAL root, not the resolved target, so prefix filters keep working.
+// A broken symlink (target Stat fails) is skipped silently.
+//
+// Cycles (symlink to self or ancestor) are detected via an EvalSymlinks-resolved
+// visited set, preventing unbounded recursion.
+func copyTree(srcRoot, dstRoot string, keep func(rel string) bool) (int, error) {
+	// Resolve srcRoot to detect cycles in symlink chains
+	resolved := srcRoot
+	if evalPath, err := filepath.EvalSymlinks(srcRoot); err == nil {
+		resolved = evalPath
+	}
+	visited := map[string]bool{resolved: true}
+	return copyTreeVisited(srcRoot, dstRoot, keep, visited)
 }
 
 // CopyGroundTruth freezes the live synthesis artifacts (the JSONs whose

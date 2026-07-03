@@ -126,6 +126,49 @@ func TestCopyTreeFollowsSymlinkedDirectory(t *testing.T) {
 	}
 }
 
+func TestCopyTreeSymlinkCycleTerminates(t *testing.T) {
+	// Create a temp directory structure with a symlink cycle
+	tmpSrc := t.TempDir()
+	tmpDst := t.TempDir()
+
+	// Create subdirectory and file
+	subdir := filepath.Join(tmpSrc, "subdir")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a normal file to ensure non-cycle files are copied
+	if err := os.WriteFile(filepath.Join(subdir, "file.txt"), []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a symlink from subdir back to tmpSrc (ancestor cycle)
+	linkPath := filepath.Join(subdir, "cycle")
+	if err := os.Symlink(tmpSrc, linkPath); err != nil {
+		t.Fatal(err)
+	}
+
+	// This should complete without hanging and without error
+	n, err := copyTree(tmpSrc, tmpDst, func(rel string) bool {
+		return true
+	})
+
+	if err != nil {
+		t.Errorf("copyTree returned error: %v", err)
+	}
+
+	// Verify the normal file was copied
+	copiedFile := filepath.Join(tmpDst, "subdir", "file.txt")
+	if _, err := os.Stat(copiedFile); err != nil {
+		t.Errorf("expected file not copied: %v", err)
+	}
+
+	// Verify at least one file was copied (the normal file)
+	if n < 1 {
+		t.Errorf("expected at least 1 file copied, got %d", n)
+	}
+}
+
 func TestSnapshotConfigCopiesGlobalAndRepoSurface(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
