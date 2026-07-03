@@ -2,6 +2,7 @@ package insightseval
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,6 +26,8 @@ func copyFileRaw(src, dst string) error {
 			return nil
 		}
 		return fmt.Errorf("append-only violation: %s exists with different content", dst)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("unable to check existing file %s: %w", dst, err)
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err

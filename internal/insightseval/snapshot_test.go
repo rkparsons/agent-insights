@@ -31,6 +31,33 @@ func TestCopyFileRawAppendOnly(t *testing.T) {
 	}
 }
 
+func TestCopyFileRawRejectsDirectory(t *testing.T) {
+	dir := t.TempDir()
+	src := writeTemp(t, dir, "source.json", `{"x":1}`)
+	dstParent := filepath.Join(dir, "dest")
+	if err := os.MkdirAll(dstParent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(dstParent, "subdir")
+	// Create a directory at the dst path
+	if err := os.Mkdir(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// copyFileRaw should reject dst when it's a directory
+	err := copyFileRaw(src, dst)
+	if err == nil {
+		t.Fatal("expected error when dst is a directory, got nil")
+	}
+	// verify it's still a directory
+	info, err := os.Stat(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.IsDir() {
+		t.Fatal("dst should still be a directory")
+	}
+}
+
 func TestSnapshotConfigCopiesGlobalAndRepoSurface(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
