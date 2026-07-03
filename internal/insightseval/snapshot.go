@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -54,6 +55,14 @@ func copyFileRaw(src, dst string) error {
 
 // copyTree copies every file under srcRoot accepted by keep into dstRoot,
 // preserving relative paths. A missing srcRoot copies nothing.
+//
+// WalkDir Lstats entries, so a symlinked directory (e.g. a stow-managed
+// ~/.claude/skills/* entry) arrives as a non-dir leaf. We resolve it and
+// recurse manually — recursing on the symlink path itself would re-Lstat the
+// same non-dir leaf forever, since WalkDir never follows symlinks even when
+// given one directly as its root. keep still sees paths relative to the
+// ORIGINAL root, not the resolved target, so prefix filters keep working.
+// A broken symlink (target Stat fails) is skipped silently.
 func copyTree(srcRoot, dstRoot string, keep func(rel string) bool) (int, error) {
 	n := 0
 	err := filepath.WalkDir(srcRoot, func(p string, d os.DirEntry, walkErr error) error {
@@ -61,7 +70,31 @@ func copyTree(srcRoot, dstRoot string, keep func(rel string) bool) (int, error) 
 			return nil
 		}
 		rel, relErr := filepath.Rel(srcRoot, p)
-		if relErr != nil || !keep(rel) {
+		if relErr != nil {
+			return nil
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			info, statErr := os.Stat(p)
+			if statErr != nil {
+				return nil // broken symlink
+			}
+			if info.IsDir() {
+				target, evalErr := filepath.EvalSymlinks(p)
+				if evalErr != nil {
+					return nil
+				}
+				sub, subErr := copyTree(target, filepath.Join(dstRoot, rel), func(inner string) bool {
+					return keep(filepath.Join(rel, inner))
+				})
+				if subErr != nil {
+					return subErr
+				}
+				n += sub
+				return nil
+			}
+			// symlink to a regular file: os.ReadFile below follows it as usual.
+		}
+		if !keep(rel) {
 			return nil
 		}
 		if err := copyFileRaw(p, filepath.Join(dstRoot, rel)); err != nil {

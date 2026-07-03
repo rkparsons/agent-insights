@@ -58,6 +58,74 @@ func TestCopyFileRawRejectsDirectory(t *testing.T) {
 	}
 }
 
+func TestCopyTreeFollowsSymlinkedDirectory(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	realSkillDir := filepath.Join(dir, "real-elsewhere", "myskill")
+	if err := os.MkdirAll(realSkillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(src, "skills"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(realSkillDir, "SKILL.md"), []byte("skill body"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(realSkillDir, filepath.Join(src, "skills", "myskill")); err != nil {
+		t.Fatal(err)
+	}
+
+	// symlinked regular file
+	realFile := filepath.Join(dir, "real.md")
+	if err := os.WriteFile(realFile, []byte("real body"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(realFile, filepath.Join(src, "linked.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	// broken symlink
+	if err := os.Symlink(filepath.Join(src, "does-not-exist"), filepath.Join(src, "broken")); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(dir, "dst")
+	var seenRels []string
+	n, err := copyTree(src, dst, func(rel string) bool {
+		seenRels = append(seenRels, rel)
+		return strings.HasPrefix(rel, "skills"+string(filepath.Separator)) || rel == "linked.md"
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("copied = %d, want 2", n)
+	}
+	wantNested := filepath.Join("skills", "myskill", "SKILL.md")
+	found := false
+	for _, r := range seenRels {
+		if r == wantNested {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("keep filter never saw %q, saw %v", wantNested, seenRels)
+	}
+	got, err := os.ReadFile(filepath.Join(dst, "skills", "myskill", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("nested symlinked-dir file missing: %v", err)
+	}
+	if string(got) != "skill body" {
+		t.Fatalf("content = %q", got)
+	}
+	if _, err := os.ReadFile(filepath.Join(dst, "linked.md")); err != nil {
+		t.Fatalf("symlinked file missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "broken")); !os.IsNotExist(err) {
+		t.Fatal("broken symlink should be skipped silently, not copied")
+	}
+}
+
 func TestSnapshotConfigCopiesGlobalAndRepoSurface(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
