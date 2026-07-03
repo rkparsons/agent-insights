@@ -2,6 +2,7 @@ package insightseval
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -22,12 +23,19 @@ type FreezeReport struct {
 }
 
 // RunFreeze executes the full freeze: scaffold, ground-truth copy, corpus +
-// sidechains, benchmark reconstruction (from the frozen ground truth, so
-// re-runs never depend on live synthesis state), assertions, then — unless a
-// blocking issue (skew or count mismatch) was found — the baseline pool.
-// benchmark.json is written even when dirty, for inspection; the pool is the
-// one artifact gated on Blocking(). Gaps (transcripts pruned before the
-// freeze ever ran) are recorded into their bucket but never gate the pool.
+// sidechains, benchmark reconstruction, assertions, then — unless a blocking
+// issue (skew or count mismatch) was found — the baseline pool.
+//
+// benchmark.json and baseline-pool/v1 are canonical once written: if an
+// existing benchmark.json has every bucket resolved, it is reused byte-for-
+// byte (no rebuild, no re-write) instead of being rebuilt from whatever the
+// live pool looks like today; if baseline-pool/v1 already exists, it is never
+// re-copied (new live analyses do not silently join it, and a changed live
+// analysis does not hard-fail it). FreezeIssues — including the skew check,
+// which reads the stamped mtime from v1 once v1 is canonical rather than the
+// (possibly since-rejudged) live pool — are still recomputed fresh every run.
+// Gaps (transcripts pruned before the freeze ever ran) are recorded into
+// their bucket but never gate the pool.
 func RunFreeze(dataDir string) (FreezeReport, error) {
 	var rep FreezeReport
 	if err := EnsureRepoScaffold(dataDir); err != nil {
@@ -58,18 +66,43 @@ func RunFreeze(dataDir string) (FreezeReport, error) {
 	if err != nil {
 		return rep, fmt.Errorf("read frozen ground truth: %w", err)
 	}
+
+	existingBenchmark, hasBenchmark, err := loadBenchmark(dataDir)
+	if err != nil {
+		return rep, fmt.Errorf("load existing benchmark: %w", err)
+	}
+	reuseBenchmark := hasBenchmark && allBucketsResolved(existingBenchmark)
+
 	var problems []string
-	rep.Benchmark, problems = BuildBenchmark(frozenAt, analyses, truths)
-	rep.Issues = AssertFrozen(rep.Benchmark, rep.Manifest, problems)
+	if reuseBenchmark {
+		rep.Benchmark = existingBenchmark
+	} else {
+		rep.Benchmark, problems = BuildBenchmark(frozenAt, analyses, truths)
+	}
+
+	v1Dir := filepath.Join(dataDir, "baseline-pool", "v1")
+	v1Exists := dirExists(v1Dir)
+	poolMtime := insights.ReadAnalysisMtime
+	if v1Exists {
+		poolMtime = func(id string) (time.Time, bool) {
+			return readStampedMtime(filepath.Join(v1Dir, id+".json"))
+		}
+	}
+	rep.Issues = AssertFrozen(rep.Benchmark, rep.Manifest, problems, poolMtime)
 	recordGaps(rep.Benchmark, rep.Issues.Gaps)
-	if err := writeJSON(filepath.Join(dataDir, "benchmark.json"), rep.Benchmark); err != nil {
-		return rep, fmt.Errorf("benchmark: %w", err)
+
+	if !reuseBenchmark {
+		if err := writeJSON(filepath.Join(dataDir, "benchmark.json"), rep.Benchmark); err != nil {
+			return rep, fmt.Errorf("benchmark: %w", err)
+		}
 	}
 
 	if !rep.Issues.Blocking() {
-		rep.PoolCopied, err = CopyBaselinePool(dataDir)
-		if err != nil {
-			return rep, fmt.Errorf("baseline pool: %w", err)
+		if !v1Exists {
+			rep.PoolCopied, err = CopyBaselinePool(dataDir)
+			if err != nil {
+				return rep, fmt.Errorf("baseline pool: %w", err)
+			}
 		}
 	} else {
 		rep.PoolSkipped = true
@@ -82,11 +115,23 @@ func RunFreeze(dataDir string) (FreezeReport, error) {
 	return rep, nil
 }
 
-// recordGaps copies gap ids ("<repo>/<id>", already sorted by AssertFrozen)
-// into their bucket's Gaps field with the repo prefix stripped, so
-// benchmark.json durably records transcripts pruned before the freeze ever
-// ran — a no-gaps gate can never pass once a transcript is gone.
+// dirExists reports whether path exists and is a directory.
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+// recordGaps resets every bucket's Gaps field and repopulates it from gaps
+// ("<repo>/<id>", already sorted by AssertFrozen) with the repo prefix
+// stripped, so benchmark.json durably records transcripts pruned before the
+// freeze ever ran — a no-gaps gate can never pass once a transcript is gone.
+// Reset-then-repopulate keeps this idempotent across runs that reuse an
+// existing (already gap-annotated) benchmark rather than rebuilding it.
 func recordGaps(b Benchmark, gaps []string) {
+	for repo, bp := range b.Buckets {
+		bp.Gaps = nil
+		b.Buckets[repo] = bp
+	}
 	for _, g := range gaps {
 		repo, id, ok := strings.Cut(g, "/")
 		if !ok {

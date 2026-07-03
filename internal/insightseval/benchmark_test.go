@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,6 +55,26 @@ func TestBuildBenchmarkPopulations(t *testing.T) {
 	}
 	if bp.RepoPath != "/Users/x/Developer/myrepo" {
 		t.Fatalf("repo path: %q", bp.RepoPath)
+	}
+}
+
+// TestBuildBenchmarkRepoPathStripsWorktree covers finding H: a worktree
+// checkout's path must not land in benchmark.json's RepoPath.
+func TestBuildBenchmarkRepoPathStripsWorktree(t *testing.T) {
+	gen := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
+	analyses := []insights.AgentSessionAnalysis{
+		analysisFor("a1", "/Users/x/Developer/myrepo/.worktrees/some-feature", "",
+			time.Date(2026, 6, 24, 9, 0, 0, 0, time.UTC)),
+	}
+	truths := map[string]synthesis.RepoSynthesis{
+		"myrepo": {GeneratedAt: gen, Window: synthesis.Window{From: "2026-06-24", To: "2026-06-24", AnalyzedCount: 1}},
+	}
+	b, problems := BuildBenchmark(gen, analyses, truths)
+	if len(problems) != 0 {
+		t.Fatalf("problems: %v", problems)
+	}
+	if got := b.Buckets["myrepo"].RepoPath; got != "/Users/x/Developer/myrepo" {
+		t.Fatalf("RepoPath = %q, want worktree segment stripped", got)
 	}
 }
 
@@ -191,5 +212,79 @@ func TestLoadGroundTruth(t *testing.T) {
 	// Verify only two entries
 	if len(got) != 2 {
 		t.Fatalf("got %d entries, want 2: %v", len(got), got)
+	}
+}
+
+// TestLoadGroundTruthAllMalformedDirErrors covers finding H: a repo dir whose
+// every .json file is malformed must return an error naming the dir, not
+// silently omit the bucket.
+func TestLoadGroundTruthAllMalformedDirErrors(t *testing.T) {
+	dir := t.TempDir()
+	badDir := filepath.Join(dir, "badrepo")
+	if err := os.MkdirAll(badDir, 0755); err != nil {
+		t.Fatalf("mkdir badrepo: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(badDir, "2026-07-01.json"), []byte("{not json"), 0644); err != nil {
+		t.Fatalf("write malformed json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(badDir, "2026-07-02.json"), []byte("also not json"), 0644); err != nil {
+		t.Fatalf("write malformed json: %v", err)
+	}
+
+	_, err := loadGroundTruth(dir)
+	if err == nil {
+		t.Fatal("want error for a repo dir with every json malformed, got nil")
+	}
+	if !strings.Contains(err.Error(), "badrepo") {
+		t.Fatalf("error must name the dir, got: %v", err)
+	}
+}
+
+func TestLoadBenchmarkRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	_, ok, err := loadBenchmark(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("no benchmark.json yet; ok must be false")
+	}
+
+	want := Benchmark{
+		FrozenAt: time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC),
+		Buckets: map[string]BucketPopulations{
+			"myrepo": {AsConsumed: []string{"a1"}, Resolved: true},
+		},
+	}
+	if err := writeJSON(filepath.Join(dir, "benchmark.json"), want); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := loadBenchmark(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("want ok=true once benchmark.json exists")
+	}
+	if !got.FrozenAt.Equal(want.FrozenAt) || !slices.Equal(got.Buckets["myrepo"].AsConsumed, want.Buckets["myrepo"].AsConsumed) {
+		t.Fatalf("loaded benchmark = %+v, want %+v", got, want)
+	}
+}
+
+func TestAllBucketsResolved(t *testing.T) {
+	resolved := Benchmark{Buckets: map[string]BucketPopulations{
+		"a": {Resolved: true}, "b": {Resolved: true},
+	}}
+	if !allBucketsResolved(resolved) {
+		t.Fatal("want true when every bucket is resolved")
+	}
+	mixed := Benchmark{Buckets: map[string]BucketPopulations{
+		"a": {Resolved: true}, "b": {Resolved: false},
+	}}
+	if allBucketsResolved(mixed) {
+		t.Fatal("want false when any bucket is unresolved")
+	}
+	if !allBucketsResolved(Benchmark{}) {
+		t.Fatal("want true (vacuous) for an empty bucket set")
 	}
 }

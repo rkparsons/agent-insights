@@ -7,6 +7,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"tmux-ctrl/internal/insights"
 )
 
 func writeAnalysisStub(t *testing.T, dir, id string, mtime time.Time) {
@@ -38,7 +40,7 @@ func TestAssertFrozenFindsGapsAndSkews(t *testing.T) {
 		{SessionID: "skewed", Mtime: mt.Add(time.Hour)}, // transcript grew after analysis
 		{SessionID: "unanalyzed", Mtime: mt},            // has manifest entry but no analysis stub
 	}}
-	iss := AssertFrozen(b, m, []string{"myrepo: reconstructed 3 analyses, report says 4"})
+	iss := AssertFrozen(b, m, []string{"myrepo: reconstructed 3 analyses, report says 4"}, insights.ReadAnalysisMtime)
 	if !slices.Equal(iss.Gaps, []string{"myrepo/missing"}) {
 		t.Fatalf("gaps = %v", iss.Gaps)
 	}
@@ -56,9 +58,57 @@ func TestAssertFrozenFindsGapsAndSkews(t *testing.T) {
 	}
 	clean := AssertFrozen(Benchmark{Buckets: map[string]BucketPopulations{
 		"myrepo": {AsConsumed: []string{"ok"}},
-	}}, Manifest{Entries: []ManifestEntry{{SessionID: "ok", Mtime: mt}}}, nil)
+	}}, Manifest{Entries: []ManifestEntry{{SessionID: "ok", Mtime: mt}}}, nil, insights.ReadAnalysisMtime)
 	if !clean.Clean() {
 		t.Fatalf("want clean, got %+v", clean)
+	}
+}
+
+// TestAssertFrozenUsesProvidedPoolMtimeLookup covers finding F: AssertFrozen
+// must consult whatever poolMtime lookup the caller threads in, so RunFreeze
+// can point it at baseline-pool/v1 once that's canonical instead of the live
+// analyses pool.
+func TestAssertFrozenUsesProvidedPoolMtimeLookup(t *testing.T) {
+	mt := time.Date(2026, 6, 25, 10, 0, 0, 0, time.UTC)
+	b := Benchmark{Buckets: map[string]BucketPopulations{
+		"myrepo": {AsConsumed: []string{"s1"}},
+	}}
+	m := Manifest{Entries: []ManifestEntry{{SessionID: "s1", Mtime: mt}}}
+
+	skewed := AssertFrozen(b, m, nil, func(id string) (time.Time, bool) {
+		return mt.Add(time.Hour), true
+	})
+	if !slices.Equal(skewed.Skews, []string{"myrepo/s1"}) {
+		t.Fatalf("skews = %v, want myrepo/s1", skewed.Skews)
+	}
+
+	clean := AssertFrozen(b, m, nil, func(id string) (time.Time, bool) {
+		return mt, true
+	})
+	if !clean.Clean() {
+		t.Fatalf("want clean, got %+v", clean)
+	}
+}
+
+func TestReadStampedMtime(t *testing.T) {
+	dir := t.TempDir()
+	mt := time.Date(2026, 6, 25, 10, 0, 0, 0, time.UTC)
+	raw, err := json.Marshal(map[string]any{"transcript_mtime": mt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, "s1.json")
+	if err := os.WriteFile(p, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, ok := readStampedMtime(p)
+	if !ok || !got.Equal(mt) {
+		t.Fatalf("readStampedMtime = %v, %v, want %v, true", got, ok, mt)
+	}
+
+	if _, ok := readStampedMtime(filepath.Join(dir, "missing.json")); ok {
+		t.Fatal("missing file must return ok=false")
 	}
 }
 
