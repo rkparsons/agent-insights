@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -72,11 +73,13 @@ func loadManifest(dataDir string) (Manifest, bool, error) {
 // analyses for repo-key/start; sessions without an analysis freeze with those
 // fields empty.
 //
-// Re-runs are canonical on the existing manifest: a session or sidechain
-// already frozen is never re-read from its (possibly since-grown) live file —
-// its manifest entry is verified against the frozen file's sha (tamper check)
-// and carried over verbatim. Only sessions absent from the existing manifest
-// are frozen fresh. FrozenAt is likewise carried over from the first freeze.
+// Re-runs are canonical on the existing manifest: every existing entry and
+// sidechain is seeded into the new manifest first (verified against its
+// frozen file's sha — the tamper check) regardless of whether its live source
+// still exists, so a live transcript pruned between freezes never drops out
+// of the manifest and gets reclassified as a gap. The live walk only ADDS
+// ids/sidechain-keys not already present; it never removes one. FrozenAt is
+// likewise carried over from the first freeze.
 func FreezeCorpus(dataDir string, byID map[string]insights.AgentSessionAnalysis, frozenAt time.Time) (Manifest, FreezeStats, error) {
 	var stats FreezeStats
 	existing, hasExisting, err := loadManifest(dataDir)
@@ -96,23 +99,39 @@ func FreezeCorpus(dataDir string, byID map[string]insights.AgentSessionAnalysis,
 		existingSidechains[sc.ParentSessionID+"\x00"+sc.File] = sc
 	}
 
-	refs, err := claude.WalkTranscripts()
+	for _, prev := range existing.Entries {
+		dst := filepath.Join(dataDir, "corpus", prev.SessionID+".jsonl.gz")
+		if err := verifyFrozenUnchanged(dst, prev.SHA256, prev.SessionID); err != nil {
+			return m, stats, err
+		}
+		m.Entries = append(m.Entries, prev)
+		stats.AlreadyFrozen++
+	}
+	for _, prev := range existing.Sidechains {
+		dst := filepath.Join(dataDir, "corpus-sidechains", prev.ParentSessionID, prev.File+".gz")
+		if err := verifyFrozenUnchanged(dst, prev.SHA256, prev.ParentSessionID+"/"+prev.File); err != nil {
+			return m, stats, err
+		}
+		m.Sidechains = append(m.Sidechains, prev)
+		stats.AlreadyFrozen++
+	}
+
+	rawRefs, err := claude.WalkTranscripts()
 	if err != nil {
 		return m, stats, err
 	}
-	for _, r := range refs {
-		dst := filepath.Join(dataDir, "corpus", r.SessionID+".jsonl.gz")
+	// A resume can copy an entire project dir (transcripts included) into a
+	// second project dir, so the same session-id can surface twice; collapse
+	// to one ref before freezing, newest Mtime wins — mirroring
+	// claude.FindTranscript's documented newest-wins resolution.
+	for _, r := range dedupeTranscriptRefs(rawRefs) {
 		if prev, ok := existingEntries[r.SessionID]; ok {
-			if err := verifyFrozenUnchanged(dst, prev.SHA256, r.SessionID); err != nil {
-				return m, stats, err
-			}
-			m.Entries = append(m.Entries, prev)
-			stats.AlreadyFrozen++
 			if info, statErr := os.Stat(r.Path); statErr == nil && info.Size() != prev.Bytes {
 				stats.Diverged++
 			}
 			continue
 		}
+		dst := filepath.Join(dataDir, "corpus", r.SessionID+".jsonl.gz")
 		sha, n, err := freezeFile(r.Path, dst)
 		if err != nil {
 			return m, stats, err
@@ -131,19 +150,14 @@ func FreezeCorpus(dataDir string, byID map[string]insights.AgentSessionAnalysis,
 	}
 	for _, sc := range scs {
 		name := filepath.Base(sc.Path)
-		dst := filepath.Join(dataDir, "corpus-sidechains", sc.Parent, name+".gz")
 		key := sc.Parent + "\x00" + name
 		if prev, ok := existingSidechains[key]; ok {
-			if err := verifyFrozenUnchanged(dst, prev.SHA256, sc.Parent+"/"+name); err != nil {
-				return m, stats, err
-			}
-			m.Sidechains = append(m.Sidechains, prev)
-			stats.AlreadyFrozen++
 			if info, statErr := os.Stat(sc.Path); statErr == nil && info.Size() != prev.Bytes {
 				stats.Diverged++
 			}
 			continue
 		}
+		dst := filepath.Join(dataDir, "corpus-sidechains", sc.Parent, name+".gz")
 		sha, n, err := freezeFile(sc.Path, dst)
 		if err != nil {
 			return m, stats, err
@@ -164,6 +178,22 @@ func FreezeCorpus(dataDir string, byID map[string]insights.AgentSessionAnalysis,
 		return m, stats, err
 	}
 	return m, stats, nil
+}
+
+// dedupeTranscriptRefs collapses refs sharing a session-id to one, newest
+// Mtime wins.
+func dedupeTranscriptRefs(refs []claude.TranscriptRef) []claude.TranscriptRef {
+	bySession := make(map[string]claude.TranscriptRef, len(refs))
+	for _, r := range refs {
+		if prev, ok := bySession[r.SessionID]; !ok || r.Mtime.After(prev.Mtime) {
+			bySession[r.SessionID] = r
+		}
+	}
+	out := make([]claude.TranscriptRef, 0, len(bySession))
+	for _, r := range bySession {
+		out = append(out, r)
+	}
+	return out
 }
 
 // verifyFrozenUnchanged hard-errors, naming id, when the frozen file at dst is
@@ -187,17 +217,35 @@ type sidechainRef struct {
 	Mtime  time.Time
 }
 
-// listSidechains finds every agent-*.jsonl under projectsDir. The parent
-// session id is the path segment immediately before "subagents"
-// (<project>/<parent-session-id>/subagents/agent-*.jsonl).
+// listSidechains finds every agent-* file under a subagents/ dir beneath
+// projectsDir — not just the primary agent-*.jsonl transcript but sibling
+// artifacts such as agent-*.meta.json. The parent session id is the path
+// segment immediately before "subagents"
+// (<project>/<parent-session-id>/subagents/agent-*).
+//
+// A missing projectsDir returns (nil, nil); any other error reading the root
+// or a subtree (e.g. a permission-denied directory) propagates rather than
+// being swallowed into a silent partial freeze.
 func listSidechains(projectsDir string) ([]sidechainRef, error) {
+	if _, err := os.Stat(projectsDir); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
 	var out []sidechainRef
 	err := filepath.WalkDir(projectsDir, func(p string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil || d.IsDir() {
+		if walkErr != nil {
+			if errors.Is(walkErr, fs.ErrNotExist) {
+				return nil
+			}
+			return walkErr
+		}
+		if d.IsDir() {
 			return nil
 		}
 		name := d.Name()
-		if !strings.HasPrefix(name, "agent-") || !strings.HasSuffix(name, ".jsonl") {
+		if !strings.HasPrefix(name, "agent-") {
 			return nil
 		}
 		rel, relErr := filepath.Rel(projectsDir, p)
@@ -206,11 +254,16 @@ func listSidechains(projectsDir string) ([]sidechainRef, error) {
 		}
 		parts := strings.Split(rel, string(filepath.Separator))
 		parent := ""
+		inSubagents := false
 		for i, seg := range parts {
 			if seg == "subagents" && i >= 1 {
 				parent = parts[i-1]
+				inSubagents = true
 				break
 			}
+		}
+		if !inSubagents {
+			return nil
 		}
 		info, infoErr := d.Info()
 		if infoErr != nil {
@@ -219,9 +272,6 @@ func listSidechains(projectsDir string) ([]sidechainRef, error) {
 		out = append(out, sidechainRef{Parent: parent, Path: p, Mtime: info.ModTime()})
 		return nil
 	})
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
 	return out, err
 }
 
