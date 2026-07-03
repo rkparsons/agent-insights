@@ -16,7 +16,7 @@ func actedPath() string { return filepath.Join(insights.InsightsDir(), "insights
 
 func ActedKey(rec Recommendation, sourceRepo string) string {
 	norm := strings.Join(strings.Fields(strings.ToLower(rec.Statement)), " ")
-	sum := sha256.Sum256([]byte(sourceRepo + "\x00" + norm))
+	sum := sha256.Sum256([]byte(sourceRepo + "\x00" + rec.Type + "\x00" + norm))
 	return hex.EncodeToString(sum[:])[:16]
 }
 
@@ -48,6 +48,34 @@ func MarkActed(key string) error {
 		return nil
 	}
 	m[key] = true
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	data, err := json.Marshal(keys)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(insights.InsightsDir(), 0o755); err != nil {
+		return err
+	}
+	return atomicWrite(actedPath(), data)
+}
+
+// UnmarkActed removes key from the acted-keys store, resurfacing the
+// recommendation in future curations. Used to roll back an acted mark when the
+// launch it recorded fails before anything lands (see the insight launch
+// failure handler in internal/app). A no-op when the key isn't recorded.
+func UnmarkActed(key string) error {
+	m, err := LoadActedKeys()
+	if err != nil {
+		return err
+	}
+	if !m[key] {
+		return nil
+	}
+	delete(m, key)
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)

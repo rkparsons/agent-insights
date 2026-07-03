@@ -2,6 +2,7 @@ package synthesis
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -40,6 +41,11 @@ func LoadSyntheses() ([]RepoSynthesis, error) {
 func newestInRepoDir(dir string) (RepoSynthesis, bool) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
+		// A missing dir is a benign race (listed then removed); anything else
+		// (permissions, I/O) silently drops a repo's insights — warn instead.
+		if !os.IsNotExist(err) {
+			log.Printf("synthesis: read repo dir %q: %v", dir, err)
+		}
 		return RepoSynthesis{}, false
 	}
 	names := make([]string, 0, len(entries))

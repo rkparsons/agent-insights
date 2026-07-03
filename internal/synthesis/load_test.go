@@ -1,11 +1,34 @@
 package synthesis
 
 import (
+	"bytes"
 	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestNewestInRepoDir_WarnsOnUnreadableDir(t *testing.T) {
+	// A regular file, not a directory: os.ReadDir returns a non-IsNotExist
+	// error (ENOTDIR). That must be surfaced to stderr, not silently swallowed
+	// as "this repo has no synthesis".
+	notDir := filepath.Join(t.TempDir(), "acme")
+	if err := os.WriteFile(notDir, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	if _, ok := newestInRepoDir(notDir); ok {
+		t.Fatal("newestInRepoDir on a non-dir returned ok=true")
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("acme")) {
+		t.Errorf("unreadable repo dir was swallowed without a warning; log = %q", buf.String())
+	}
+}
 
 func writeSynthesisJSON(t *testing.T, root, repo, date string, s RepoSynthesis) {
 	t.Helper()
