@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -28,6 +29,8 @@ func freezeFile(src, dst string) (string, int64, error) {
 			return sha, int64(len(raw)), nil
 		}
 		return "", 0, fmt.Errorf("append-only violation: %s exists with different content", dst)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", 0, fmt.Errorf("unable to check frozen file %s: %w", dst, err)
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return "", 0, err
