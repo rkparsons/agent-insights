@@ -57,7 +57,13 @@ func copyFileRaw(src, dst string) error {
 func copyTreeVisited(srcRoot, dstRoot string, keep func(string) bool, visited map[string]bool) (int, error) {
 	n := 0
 	err := filepath.WalkDir(srcRoot, func(p string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil || d.IsDir() {
+		if walkErr != nil {
+			if errors.Is(walkErr, fs.ErrNotExist) {
+				return nil
+			}
+			return walkErr
+		}
+		if d.IsDir() {
 			return nil
 		}
 		rel, relErr := filepath.Rel(srcRoot, p)
@@ -99,33 +105,40 @@ func copyTreeVisited(srcRoot, dstRoot string, keep func(string) bool, visited ma
 		n++
 		return nil
 	})
-	if os.IsNotExist(err) {
-		return n, nil
-	}
 	return n, err
 }
 
 // copyTree copies every file under srcRoot accepted by keep into dstRoot,
-// preserving relative paths. A missing srcRoot copies nothing.
+// preserving relative paths. A missing srcRoot copies nothing; any other
+// error reading the root or a subtree (e.g. a permission-denied directory)
+// propagates rather than being swallowed into a silent partial freeze.
 //
-// WalkDir Lstats entries, so a symlinked directory (e.g. a stow-managed
-// ~/.claude/skills/* entry) arrives as a non-dir leaf. We resolve it and
-// recurse manually — recursing on the symlink path itself would re-Lstat the
-// same non-dir leaf forever, since WalkDir never follows symlinks even when
-// given one directly as its root. keep still sees paths relative to the
-// ORIGINAL root, not the resolved target, so prefix filters keep working.
-// A broken symlink (target Stat fails) is skipped silently.
+// srcRoot is resolved with EvalSymlinks before walking: WalkDir Lstats
+// entries, so a symlinked directory passed directly as root (e.g. a
+// stow-managed ~/.claude/skills/* entry, or a repo whose whole srcRoot is a
+// symlink) would otherwise arrive as a non-dir leaf and WalkDir would never
+// follow it — recursing on the symlink path itself would re-Lstat the same
+// non-dir leaf forever. Resolving up front sidesteps that; keep still sees
+// paths relative to the walk root, so prefix filters keep working the same
+// whether srcRoot was a symlink or not. Symlinked directories found DEEPER in
+// the tree are still handled by the recursion inside copyTreeVisited. A
+// broken symlink (target Stat fails) is skipped silently.
 //
 // Cycles (symlink to self or ancestor) are detected via an EvalSymlinks-resolved
 // visited set, preventing unbounded recursion.
 func copyTree(srcRoot, dstRoot string, keep func(rel string) bool) (int, error) {
-	// Resolve srcRoot to detect cycles in symlink chains
+	if _, err := os.Stat(srcRoot); err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
 	resolved := srcRoot
 	if evalPath, err := filepath.EvalSymlinks(srcRoot); err == nil {
 		resolved = evalPath
 	}
 	visited := map[string]bool{resolved: true}
-	return copyTreeVisited(srcRoot, dstRoot, keep, visited)
+	return copyTreeVisited(resolved, dstRoot, keep, visited)
 }
 
 // CopyGroundTruth freezes the live synthesis artifacts (the JSONs whose
@@ -144,8 +157,9 @@ func CopyBaselinePool(dataDir string) (int, error) {
 
 // SnapshotConfig freezes the config surface the adopted-check greps and the
 // env-pinning later composes from: the global ~/.claude surface (top-level
-// *.md, settings.json, full skills tree) plus each bucket repo's CLAUDE.md and
-// .claude tree.
+// *.md, settings.json, statusline.mjs, the full skills and hooks trees, and
+// the plugin inventory — never the plugins cache) plus each bucket repo's
+// CLAUDE.md and .claude tree.
 func SnapshotConfig(dataDir string, buckets map[string]BucketPopulations) (int, error) {
 	home, _ := os.UserHomeDir()
 	total := 0
@@ -154,8 +168,14 @@ func SnapshotConfig(dataDir string, buckets map[string]BucketPopulations) (int, 
 		if strings.HasPrefix(rel, "skills"+string(filepath.Separator)) {
 			return true
 		}
+		if strings.HasPrefix(rel, "hooks"+string(filepath.Separator)) {
+			return true
+		}
+		if rel == filepath.Join("plugins", "config.json") || rel == filepath.Join("plugins", "known_marketplaces.json") {
+			return true
+		}
 		if !strings.Contains(rel, string(filepath.Separator)) {
-			return strings.HasSuffix(rel, ".md") || rel == "settings.json"
+			return strings.HasSuffix(rel, ".md") || rel == "settings.json" || rel == "statusline.mjs"
 		}
 		return false
 	})

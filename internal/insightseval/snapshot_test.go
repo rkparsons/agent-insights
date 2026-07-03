@@ -169,6 +169,79 @@ func TestCopyTreeSymlinkCycleTerminates(t *testing.T) {
 	}
 }
 
+// TestCopyTreeUnreadableSubdirErrors covers finding C: a subtree read error
+// must propagate, not be swallowed into a silent partial freeze.
+func TestCopyTreeUnreadableSubdirErrors(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root; permission bits are not enforced")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	blocked := filepath.Join(src, "blocked")
+	if err := os.MkdirAll(blocked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(blocked, "f.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(blocked, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(blocked, 0o755) })
+
+	if _, err := copyTree(src, filepath.Join(dir, "dst"), func(string) bool { return true }); err == nil {
+		t.Fatal("want error for unreadable subdir, got nil")
+	}
+}
+
+// TestCopyTreeMissingRootReturnsNilError guards the restructured root-missing
+// check: a missing srcRoot copies nothing and is not an error.
+func TestCopyTreeMissingRootReturnsNilError(t *testing.T) {
+	dir := t.TempDir()
+	n, err := copyTree(filepath.Join(dir, "does-not-exist"), filepath.Join(dir, "dst"), func(string) bool { return true })
+	if err != nil {
+		t.Fatalf("missing root must not error: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("n = %d, want 0", n)
+	}
+}
+
+// TestCopyTreeSymlinkedSrcRootCopiesContents covers finding C: a srcRoot that
+// is itself a symlink-to-dir must copy its contents, not silently copy zero
+// files (the visited-set seed used to pre-mark the resolved target before the
+// walk ever reached it).
+func TestCopyTreeSymlinkedSrcRootCopiesContents(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "real")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(real, "f.txt"), []byte("body"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(dir, "dst")
+	n, err := copyTree(link, dst, func(string) bool { return true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("copied = %d, want 1 (symlinked srcRoot must not copy zero files)", n)
+	}
+	got, err := os.ReadFile(filepath.Join(dst, "f.txt"))
+	if err != nil {
+		t.Fatalf("nested file missing: %v", err)
+	}
+	if string(got) != "body" {
+		t.Fatalf("content = %q", got)
+	}
+}
+
 func TestSnapshotConfigCopiesGlobalAndRepoSurface(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -186,7 +259,14 @@ func TestSnapshotConfigCopiesGlobalAndRepoSurface(t *testing.T) {
 	mustWrite(filepath.Join(home, ".claude", "CLAUDE.md"), "global rules")
 	mustWrite(filepath.Join(home, ".claude", "RTK.md"), "rtk include")
 	mustWrite(filepath.Join(home, ".claude", "settings.json"), "{}")
+	mustWrite(filepath.Join(home, ".claude", "statusline.mjs"), "statusline body")
 	mustWrite(filepath.Join(home, ".claude", "skills", "synthesizing-workflow-insights", "SKILL.md"), "skill body")
+	mustWrite(filepath.Join(home, ".claude", "hooks", "pre-commit.sh"), "hook body")
+	mustWrite(filepath.Join(home, ".claude", "hooks", "nested", "deep.sh"), "nested hook body")
+	mustWrite(filepath.Join(home, ".claude", "plugins", "config.json"), "{}")
+	mustWrite(filepath.Join(home, ".claude", "plugins", "known_marketplaces.json"), "{}")
+	// never the plugins cache
+	mustWrite(filepath.Join(home, ".claude", "plugins", "cache", "some-plugin", "index.js"), "cached plugin code")
 	mustWrite(filepath.Join(repo, "CLAUDE.md"), "repo rules")
 	mustWrite(filepath.Join(repo, ".claude", "settings.json"), "{}")
 
@@ -197,20 +277,28 @@ func TestSnapshotConfigCopiesGlobalAndRepoSurface(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n != 6 {
-		t.Fatalf("copied = %d, want 6", n)
+	if n != 11 {
+		t.Fatalf("copied = %d, want 11", n)
 	}
 	for _, p := range []string{
 		filepath.Join(data, "config-snapshot", "global", "CLAUDE.md"),
 		filepath.Join(data, "config-snapshot", "global", "RTK.md"),
 		filepath.Join(data, "config-snapshot", "global", "settings.json"),
+		filepath.Join(data, "config-snapshot", "global", "statusline.mjs"),
 		filepath.Join(data, "config-snapshot", "global", "skills", "synthesizing-workflow-insights", "SKILL.md"),
+		filepath.Join(data, "config-snapshot", "global", "hooks", "pre-commit.sh"),
+		filepath.Join(data, "config-snapshot", "global", "hooks", "nested", "deep.sh"),
+		filepath.Join(data, "config-snapshot", "global", "plugins", "config.json"),
+		filepath.Join(data, "config-snapshot", "global", "plugins", "known_marketplaces.json"),
 		filepath.Join(data, "config-snapshot", "repos", "myrepo", "CLAUDE.md"),
 		filepath.Join(data, "config-snapshot", "repos", "myrepo", ".claude", "settings.json"),
 	} {
 		if _, err := os.Stat(p); err != nil {
 			t.Fatalf("missing %s", p)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(data, "config-snapshot", "global", "plugins", "cache")); !os.IsNotExist(err) {
+		t.Fatal("plugins cache must never be snapshotted")
 	}
 }
 
