@@ -73,6 +73,44 @@ func TestClaudeMatcherRejectsInconsistentOutput(t *testing.T) {
 	}
 }
 
+func TestNewMatchCommand(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "sk-should-be-scrubbed")
+	t.Setenv("ANTHROPIC_AUTH_TOKEN", "tok-should-be-scrubbed")
+	t.Setenv("CLAUDE_CONFIG_DIR", "/elsewhere")
+	cmd := newMatchCommand(context.Background(), []byte(`{"rubric":{}}`), "/tmp/cfg", "/tmp/work")
+
+	args := strings.Join(cmd.Args, "\x00")
+	for _, want := range []string{
+		"-p\x00" + matcherPrompt,
+		"--output-format\x00json",
+		"--json-schema\x00" + matcherSchema,
+		"--model\x00" + MatcherModel,
+		"--no-session-persistence",
+	} {
+		if !strings.Contains(args, want) {
+			t.Errorf("argv missing %q; got %v", want, cmd.Args)
+		}
+	}
+	if cmd.Stdin == nil {
+		t.Error("stdin not wired")
+	}
+	if cmd.Dir != "/tmp/work" {
+		t.Errorf("Dir = %q, want /tmp/work", cmd.Dir)
+	}
+	lastConfigDir := ""
+	for _, kv := range cmd.Env {
+		if strings.HasPrefix(kv, "ANTHROPIC_API_KEY=") || strings.HasPrefix(kv, "ANTHROPIC_AUTH_TOKEN=") {
+			t.Errorf("env not scrubbed: %s", kv)
+		}
+		if strings.HasPrefix(kv, "CLAUDE_CONFIG_DIR=") {
+			lastConfigDir = kv
+		}
+	}
+	if lastConfigDir != "CLAUDE_CONFIG_DIR=/tmp/cfg" {
+		t.Errorf("last CLAUDE_CONFIG_DIR = %q, want pinned /tmp/cfg", lastConfigDir)
+	}
+}
+
 func TestMatcherCodeVersionStableAndNonEmpty(t *testing.T) {
 	v1, v2 := MatcherCodeVersion(), MatcherCodeVersion()
 	if v1 == "" || v1 != v2 {
