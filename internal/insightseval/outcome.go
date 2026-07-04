@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"tmux-ctrl/internal/insights"
+	"tmux-ctrl/internal/sources/claude"
 	"tmux-ctrl/internal/synthesis"
 )
 
@@ -397,12 +398,121 @@ func stripGaps(ids, gaps []string, bucket string, rec *RunRecord) []string {
 	return out
 }
 
-// runL1Full and runL1Sample land in the next task; scope "full" and
-// --l1-sample are rejected until then.
+// l1Key builds the L1 stage cache key per the spec table.
+func l1Key(reducedText string, pin EnvPin) string {
+	return cacheKey("l1", sha256hex([]byte(reducedText)),
+		pin.SkillHashes["analyzing-agent-sessions"], insights.SchemaHash(),
+		insights.AnalysisModel, pin.EnvHash)
+}
+
+// judgeSession runs (or serves cached) one L1 analysis from the frozen
+// transcript: decode → Analyze (extract + judge + quote validation), mtime
+// restamped from the manifest so incremental semantics match the freeze.
+func judgeSession(ctx context.Context, cache *Cache, corpus *Corpus, facts FactsResult, pin EnvPin, judge insights.Judge, poolRepo map[string]string, id string) (insights.AgentSessionAnalysis, bool, error) {
+	key := l1Key(facts.Reduced[id].Text, pin)
+	var a insights.AgentSessionAnalysis
+	hit, err := cache.Get("l1", key, &a)
+	if err != nil || hit {
+		return a, hit, err
+	}
+	ref, err := corpus.Ref(id)
+	if err != nil {
+		return a, false, err
+	}
+	events, canary, _, err := claude.LoadTranscript(ref.Path)
+	if err != nil {
+		return a, false, err
+	}
+	repo := poolRepo[id]
+	jctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	a, _, err = insights.Analyze(jctx, events, canary, id, func(string) string { return repo }, judge)
+	cancel()
+	if err != nil {
+		return a, false, err
+	}
+	entry, _ := corpus.Entry(id)
+	a.TranscriptMtime = entry.Mtime
+	return a, false, cache.Put("l1", key, a)
+}
+
+// poolRepos recovers the freeze-verified repo identity per session from the
+// facts result (stats carry the pool's Repo either way).
+func poolRepos(facts FactsResult) map[string]string {
+	out := map[string]string{}
+	for _, a := range facts.Analyses {
+		out[a.Stats.SessionID] = a.Stats.Repo
+	}
+	return out
+}
+
 func runL1Full(ctx context.Context, rec *RunRecord, cache *Cache, corpus *Corpus, facts FactsResult, pin EnvPin, judge insights.Judge, poolDir string, consecutiveFailures *int) ([]insights.AgentSessionAnalysis, error) {
-	return nil, fmt.Errorf("scope full: L1 stage not wired yet")
+	repos := poolRepos(facts)
+	var out []insights.AgentSessionAnalysis
+	for _, prior := range facts.Analyses {
+		id := prior.Stats.SessionID
+		if !corpus.Has(id) {
+			// RunOutcome already rejects full-scope gap fallbacks before this
+			// runs; pool judged fields must never blend into a full-scope
+			// bundle, so anything reaching here is an internal inconsistency.
+			return nil, fmt.Errorf("full scope: %s has no frozen transcript", id)
+		}
+		a, hit, err := judgeSession(ctx, cache, corpus, facts, pin, judge, repos, id)
+		if err != nil {
+			*consecutiveFailures++
+			rec.Warnings = append(rec.Warnings, fmt.Sprintf("L1 %s failed: %v", id, err))
+			if *consecutiveFailures >= consecutiveLLMFailureLimit {
+				return nil, fmt.Errorf("parked after %d consecutive LLM failures (see warnings)", *consecutiveFailures)
+			}
+			return nil, fmt.Errorf("L1 %s failed (full sweep must be complete before its pool can be used): %w", id, err)
+		}
+		*consecutiveFailures = 0
+		if hit {
+			rec.CacheHits++
+		} else {
+			rec.CacheMisses++
+		}
+		out = append(out, a)
+	}
+	return out, nil
 }
 
 func runL1Sample(ctx context.Context, rec *RunRecord, cache *Cache, corpus *Corpus, facts FactsResult, pin EnvPin, judge insights.Judge, bucket string) error {
-	return fmt.Errorf("--l1-sample not wired yet")
+	stats := make([]insights.AgentSessionStats, 0, len(facts.Analyses))
+	sizes := map[string]int64{}
+	for _, a := range facts.Analyses {
+		id := a.Stats.SessionID
+		if !corpus.Has(id) {
+			continue // nothing to re-judge without a transcript
+		}
+		stats = append(stats, a.Stats)
+		if e, ok := corpus.Entry(id); ok {
+			sizes[id] = e.Bytes
+		}
+	}
+	cells := insights.CurateIDs(stats, sizes)
+	if rec.L1Sample == nil {
+		rec.L1Sample = &L1SampleResult{Cells: map[string]string{}}
+	}
+	repos := poolRepos(facts)
+	ids := make([]string, 0, len(cells))
+	for id := range cells {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		rec.L1Sample.Cells[bucket+"/"+id] = cells[id]
+		_, hit, err := judgeSession(ctx, cache, corpus, facts, pin, judge, repos, id)
+		if err != nil {
+			return fmt.Errorf("l1-sample %s: %w", id, err)
+		}
+		rec.L1Sample.Analyzed++
+		if hit {
+			rec.L1Sample.Hits++
+			rec.CacheHits++
+		} else {
+			rec.L1Sample.Misses++
+			rec.CacheMisses++
+		}
+	}
+	return nil
 }
