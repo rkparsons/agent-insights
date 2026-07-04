@@ -173,3 +173,22 @@ func curate(pool []sessionStat) []curatedSession {
 	}
 	return out
 }
+
+// CurateIDs runs the deterministic stratified curation over bare stats and
+// returns session-id → stratum cell. Exported for the outcome-eval --l1-sample
+// loop, which curates from the frozen corpus rather than a live walk.
+func CurateIDs(stats []AgentSessionStats, sizes map[string]int64) map[string]string {
+	pool := make([]sessionStat, 0, len(stats))
+	for _, s := range stats {
+		pool = append(pool, sessionStat{
+			Ref:   claude.TranscriptRef{SessionID: s.SessionID},
+			Stats: s,
+			Bytes: sizes[s.SessionID],
+		})
+	}
+	out := make(map[string]string)
+	for _, c := range curate(pool) {
+		out[c.Ref.SessionID] = c.Cell
+	}
+	return out
+}

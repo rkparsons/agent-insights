@@ -101,3 +101,21 @@ func TestCuratePredicates(t *testing.T) {
 		t.Error("plain cwd → not meta")
 	}
 }
+
+func TestCurateIDsSelectsOutlierAndCells(t *testing.T) {
+	mk := func(id string, turns, errs int) AgentSessionStats {
+		return AgentSessionStats{SessionID: id, Repo: "/Users/x/Developer/r", AssistantTurns: turns, ToolErrors: errs}
+	}
+	stats := []AgentSessionStats{
+		mk("a-outlier", 200, 0),
+		mk("b-zero-short", 2, 0),
+		mk("c-friction-medium", 20, 3),
+	}
+	got := CurateIDs(stats, map[string]int64{"a-outlier": 999})
+	if got["a-outlier"] != "outlier" {
+		t.Fatalf("outlier cell = %q", got["a-outlier"])
+	}
+	if got["b-zero-short"] == "" || got["c-friction-medium"] == "" {
+		t.Fatalf("cells missing: %v", got)
+	}
+}
