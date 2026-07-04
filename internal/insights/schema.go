@@ -2,8 +2,8 @@ package insights
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	_ "embed"
+	"encoding/hex"
 )
 
 // analysisSchema is the JSON schema passed to `claude -p --json-schema`. It is a
