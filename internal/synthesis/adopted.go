@@ -59,18 +59,17 @@ func NewAdoptCheckerFromFiles(paths []string) AdoptChecker {
 	}
 }
 
-// AdoptPaths returns the exact files the already-adopted check greps, in order:
-// repo CLAUDE.md, global CLAUDE.md, global settings.json, then repo-local and
-// global skill/command markdown. Exported so the eval freeze can snapshot the
-// same corpus the checker reads.
-func AdoptPaths(repoPath string) []string {
-	home, _ := os.UserHomeDir()
+// AdoptPathsUnder is AdoptPaths against explicit roots: globalRoot stands in
+// for ~/.claude and repoRoot for the repo checkout. The eval harness points
+// these at its frozen config snapshot, so the path-selection logic stays
+// inside this package's code-version hash.
+func AdoptPathsUnder(globalRoot, repoRoot string) []string {
 	paths := []string{
-		filepath.Join(repoPath, "CLAUDE.md"),
-		filepath.Join(home, ".claude", "CLAUDE.md"),
-		filepath.Join(home, ".claude", "settings.json"),
+		filepath.Join(repoRoot, "CLAUDE.md"),
+		filepath.Join(globalRoot, "CLAUDE.md"),
+		filepath.Join(globalRoot, "settings.json"),
 	}
-	for _, root := range []string{filepath.Join(repoPath, ".claude"), filepath.Join(home, ".claude", "skills")} {
+	for _, root := range []string{filepath.Join(repoRoot, ".claude"), filepath.Join(globalRoot, "skills")} {
 		_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 			if err == nil && !d.IsDir() && strings.HasSuffix(p, ".md") {
 				paths = append(paths, p)
@@ -79,6 +78,15 @@ func AdoptPaths(repoPath string) []string {
 		})
 	}
 	return paths
+}
+
+// AdoptPaths returns the exact files the already-adopted check greps, in order:
+// repo CLAUDE.md, global CLAUDE.md, global settings.json, then repo-local and
+// global skill/command markdown. Exported so the eval freeze can snapshot the
+// same corpus the checker reads.
+func AdoptPaths(repoPath string) []string {
+	home, _ := os.UserHomeDir()
+	return AdoptPathsUnder(filepath.Join(home, ".claude"), repoPath)
 }
 
 // NewAdoptChecker greps the repo's and the global CLAUDE.md/settings/skills corpus.

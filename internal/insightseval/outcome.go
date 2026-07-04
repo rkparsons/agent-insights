@@ -97,26 +97,14 @@ func defaultSkillDirs() (map[string]string, error) {
 	}, nil
 }
 
-// snapshotAdoptPaths mirrors synthesis.AdoptPaths against the frozen
-// config-snapshot, so the already-adopted check greps the same corpus shape
-// the live checker would — but pinned to freeze time.
+// snapshotAdoptPaths applies the adopted-check's path selection
+// (synthesis.AdoptPathsUnder, covered by the synthesis code version in the
+// verify cache key) to the frozen config-snapshot layout.
 func snapshotAdoptPaths(dataDir, bucket string) []string {
-	global := filepath.Join(dataDir, "config-snapshot", "global")
-	repo := filepath.Join(dataDir, "config-snapshot", "repos", bucket)
-	paths := []string{
-		filepath.Join(repo, "CLAUDE.md"),
-		filepath.Join(global, "CLAUDE.md"),
-		filepath.Join(global, "settings.json"),
-	}
-	for _, root := range []string{filepath.Join(repo, ".claude"), filepath.Join(global, "skills")} {
-		_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
-			if err == nil && !d.IsDir() && filepath.Ext(p) == ".md" {
-				paths = append(paths, p)
-			}
-			return nil
-		})
-	}
-	return paths
+	return synthesis.AdoptPathsUnder(
+		filepath.Join(dataDir, "config-snapshot", "global"),
+		filepath.Join(dataDir, "config-snapshot", "repos", bucket),
+	)
 }
 
 // RunOutcome runs the pipeline stages over the frozen corpus with the
@@ -201,10 +189,18 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 	rec.CodeVersions["synthesis"] = synthCV
 	rec.CodeVersions["insightseval"] = evalCV
 
-	scratch := filepath.Join(opts.CacheDir, "scratch", strconv.FormatInt(time.Now().UnixNano(), 10))
+	// Sweep scratch remnants from interrupted runs first: a killed run's
+	// deferred cleanup never fired, and the ephemeral config dir holds the
+	// materialized credential — stale copies must not outlive their run.
+	scratchRoot := filepath.Join(opts.CacheDir, "scratch")
+	if err := os.RemoveAll(scratchRoot); err != nil {
+		return rec, err
+	}
+	scratch := filepath.Join(scratchRoot, strconv.FormatInt(time.Now().UnixNano(), 10))
 	// The ephemeral config/cwd only need to outlive the nested claude calls;
-	// removing them at exit keeps re-runs from accumulating per-run copies.
-	defer os.RemoveAll(scratch)
+	// removing the whole scratch root at exit (not just this run's subdir)
+	// leaves no trace of the run and keeps re-runs from accumulating copies.
+	defer os.RemoveAll(scratchRoot)
 	pin, err := ComposeEnvPin(opts.DataDir, scratch, opts.SkillDirs, opts.ClaudeVersion)
 	if err != nil {
 		return rec, err

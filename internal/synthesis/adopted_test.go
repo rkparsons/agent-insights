@@ -51,6 +51,37 @@ func TestAdoptPathsListsCheckerCorpus(t *testing.T) {
 	}
 }
 
+func TestAdoptPathsUnderListsCheckerCorpus(t *testing.T) {
+	global := t.TempDir()
+	repo := t.TempDir()
+	mustWrite := func(p, s string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite(filepath.Join(global, "CLAUDE.md"), "global")
+	mustWrite(filepath.Join(global, "settings.json"), "{}")
+	mustWrite(filepath.Join(global, "skills", "x", "SKILL.md"), "skill")
+	mustWrite(filepath.Join(repo, "CLAUDE.md"), "repo")
+	mustWrite(filepath.Join(repo, ".claude", "rules.md"), "repo rules")
+
+	paths := AdoptPathsUnder(global, repo)
+	want := []string{
+		filepath.Join(repo, "CLAUDE.md"),
+		filepath.Join(global, "CLAUDE.md"),
+		filepath.Join(global, "settings.json"),
+		filepath.Join(repo, ".claude", "rules.md"),
+		filepath.Join(global, "skills", "x", "SKILL.md"),
+	}
+	if !slices.Equal(paths, want) {
+		t.Fatalf("AdoptPathsUnder = %v, want %v", paths, want)
+	}
+}
+
 func TestNewAdoptCheckerFromFilesExported(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "CLAUDE.md")

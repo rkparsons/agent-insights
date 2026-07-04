@@ -2,6 +2,7 @@ package insightseval
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -185,6 +186,29 @@ func (f *flakySynth) Synthesize(ctx context.Context, b synthesis.EvidenceBundle)
 	return synthesis.RawSynthesis{
 		Themes: []synthesis.RawTheme{{Title: "T", Kind: "friction", Summary: "s", EvidenceIDs: []string{"F1"}}},
 	}, nil
+}
+
+func TestRunOutcomeSweepsStaleScratchDirs(t *testing.T) {
+	_, opts := buildOutcomeFixture(t)
+	stale := filepath.Join(opts.CacheDir, "scratch", "stale", "config", ".credentials.json")
+	if err := os.MkdirAll(filepath.Dir(stale), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stale, []byte(`{"leaked":"credential"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fs := &fakeSynth{raw: synthesis.RawSynthesis{
+		Themes: []synthesis.RawTheme{{Title: "T", Kind: "friction", Summary: "s", EvidenceIDs: []string{"F1"}}},
+	}}
+	opts.Synth = fs
+
+	if _, err := RunOutcome(context.Background(), opts); err != nil {
+		t.Fatal(err)
+	}
+	scratchRoot := filepath.Join(opts.CacheDir, "scratch")
+	if _, err := os.Stat(scratchRoot); !os.IsNotExist(err) {
+		t.Fatalf("scratch root must not survive a completed run (stale dir swept, own dir deferred-removed): stat err = %v", err)
+	}
 }
 
 func TestRunOutcomeConsecutiveFailureReset(t *testing.T) {
