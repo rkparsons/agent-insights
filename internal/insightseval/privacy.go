@@ -8,11 +8,11 @@ import "regexp"
 // carry no free-text fields — this scan is the backstop for runs/ and
 // adjudications.json writes.
 var privacyPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`),
+	regexp.MustCompile(`(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`),
 	regexp.MustCompile(`/Users/`),
 	regexp.MustCompile(`/home/`),
 	regexp.MustCompile(`\$HOME`),
-	regexp.MustCompile(`\bsc-\d+\b`),
+	regexp.MustCompile(`(?i)\bsc-\d+\b`),
 	regexp.MustCompile(`\.worktrees/`),
 }
 

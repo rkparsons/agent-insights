@@ -10,6 +10,8 @@ func TestPrivacyScanCatchesEveryClass(t *testing.T) {
 		"under $HOME/.claude",
 		"branch TICKET-0000",           // ticket-branch marker
 		"repo/.worktrees/insights", // worktree path
+		"session 00000000-0000-4000-8000-00000000dead did it", // uppercase-hex session id
+		"branch TICKET-0000",
 	}
 	for _, l := range leaks {
 		if hits := privacyScan([]byte(l)); len(hits) == 0 {
