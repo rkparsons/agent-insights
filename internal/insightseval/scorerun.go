@@ -72,17 +72,25 @@ func LatestRunRecord(cacheDir string) (RunRecord, string, error) {
 // validateStatusCoverage fail-closes on any scored rubric without a status —
 // an unseeded target must never silently default at scoring time.
 func validateStatusCoverage(rubrics []Rubric, statuses map[string]string) error {
-	var missing []string
+	var missing, invalid []string
 	for _, r := range rubrics {
 		if r.Part == "negative" {
 			continue
 		}
-		if _, ok := statuses[r.ID]; !ok {
+		s, ok := statuses[r.ID]
+		if !ok {
 			missing = append(missing, r.ID)
+			continue
+		}
+		if !validStatuses[s] {
+			invalid = append(invalid, r.ID+"="+s)
 		}
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("statuses missing for %v — run `insights eval statuses seed`", missing)
+	}
+	if len(invalid) > 0 {
+		return fmt.Errorf("invalid status values %v — fix benchmark.json (valid: must_pass, expected_fail, expected_partial, needs_reconfirmation, invalidated)", invalid)
 	}
 	return nil
 }

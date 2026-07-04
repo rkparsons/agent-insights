@@ -173,10 +173,17 @@ func TestAggregateTargetSideMatchTriggers(t *testing.T) {
 func TestAggregateTargetEmptySamplesNeverVacuouslyPasses(t *testing.T) {
 	r := scoreRubric()
 	tv, cards := AggregateTarget(r, "must_pass", nil, 2, nil, true)
-	if tv.Pass || tv.HardFail || tv.MeetsExpectation || tv.Granularity != "absent" {
-		t.Fatalf("empty samples must be a defensive absent, never a pass or a hard fail: %+v", tv)
+	if tv.Pass || tv.MeetsExpectation || tv.Granularity != "absent" {
+		t.Fatalf("empty samples must score absent, never a pass: %+v", tv)
+	}
+	if !tv.HardFail {
+		t.Fatal("an unscoreable HIGH must_pass target must hard-fail, never degrade to a warning")
 	}
 	if len(tv.Samples) != 0 || len(tv.Triggers) != 0 || len(cards) != 0 {
 		t.Fatalf("empty samples must produce no sample entries, triggers, or cards: %+v %+v", tv, cards)
+	}
+	gap, _ := AggregateTarget(r, "expected_fail", nil, 0, nil, false)
+	if gap.HardFail || !gap.MeetsExpectation {
+		t.Fatalf("an unscoreable gap target stays informational: %+v", gap)
 	}
 }

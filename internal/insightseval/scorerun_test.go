@@ -197,6 +197,24 @@ func TestScoreRunAbortsOnProbeFailure(t *testing.T) {
 	}
 }
 
+func TestScoreRunRejectsInvalidStatusValues(t *testing.T) {
+	opts, _ := runScoreFixture(t)
+	b, ok, err := loadBenchmark(opts.DataDir)
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	b.Statuses["C-07"] = "must-pass" // typo'd manual ratchet edit
+	if err := writeJSON(filepath.Join(opts.DataDir, "benchmark.json"), b); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = ScoreRun(context.Background(), ScoreOptions{
+		DataDir: opts.DataDir, CacheDir: opts.CacheDir, ClaudeVersion: "1.0.0 (test)",
+		Matcher: &scriptedMatcher{}, ScoredAt: time.Date(2026, 7, 5, 10, 0, 0, 0, time.UTC)})
+	if err == nil || !strings.Contains(err.Error(), "invalid status") {
+		t.Fatalf("a typo'd status value must fail closed, never silently un-score a target: %v", err)
+	}
+}
+
 func TestFindCardByPrefix(t *testing.T) {
 	cacheDir := t.TempDir()
 	k := AdjKey{TargetID: "C-01", Statement: "s", IDSetHash: idSetHash([]string{"a"}), RubricHash: "h", Trigger: "flip"}

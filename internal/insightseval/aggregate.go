@@ -83,8 +83,17 @@ func AggregateTarget(r Rubric, status string, samples []SampleScore, effectiveAn
 	tv := TargetVerdict{ID: r.ID, Part: r.Part, Tier: r.Tier, Status: status,
 		PassAt: r.PassAt, EffectiveAnchors: effectiveAnchors, Granularity: "absent"}
 	if len(samples) == 0 {
-		// the orchestrator fail-closes zero-sample buckets before scoring;
-		// this is a defensive absent, never a vacuous pass
+		// Unscoreable target (e.g. expected bucket missing from the record):
+		// absent takes full status semantics — fail-closed, a HIGH miss must
+		// never degrade to a warning just because nothing could be scored.
+		switch status {
+		case "must_pass":
+			tv.HardFail = r.Tier == "HIGH"
+		case "expected_partial":
+			tv.HardFail = true // presence regression
+		case "expected_fail", "needs_reconfirmation":
+			tv.MeetsExpectation = true
+		}
 		return tv, nil
 	}
 	var cards []PendingCard
