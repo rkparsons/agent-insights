@@ -146,7 +146,7 @@ func wrapClaudeExit(out []byte, err error) error {
 	if detail == "" {
 		detail = "stdout: " + strings.TrimSpace(string(out))
 	}
-	if r := []rune(detail); r != nil && len(r) > 2000 {
+	if r := []rune(detail); len(r) > 2000 {
 		detail = string(r[:2000]) + "…"
 	}
 	return fmt.Errorf("claude exit %d: %s", ee.ExitCode(), detail)
