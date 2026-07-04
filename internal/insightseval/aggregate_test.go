@@ -169,3 +169,14 @@ func TestAggregateTargetSideMatchTriggers(t *testing.T) {
 		}
 	}
 }
+
+func TestAggregateTargetEmptySamplesNeverVacuouslyPasses(t *testing.T) {
+	r := scoreRubric()
+	tv, cards := AggregateTarget(r, "must_pass", nil, 2, nil, true)
+	if tv.Pass || tv.HardFail || tv.MeetsExpectation || tv.Granularity != "absent" {
+		t.Fatalf("empty samples must be a defensive absent, never a pass or a hard fail: %+v", tv)
+	}
+	if len(tv.Samples) != 0 || len(tv.Triggers) != 0 || len(cards) != 0 {
+		t.Fatalf("empty samples must produce no sample entries, triggers, or cards: %+v %+v", tv, cards)
+	}
+}
