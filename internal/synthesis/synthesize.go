@@ -19,7 +19,16 @@ func Synthesize(ctx context.Context, repoKey string, group []insights.AgentSessi
 	if err != nil {
 		return RepoSynthesis{}, ValidationReport{}, err
 	}
+	rs, report := Finalize(repoKey, b, raw, adopt, time.Now().UTC())
+	return rs, report, nil
+}
 
+// Finalize applies the deterministic post-LLM half of synthesis — id validation
+// and counting, the pool-quote guard, ranking, and the already-adopted check —
+// to a raw synthesis. Exported (with an explicit generatedAt) so the eval
+// harness can cache raw LLM outputs and re-verify them without re-calling the
+// model, byte-stable across runs.
+func Finalize(repoKey string, b EvidenceBundle, raw RawSynthesis, adopt AdoptChecker, generatedAt time.Time) (RepoSynthesis, ValidationReport) {
 	var poolQuotes []string
 	for _, f := range b.Friction {
 		if f.Quote != "" {
@@ -71,13 +80,13 @@ func Synthesize(ctx context.Context, repoKey string, group []insights.AgentSessi
 		rate = float64(droppedCited) / float64(rawCited)
 	}
 	rs := RepoSynthesis{
-		Repo: repoKey, GeneratedAt: time.Now().UTC(),
+		Repo: repoKey, GeneratedAt: generatedAt,
 		Window:          Window{From: b.From, To: b.To, SessionCount: b.SessionCount, AnalyzedCount: b.AnalyzedCount},
 		Themes:          themes,
 		Recommendations: recs,
 		Meta:            Meta{Model: synthesisModel, UnthemedFriction: unthemed, ValidationErrors: hard, PrefCountByRec: prefCount},
 	}
-	return rs, ValidationReport{RawQuoteDropRate: rate, HardErrors: hard}, nil
+	return rs, ValidationReport{RawQuoteDropRate: rate, HardErrors: hard}
 }
 
 // rankThemes assigns Rank (1 = top). Friction: normalized incident_count desc.

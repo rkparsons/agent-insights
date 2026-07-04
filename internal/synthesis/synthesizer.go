@@ -3,6 +3,8 @@ package synthesis
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +22,17 @@ const (
 	synthesisModel        = "claude-opus-4-8"
 	synthesisSkillCommand = "/synthesizing-workflow-insights"
 )
+
+// SynthesisModel is the pinned L2 model id, exported for eval cache keys and
+// reproducibility records.
+const SynthesisModel = synthesisModel
+
+// SchemaHash returns the sha256 (hex) of the embedded L2 schema, for eval
+// cache keys and reproducibility records.
+func SchemaHash() string {
+	sum := sha256.Sum256([]byte(synthesisSchema))
+	return hex.EncodeToString(sum[:])
+}
 
 // Synthesizer produces the qualitative themes/recommendations half of a repo's
 // insights from its EvidenceBundle. Injected so the merge/ranking logic is

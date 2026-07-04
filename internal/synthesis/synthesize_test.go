@@ -2,7 +2,9 @@ package synthesis
 
 import (
 	"context"
+	"reflect"
 	"testing"
+	"time"
 
 	"tmux-ctrl/internal/insights"
 )
@@ -167,5 +169,35 @@ func TestSynthesizeQuantitativeClaimInRecommendation(t *testing.T) {
 	}
 	if len(report.HardErrors) == 0 {
 		t.Error("expected hard error: recommendation statement contains a number")
+	}
+}
+
+func TestFinalizeIsDeterministicAndUsesProvidedTime(t *testing.T) {
+	group := []insights.AgentSessionAnalysis{
+		{Stats: insights.AgentSessionStats{SessionID: "s1", Repo: "/Users/x/Developer/myrepo",
+			Start: time.Date(2026, 6, 20, 9, 0, 0, 0, time.UTC)},
+			JudgedFields: insights.JudgedFields{
+				Outcome: "fully_achieved", SessionType: "single_task",
+				FrictionIncidents: []insights.FrictionIncident{{Type: "wrong_approach", OneLine: "took a detour"}},
+			}},
+	}
+	b := BuildBundle("myrepo", group)
+	raw := RawSynthesis{
+		Themes: []RawTheme{{Title: "Detours", Kind: "friction", Summary: "detours happen",
+			EvidenceIDs: []string{"F1"}}},
+	}
+	adopt := func(Recommendation) string { return "no" }
+	gen := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
+
+	rs1, rep1 := Finalize("myrepo", b, raw, adopt, gen)
+	rs2, rep2 := Finalize("myrepo", b, raw, adopt, gen)
+	if !rs1.GeneratedAt.Equal(gen) {
+		t.Fatalf("GeneratedAt = %v, want %v", rs1.GeneratedAt, gen)
+	}
+	if !reflect.DeepEqual(rs1, rs2) || !reflect.DeepEqual(rep1, rep2) {
+		t.Fatal("Finalize is not deterministic for identical inputs")
+	}
+	if rs1.Repo != "myrepo" || len(rs1.Themes) != 1 {
+		t.Fatalf("unexpected synthesis: %+v", rs1)
 	}
 }

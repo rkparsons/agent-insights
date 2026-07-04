@@ -26,10 +26,11 @@ func salientTerms(statement string) []string {
 	return out
 }
 
-// newAdoptCheckerFromFiles returns a checker: "yes" if a majority of a rec's salient
+// NewAdoptCheckerFromFiles returns a checker: "yes" if a majority of a rec's salient
 // terms appear in the concatenated corpus, "no" if terms exist but < majority match,
 // "unknown" if the corpus is unreadable or the statement has no salient terms.
-func newAdoptCheckerFromFiles(paths []string) AdoptChecker {
+// Exported so the eval harness can point it at the frozen config-snapshot.
+func NewAdoptCheckerFromFiles(paths []string) AdoptChecker {
 	var corpus strings.Builder
 	readable := false
 	for _, p := range paths {
@@ -82,5 +83,5 @@ func AdoptPaths(repoPath string) []string {
 
 // NewAdoptChecker greps the repo's and the global CLAUDE.md/settings/skills corpus.
 func NewAdoptChecker(repoPath string) AdoptChecker {
-	return newAdoptCheckerFromFiles(AdoptPaths(repoPath))
+	return NewAdoptCheckerFromFiles(AdoptPaths(repoPath))
 }
