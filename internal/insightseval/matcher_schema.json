@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["matches"],
+  "properties": {
+    "matches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item_id", "granularity", "nuance_results", "forbidden_forms_matched"],
+        "properties": {
+          "item_id": {"type": "string"},
+          "granularity": {"type": "string", "enum": ["full", "partial", "over_generalized"]},
+          "nuance_results": {"type": "array", "items": {"type": "boolean"}},
+          "forbidden_forms_matched": {"type": "array", "items": {"type": "integer"}}
+        }
+      }
+    }
+  }
+}
