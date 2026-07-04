@@ -1,0 +1,79 @@
+package insightseval
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"tmux-ctrl/internal/synthesis"
+)
+
+// TestPartARubricsAnchorsResolveInFrozenData verifies, against the private
+// data repo: 24 regression rubrics exist; every anchor id appears in some
+// frozen ground-truth theme's session_ids for the expected bucket AND in that
+// bucket's scoring population (i.e. meta ids were stripped at authoring).
+func TestPartARubricsAnchorsResolveInFrozenData(t *testing.T) {
+	home, _ := os.UserHomeDir()
+	dataDir := filepath.Join(home, "Developer", "insights-eval-data")
+	if _, err := os.Stat(filepath.Join(dataDir, "manifest.json")); err != nil {
+		t.Skip("insights-eval-data not present")
+	}
+	rubrics, err := LoadRubrics()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, ok, err := loadBenchmark(dataDir)
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	themeIDs := map[string]map[string]bool{} // bucket → id set across all themes
+	for bucket := range b.Buckets {
+		raw, err := os.ReadFile(filepath.Join(dataDir, "ground-truth", bucket, "2026-07-02.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var gt synthesis.RepoSynthesis
+		if err := json.Unmarshal(raw, &gt); err != nil {
+			t.Fatal(err)
+		}
+		set := map[string]bool{}
+		for _, th := range gt.Themes {
+			for _, id := range th.SessionIDs {
+				set[id] = true
+			}
+		}
+		themeIDs[bucket] = set
+	}
+	scoring := map[string]map[string]bool{}
+	for bucket, bp := range b.Buckets {
+		set := map[string]bool{}
+		for _, id := range bp.Scoring {
+			set[id] = true
+		}
+		scoring[bucket] = set
+	}
+	regressions := 0
+	for _, r := range rubrics {
+		if r.Part != "regression" {
+			continue
+		}
+		regressions++
+		expected := r.Repos[0]
+		if _, known := b.Buckets[expected]; !known {
+			t.Errorf("%s: expected bucket %q not in benchmark", r.ID, expected)
+			continue
+		}
+		for _, id := range r.AnchorSessionIDs {
+			if !themeIDs[expected][id] {
+				t.Errorf("%s: anchor %s not in any frozen %s theme", r.ID, id, expected)
+			}
+			if !scoring[expected][id] {
+				t.Errorf("%s: anchor %s not in %s scoring population (meta id not stripped?)", r.ID, id, expected)
+			}
+		}
+	}
+	if regressions != 24 {
+		t.Fatalf("regression rubrics = %d, want 24", regressions)
+	}
+}
