@@ -122,7 +122,7 @@ func sortedBucketNames(buckets map[string]bucketData) []string {
 // verdict (modulo ScoredAt).
 func ScoreRun(ctx context.Context, opts ScoreOptions) (Verdict, ScoreArtifacts, error) {
 	none := ScoreArtifacts{}
-	if opts.Repeats == 0 {
+	if opts.Repeats <= 0 {
 		opts.Repeats = 3
 	}
 	if opts.ScoredAt.IsZero() {
@@ -359,7 +359,7 @@ func ScoreRun(ctx context.Context, opts ScoreOptions) (Verdict, ScoreArtifacts, 
 
 // ProbeRun runs only the integrity probes — the calibration entry point.
 func ProbeRun(ctx context.Context, opts ScoreOptions) ([]ProbeResult, error) {
-	if opts.Repeats == 0 {
+	if opts.Repeats <= 0 {
 		opts.Repeats = 3
 	}
 	rubrics, err := LoadRubrics()

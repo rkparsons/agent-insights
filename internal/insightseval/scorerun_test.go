@@ -218,3 +218,23 @@ func TestFindCardByPrefix(t *testing.T) {
 		t.Fatalf("informational card must refuse adjudication: %v", err)
 	}
 }
+
+func TestScoreRunDefaultsNonPositiveRepeats(t *testing.T) {
+	opts, _ := runScoreFixture(t)
+	sm := &scriptedMatcher{responses: map[string]MatchResult{"M1": m1Match()}}
+	v, _, err := ScoreRun(context.Background(), ScoreOptions{
+		DataDir: opts.DataDir, CacheDir: opts.CacheDir, ClaudeVersion: "1.0.0 (test)",
+		Matcher: sm, Repeats: -1,
+		ScoredAt: time.Date(2026, 7, 5, 10, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatalf("negative repeats must default to 3, not error or no-op: %v", err)
+	}
+	if len(v.Probes) != 3 {
+		t.Fatalf("probes must have run with the defaulted repeats: %+v", v.Probes)
+	}
+	for _, p := range v.Probes {
+		if len(p.Granularities) != 3 {
+			t.Fatalf("probe %s must carry 3 defaulted repeats, got %v", p.Class, p.Granularities)
+		}
+	}
+}
