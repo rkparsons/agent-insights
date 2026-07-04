@@ -24,6 +24,7 @@ func (f *fakeSynth) Synthesize(ctx context.Context, b synthesis.EvidenceBundle) 
 // config-snapshot, returning (dataDir, opts) ready for RunOutcome.
 func buildOutcomeFixture(t *testing.T) (string, OutcomeOptions) {
 	t.Helper()
+	withFakeCredentials(t)
 	data, plain := buildCorpusFixture(t)
 	_ = plain
 	pool := filepath.Join(data, "baseline-pool", "v1")

@@ -17,6 +17,16 @@ func mustWriteFile(t *testing.T, p, s string) {
 	}
 }
 
+// withFakeCredentials swaps credentialsCommand for a real-but-harmless command
+// so tests never touch the actual macOS keychain, restoring the original on
+// cleanup.
+func withFakeCredentials(t *testing.T) {
+	t.Helper()
+	orig := credentialsCommand
+	credentialsCommand = []string{"echo", `{"fake":"credential"}`}
+	t.Cleanup(func() { credentialsCommand = orig })
+}
+
 func TestHashTreeStableAndContentSensitive(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, "a.md"), "one")
@@ -63,6 +73,7 @@ func TestHashTreeStableAndContentSensitive(t *testing.T) {
 }
 
 func TestComposeEnvPinBuildsEphemeralConfig(t *testing.T) {
+	withFakeCredentials(t)
 	data, scratch := t.TempDir(), t.TempDir()
 	mustWriteFile(t, filepath.Join(data, "config-snapshot", "global", "CLAUDE.md"), "frozen rules")
 	mustWriteFile(t, filepath.Join(data, "config-snapshot", "global", "settings.json"), "{}")
@@ -84,6 +95,18 @@ func TestComposeEnvPinBuildsEphemeralConfig(t *testing.T) {
 	frozen, err := os.ReadFile(filepath.Join(pin.ConfigDir, "CLAUDE.md"))
 	if err != nil || string(frozen) != "frozen rules" {
 		t.Fatalf("frozen config not copied: %q %v", frozen, err)
+	}
+	credPath := filepath.Join(pin.ConfigDir, ".credentials.json")
+	credRaw, err := os.ReadFile(credPath)
+	if err != nil || string(credRaw) != `{"fake":"credential"}` {
+		t.Fatalf("credentials not materialized: %q %v", credRaw, err)
+	}
+	info, err := os.Stat(credPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("credentials.json mode = %v, want 0600", info.Mode().Perm())
 	}
 	entries, err := os.ReadDir(pin.WorkDir)
 	if err != nil || len(entries) != 0 {
@@ -145,6 +168,7 @@ func TestSnapshotSkillsAppendOnlyFirstSight(t *testing.T) {
 }
 
 func TestComposeEnvPinWarnsOnHookDrift(t *testing.T) {
+	withFakeCredentials(t)
 	data, scratch := t.TempDir(), t.TempDir()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -158,5 +182,18 @@ func TestComposeEnvPinWarnsOnHookDrift(t *testing.T) {
 	joined := strings.Join(pin.DriftWarnings, "\n")
 	if !strings.Contains(joined, "hooks") {
 		t.Fatalf("expected hook drift warning, got %v", pin.DriftWarnings)
+	}
+}
+
+func TestComposeEnvPinFailsWhenCredentialUnavailable(t *testing.T) {
+	orig := credentialsCommand
+	credentialsCommand = []string{"false"}
+	t.Cleanup(func() { credentialsCommand = orig })
+
+	data, scratch := t.TempDir(), t.TempDir()
+	mustWriteFile(t, filepath.Join(data, "config-snapshot", "global", "settings.json"), "{}")
+	_, err := ComposeEnvPin(data, scratch, nil, "1.0.0")
+	if err == nil || !strings.Contains(err.Error(), "keychain credential") {
+		t.Fatalf("expected keychain credential error, got %v", err)
 	}
 }

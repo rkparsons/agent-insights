@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"testing"
@@ -104,6 +105,26 @@ func TestNewClaudeJudgeConfigured(t *testing.T) {
 	}
 	if j.run == nil {
 		t.Error("runner is nil")
+	}
+}
+
+func TestWrapClaudeExit(t *testing.T) {
+	cmd := exec.Command("sh", "-c", "exit 3")
+	err := cmd.Run()
+	if err == nil {
+		t.Fatal("expected exit 3 to error")
+	}
+	wrapped := wrapClaudeExit([]byte("boom from stdout"), err)
+	if wrapped == nil {
+		t.Fatal("expected a wrapped error")
+	}
+	if !strings.Contains(wrapped.Error(), "exit 3") || !strings.Contains(wrapped.Error(), "boom from stdout") {
+		t.Fatalf("wrapped error = %q, want it to mention exit 3 and stdout tail", wrapped.Error())
+	}
+
+	plain := errors.New("not an exit error")
+	if got := wrapClaudeExit(nil, plain); got != plain {
+		t.Fatalf("non-ExitError must pass through unchanged, got %v", got)
 	}
 }
 

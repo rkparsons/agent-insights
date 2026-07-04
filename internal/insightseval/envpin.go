@@ -1,6 +1,7 @@
 package insightseval
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -75,6 +76,10 @@ func ComposeEnvPin(dataDir, scratchDir string, skillDirs map[string]string, clau
 		return pin, err
 	}
 
+	if err := materializeCredentials(pin.ConfigDir); err != nil {
+		return pin, err
+	}
+
 	pin.DriftWarnings = liveConfigDrift(dataDir)
 
 	pin.SnapshotWarnings, err = snapshotSkills(dataDir, skillDirs, pin.SkillHashes)
@@ -82,6 +87,23 @@ func ComposeEnvPin(dataDir, scratchDir string, skillDirs map[string]string, clau
 		return pin, err
 	}
 	return pin, nil
+}
+
+// credentialsCommand prints the subscription OAuth credential blob; a package
+// var so tests never touch the real keychain.
+var credentialsCommand = []string{"security", "find-generic-password", "-s", "Claude Code-credentials", "-w"}
+
+// materializeCredentials writes the keychain credential into the ephemeral
+// config dir. macOS claude ignores the keychain for custom CLAUDE_CONFIG_DIRs
+// and expects .credentials.json inside them; the file exists only for the
+// run's lifetime (0600, removed with the scratch dir) and never enters the
+// data repo, the cache, or any hash.
+func materializeCredentials(configDir string) error {
+	out, err := exec.Command(credentialsCommand[0], credentialsCommand[1:]...).Output()
+	if err != nil {
+		return fmt.Errorf("read keychain credential for nested claude (is `claude` logged in?): %w", err)
+	}
+	return os.WriteFile(filepath.Join(configDir, ".credentials.json"), bytes.TrimSpace(out), 0o600)
 }
 
 // liveConfigDrift compares the live hook/statusline files against the frozen

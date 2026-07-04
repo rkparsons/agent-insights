@@ -140,17 +140,27 @@ func NewClaudeSynthesizerPinned(configDir, workDir string) Synthesizer {
 	s.run = func(ctx context.Context, stdin []byte) ([]byte, error) {
 		out, err := newSynthesizeCommand(ctx, s.model, s.schema, stdin, configDir, workDir).Output()
 		if err != nil {
-			var ee *exec.ExitError
-			if errors.As(err, &ee) {
-				stderr := string(ee.Stderr)
-				if r := []rune(stderr); len(r) > 2000 {
-					stderr = string(r[:2000]) + "…"
-				}
-				return out, fmt.Errorf("claude exit %d: %s", ee.ExitCode(), stderr)
-			}
-			return out, err
+			return out, wrapClaudeExit(out, err)
 		}
 		return out, nil
 	}
 	return s
+}
+
+// wrapClaudeExit formats a claude subprocess failure. claude -p reports many
+// errors (e.g. "Not logged in") in its stdout JSON envelope with an empty
+// stderr, so stdout's tail is included whenever stderr alone would be blank.
+func wrapClaudeExit(out []byte, err error) error {
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) {
+		return err
+	}
+	detail := strings.TrimSpace(string(ee.Stderr))
+	if detail == "" {
+		detail = "stdout: " + strings.TrimSpace(string(out))
+	}
+	if r := []rune(detail); r != nil && len(r) > 2000 {
+		detail = string(r[:2000]) + "…"
+	}
+	return fmt.Errorf("claude exit %d: %s", ee.ExitCode(), detail)
 }
