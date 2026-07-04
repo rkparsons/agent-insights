@@ -450,3 +450,29 @@ func TestRunFreezeDoesNotReuseEmptyBenchmark(t *testing.T) {
 		t.Fatalf("myrepo bucket must be resolved: %+v", rep.Benchmark.Buckets["myrepo"])
 	}
 }
+
+func TestRunFreezeGroundTruthCanonicalOnce(t *testing.T) {
+	data := buildFixtureWorld(t)
+	if _, err := RunFreeze(data); err != nil {
+		t.Fatal(err)
+	}
+	// a NEW live synthesis lands after the freeze — it must not join ground-truth/
+	insightsDir := os.Getenv("TMUX_CTRL_INSIGHTS_DIR")
+	newer := filepath.Join(insightsDir, "synthesis", "myrepo", "2026-07-09.json")
+	if err := os.WriteFile(newer, []byte(`{"repo":"myrepo"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := RunFreeze(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep.GroundTruthRetained {
+		t.Fatal("re-run must retain the frozen ground truth")
+	}
+	if _, err := os.Stat(filepath.Join(data, "ground-truth", "myrepo", "2026-07-09.json")); !os.IsNotExist(err) {
+		t.Fatal("newer live synthesis leaked into the frozen ground truth")
+	}
+	if !rep.PoolRetained {
+		t.Fatal("re-run with existing v1 must report the pool as retained")
+	}
+}

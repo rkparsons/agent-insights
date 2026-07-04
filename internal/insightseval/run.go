@@ -12,14 +12,16 @@ import (
 )
 
 type FreezeReport struct {
-	Manifest     Manifest     `json:"manifest"`
-	FreezeStats  FreezeStats  `json:"freeze_stats"`
-	Benchmark    Benchmark    `json:"benchmark"`
-	Issues       FreezeIssues `json:"issues"`
-	GroundTruth  int          `json:"ground_truth_files"`
-	PoolCopied   int          `json:"pool_files"`
-	ConfigCopied int          `json:"config_files"`
-	PoolSkipped  bool         `json:"pool_skipped"`
+	Manifest            Manifest     `json:"manifest"`
+	FreezeStats         FreezeStats  `json:"freeze_stats"`
+	Benchmark           Benchmark    `json:"benchmark"`
+	Issues              FreezeIssues `json:"issues"`
+	GroundTruth         int          `json:"ground_truth_files"`
+	PoolCopied          int          `json:"pool_files"`
+	ConfigCopied        int          `json:"config_files"`
+	PoolSkipped         bool         `json:"pool_skipped"`
+	PoolRetained        bool         `json:"pool_retained"`
+	GroundTruthRetained bool         `json:"ground_truth_retained"`
 }
 
 // RunFreeze executes the full freeze: scaffold, ground-truth copy, corpus +
@@ -41,11 +43,18 @@ func RunFreeze(dataDir string) (FreezeReport, error) {
 	if err := EnsureRepoScaffold(dataDir); err != nil {
 		return rep, err
 	}
-	n, err := CopyGroundTruth(dataDir)
-	if err != nil {
-		return rep, fmt.Errorf("ground truth: %w", err)
+	if dirExists(filepath.Join(dataDir, "ground-truth")) {
+		// Ground truth is canonical once frozen: re-copying would let a newer
+		// live synthesis slip in and silently shift loadGroundTruth's
+		// newest-file pick — the anchors' source of truth.
+		rep.GroundTruthRetained = true
+	} else {
+		n, err := CopyGroundTruth(dataDir)
+		if err != nil {
+			return rep, fmt.Errorf("ground truth: %w", err)
+		}
+		rep.GroundTruth = n
 	}
-	rep.GroundTruth = n
 
 	analyses, err := synthesis.LoadAnalyses()
 	if err != nil {
@@ -103,6 +112,8 @@ func RunFreeze(dataDir string) (FreezeReport, error) {
 			if err != nil {
 				return rep, fmt.Errorf("baseline pool: %w", err)
 			}
+		} else {
+			rep.PoolRetained = true
 		}
 	} else {
 		rep.PoolSkipped = true

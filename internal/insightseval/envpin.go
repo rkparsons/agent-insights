@@ -239,3 +239,6 @@ func snapshotSkills(dataDir string, skillDirs, hashes map[string]string) ([]stri
 	}
 	return warnings, nil
 }
+
+// ClaudeVersionString is claudeVersionString exported for the CLI.
+func ClaudeVersionString() (string, error) { return claudeVersionString() }

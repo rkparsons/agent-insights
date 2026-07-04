@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"tmux-ctrl/internal/insightseval"
@@ -46,5 +47,41 @@ func TestDirExists(t *testing.T) {
 	}
 	if dirExists(f) {
 		t.Fatal("a regular file must not report true")
+	}
+}
+
+func TestParseOutcomeArgs(t *testing.T) {
+	opts, err := parseOutcomeArgs([]string{"--scope", "full", "--samples", "5", "--population", "as_consumed", "--l1-sample", "--data", "/d", "--cache", "/c"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.Scope != "full" || opts.Samples != 5 || opts.Population != "as_consumed" ||
+		!opts.L1Sample || opts.DataDir != "/d" || opts.CacheDir != "/c" {
+		t.Fatalf("opts: %+v", opts)
+	}
+	if _, err := parseOutcomeArgs([]string{"--samples", "zero"}); err == nil {
+		t.Fatal("bad --samples must error")
+	}
+	if _, err := parseOutcomeArgs([]string{"--bogus"}); err == nil {
+		t.Fatal("unknown flag must error")
+	}
+	defaults, err := parseOutcomeArgs(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaults.DataDir == "" || defaults.CacheDir == "" {
+		t.Fatalf("defaults: %+v", defaults)
+	}
+	if !strings.HasSuffix(defaults.DataDir, "insights-eval-data") {
+		t.Fatalf("default data dir: %q", defaults.DataDir)
+	}
+}
+
+func TestPoolSummaryMessage(t *testing.T) {
+	if got := poolSummaryMessage(true, 0); !strings.Contains(got, "retained") {
+		t.Fatalf("retained wording: %q", got)
+	}
+	if got := poolSummaryMessage(false, 296); !strings.Contains(got, "296") {
+		t.Fatalf("written wording: %q", got)
 	}
 }

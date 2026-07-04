@@ -177,3 +177,15 @@ func SeedStatuses(dataDir string) (int, error) {
 	}
 	return added, writeJSON(filepath.Join(dataDir, "benchmark.json"), b)
 }
+
+// Statuses returns benchmark.json's per-target status map.
+func Statuses(dataDir string) (map[string]string, error) {
+	b, ok, err := loadBenchmark(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("no benchmark.json in %s", dataDir)
+	}
+	return b.Statuses, nil
+}
