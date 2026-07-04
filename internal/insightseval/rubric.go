@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+	"tmux-ctrl/internal/synthesis"
 )
 
 //go:embed rubrics/*.yaml
@@ -26,10 +28,14 @@ type Rubric struct {
 	RequiredNuances          []string `yaml:"required_nuances"`
 	ForbiddenGeneralizations []string `yaml:"forbidden_generalizations"`
 	AnchorSessionIDs         []string `yaml:"anchor_session_ids"`
+	AnchorTheme              string   `yaml:"anchor_theme,omitempty"` // "<bucket>/<theme-index>" in frozen ground truth (pre-strip anchor source)
 	Surface                  string   `yaml:"surface"`
 	PassAt                   string   `yaml:"pass_at"`
 	SeedStatus               string   `yaml:"seed_status,omitempty"`
 	Notes                    string   `yaml:"notes,omitempty"`
+	// Hash is the sha256 of the rubric file bytes: adjudication keys and
+	// per-rubric matcher payloads re-key when the file changes.
+	Hash string `yaml:"-"`
 }
 
 var validStatuses = map[string]bool{
@@ -46,6 +52,7 @@ func parseRubric(name string, raw []byte) (Rubric, error) {
 	if err := dec.Decode(&r); err != nil {
 		return r, fmt.Errorf("rubric %s: %w", name, err)
 	}
+	r.Hash = sha256hex(raw)
 	fail := func(msg string) (Rubric, error) { return r, fmt.Errorf("rubric %s: %s", name, msg) }
 	if r.ID == "" || r.Statement == "" {
 		return fail("id and statement are required")
@@ -64,9 +71,23 @@ func parseRubric(name string, raw []byte) (Rubric, error) {
 		if r.Part == "gap" && len(r.AnchorSessionIDs) > 0 {
 			return fail("gap rubrics carry no anchors (nothing persisted for misses)")
 		}
+		if len(r.AnchorSessionIDs) > 0 {
+			bucket, _, err := parseAnchorTheme(r.AnchorTheme)
+			if err != nil {
+				return fail("anchor_theme: " + err.Error())
+			}
+			if bucket != r.Repos[0] {
+				return fail("anchor_theme bucket must be repos[0] (the anchor source bucket)")
+			}
+		} else if r.AnchorTheme != "" {
+			return fail("anchor_theme requires anchor_session_ids")
+		}
 	case "negative":
 		if len(r.AnchorSessionIDs) > 0 {
 			return fail("negative rubrics carry no anchors (no corroboration channel)")
+		}
+		if r.AnchorTheme != "" {
+			return fail("negative rubrics carry no anchor_theme")
 		}
 	default:
 		return fail("part must be regression|gap|negative")
@@ -188,4 +209,48 @@ func Statuses(dataDir string) (map[string]string, error) {
 		return nil, fmt.Errorf("no benchmark.json in %s", dataDir)
 	}
 	return b.Statuses, nil
+}
+
+// parseAnchorTheme splits "<bucket>/<theme-index>" — the frozen ground-truth
+// theme the rubric's anchors were copied from.
+func parseAnchorTheme(s string) (string, int, error) {
+	i := strings.LastIndex(s, "/")
+	if i <= 0 || i == len(s)-1 {
+		return "", 0, fmt.Errorf("want <bucket>/<theme-index>, got %q", s)
+	}
+	idx, err := strconv.Atoi(s[i+1:])
+	if err != nil || idx < 0 {
+		return "", 0, fmt.Errorf("theme index invalid in %q", s)
+	}
+	return s[:i], idx, nil
+}
+
+// PreStripAnchors returns the deduped session ids of the frozen ground-truth
+// theme named by anchor_theme — the anchors BEFORE meta-stripping, straight
+// from ground-truth/ (never re-derived, never the rubric file). The run-0
+// as_consumed control scores against these. Errors when the rubric's stripped
+// anchors are not a subset — that means anchor_theme names the wrong theme.
+func PreStripAnchors(truths map[string]synthesis.RepoSynthesis, r Rubric) ([]string, error) {
+	if r.AnchorTheme == "" {
+		return nil, nil
+	}
+	bucket, idx, err := parseAnchorTheme(r.AnchorTheme)
+	if err != nil {
+		return nil, fmt.Errorf("rubric %s: %w", r.ID, err)
+	}
+	gt, ok := truths[bucket]
+	if !ok {
+		return nil, fmt.Errorf("rubric %s: no ground truth for bucket %s", r.ID, bucket)
+	}
+	if idx >= len(gt.Themes) {
+		return nil, fmt.Errorf("rubric %s: anchor_theme index %d out of range (%d themes)", r.ID, idx, len(gt.Themes))
+	}
+	pre := sortedSet(gt.Themes[idx].SessionIDs)
+	preSet := stringSet(pre)
+	for _, id := range r.AnchorSessionIDs {
+		if !preSet[id] {
+			return nil, fmt.Errorf("rubric %s: anchor %s not in ground-truth theme %s (anchor_theme wrong?)", r.ID, id, r.AnchorTheme)
+		}
+	}
+	return pre, nil
 }

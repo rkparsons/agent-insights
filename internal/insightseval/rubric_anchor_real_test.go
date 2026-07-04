@@ -77,3 +77,41 @@ func TestPartARubricsAnchorsResolveInFrozenData(t *testing.T) {
 		t.Fatalf("regression rubrics = %d, want 24", regressions)
 	}
 }
+
+// TestAnchorThemeResolvesPreStripAnchors verifies, against the private data
+// repo, that every anchored rubric's anchor_theme names a frozen ground-truth
+// theme whose id set contains the rubric's (meta-stripped) anchors — i.e. the
+// as_consumed control's pre-strip anchors are resolvable and consistent.
+func TestAnchorThemeResolvesPreStripAnchors(t *testing.T) {
+	home, _ := os.UserHomeDir()
+	dataDir := filepath.Join(home, "Developer", "insights-eval-data")
+	if _, err := os.Stat(filepath.Join(dataDir, "manifest.json")); err != nil {
+		t.Skip("insights-eval-data not present")
+	}
+	rubrics, err := LoadRubrics()
+	if err != nil {
+		t.Fatal(err)
+	}
+	truths, err := loadGroundTruth(filepath.Join(dataDir, "ground-truth"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	anchored := 0
+	for _, r := range rubrics {
+		if len(r.AnchorSessionIDs) == 0 {
+			continue
+		}
+		anchored++
+		pre, err := PreStripAnchors(truths, r)
+		if err != nil {
+			t.Errorf("%s: %v", r.ID, err)
+			continue
+		}
+		if len(pre) < len(sortedSet(r.AnchorSessionIDs)) {
+			t.Errorf("%s: pre-strip set (%d) smaller than stripped anchors (%d)", r.ID, len(pre), len(r.AnchorSessionIDs))
+		}
+	}
+	if anchored != 21 {
+		t.Fatalf("anchored rubrics = %d, want 21", anchored)
+	}
+}

@@ -2,9 +2,12 @@ package insightseval
 
 import (
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"tmux-ctrl/internal/synthesis"
 )
 
 func TestLoadRubricsEmbeddedValid(t *testing.T) {
@@ -89,5 +92,66 @@ func TestRubricValidationRejectsBadFiles(t *testing.T) {
 	dupAnchor := []byte("id: G1\npart: gap\ntier: HIGH\nsurface: either\nrepos: [tmux-ctrl]\nstatement: s\nanchor_session_ids: [abc]\n")
 	if _, err := parseRubric("G1.yaml", dupAnchor); err == nil || !strings.Contains(err.Error(), "anchor") {
 		t.Fatalf("gap rubric with anchors must fail, got %v", err)
+	}
+}
+
+func TestRubricAnchorThemeValidation(t *testing.T) {
+	base := "id: C-77\npart: regression\ntier: HIGH\nsurface: theme\nrepos: [client-project]\nstatement: s\n"
+	anchored := base + "anchor_session_ids: [abc]\n"
+	if _, err := parseRubric("C-77.yaml", []byte(anchored)); err == nil || !strings.Contains(err.Error(), "anchor_theme") {
+		t.Fatalf("anchored rubric without anchor_theme must fail: %v", err)
+	}
+	wrongBucket := anchored + "anchor_theme: tmux-ctrl/3\n"
+	if _, err := parseRubric("C-77.yaml", []byte(wrongBucket)); err == nil || !strings.Contains(err.Error(), "repos[0]") {
+		t.Fatalf("anchor_theme bucket must be repos[0]: %v", err)
+	}
+	ok := anchored + "anchor_theme: client-project/3\n"
+	r, err := parseRubric("C-77.yaml", []byte(ok))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.AnchorTheme != "client-project/3" || r.Hash == "" || len(r.Hash) != 64 {
+		t.Fatalf("rubric: %+v", r)
+	}
+	orphan := base + "anchor_theme: client-project/3\n"
+	if _, err := parseRubric("C-77.yaml", []byte(orphan)); err == nil {
+		t.Fatal("anchor_theme without anchors must fail")
+	}
+	if _, _, err := parseAnchorTheme("nonsense"); err == nil {
+		t.Fatal("parseAnchorTheme must reject un-slashed input")
+	}
+	if b, i, err := parseAnchorTheme("tmux-ctrl/10"); err != nil || b != "tmux-ctrl" || i != 10 {
+		t.Fatalf("parseAnchorTheme: %q %d %v", b, i, err)
+	}
+}
+
+func TestPreStripAnchorsFromGroundTruth(t *testing.T) {
+	truths := map[string]synthesis.RepoSynthesis{
+		"client-project": {Themes: []synthesis.Theme{
+			{}, {SessionIDs: []string{"m1", "a1", "a2", "a1"}},
+		}},
+	}
+	r := Rubric{ID: "C-77", Repos: []string{"client-project"}, AnchorTheme: "client-project/1",
+		AnchorSessionIDs: []string{"a1", "a2"}} // m1 was meta-stripped
+	pre, err := PreStripAnchors(truths, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(pre, []string{"a1", "a2", "m1"}) {
+		t.Fatalf("pre-strip anchors: %v", pre)
+	}
+	bad := r
+	bad.AnchorSessionIDs = []string{"a1", "not-in-theme"}
+	if _, err := PreStripAnchors(truths, bad); err == nil {
+		t.Fatal("anchors outside the named theme must fail (wrong anchor_theme)")
+	}
+	outOfRange := r
+	outOfRange.AnchorTheme = "client-project/9"
+	if _, err := PreStripAnchors(truths, outOfRange); err == nil {
+		t.Fatal("out-of-range theme index must fail")
+	}
+	noAnchors := Rubric{ID: "C-E1"}
+	if pre, err := PreStripAnchors(truths, noAnchors); err != nil || pre != nil {
+		t.Fatalf("no-anchor rubric: %v %v", pre, err)
 	}
 }
