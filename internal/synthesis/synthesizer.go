@@ -103,7 +103,7 @@ func scrubbedEnv() []string {
 // newSynthesizeCommand builds the claude invocation that runs the synthesis skill with
 // structured output. The bundle is fed on stdin (argv is never used for it — bundles
 // can exceed the macOS argv cap).
-func newSynthesizeCommand(ctx context.Context, model, schema string, stdin []byte) *exec.Cmd {
+func newSynthesizeCommand(ctx context.Context, model, schema string, stdin []byte, configDir, workDir string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "claude", "-p", synthesisSkillCommand,
 		"--output-format", "json",
 		"--json-schema", schema,
@@ -116,16 +116,29 @@ func newSynthesizeCommand(ctx context.Context, model, schema string, stdin []byt
 		"--no-session-persistence")
 	cmd.Stdin = bytes.NewReader(stdin)
 	cmd.Env = scrubbedEnv()
+	// Appended last so it wins over any inherited CLAUDE_CONFIG_DIR (os/exec
+	// keeps the last duplicate). Pinning both knobs keeps a nested claude from
+	// reading live global config or a project CLAUDE.md from the caller's cwd.
+	if configDir != "" {
+		cmd.Env = append(cmd.Env, "CLAUDE_CONFIG_DIR="+configDir)
+	}
+	if workDir != "" {
+		cmd.Dir = workDir
+	}
 	return cmd
 }
 
 // NewClaudeSynthesizer returns a Synthesizer that shells out to `claude -p` under
 // subscription auth (Opus 4.8, embedded schema). The caller's ctx governs the
 // subprocess timeout; a context with no deadline means no timeout.
-func NewClaudeSynthesizer() Synthesizer {
+func NewClaudeSynthesizer() Synthesizer { return NewClaudeSynthesizerPinned("", "") }
+
+// NewClaudeSynthesizerPinned is NewClaudeSynthesizer with the nested claude's
+// config dir and working directory pinned (see NewClaudeJudgePinned).
+func NewClaudeSynthesizerPinned(configDir, workDir string) Synthesizer {
 	s := claudeSynthesizer{model: synthesisModel, schema: synthesisSchema}
 	s.run = func(ctx context.Context, stdin []byte) ([]byte, error) {
-		out, err := newSynthesizeCommand(ctx, s.model, s.schema, stdin).Output()
+		out, err := newSynthesizeCommand(ctx, s.model, s.schema, stdin, configDir, workDir).Output()
 		if err != nil {
 			var ee *exec.ExitError
 			if errors.As(err, &ee) {

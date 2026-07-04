@@ -16,6 +16,10 @@ const (
 	analysisSkillCommand = "/analyzing-agent-sessions"
 )
 
+// AnalysisModel is the pinned L1 model id, exported for eval cache keys and
+// reproducibility records.
+const AnalysisModel = analysisModel
+
 // scrubbedEnv returns the current environment with the API-key vars removed so the
 // nested claude runs under subscription auth, never API billing. Removed, not
 // blanked — an empty ANTHROPIC_API_KEY still wins its precedence slot.
@@ -34,7 +38,7 @@ func scrubbedEnv() []string {
 // newAnalyzeCommand builds the claude invocation that runs the analysis skill with
 // structured output. The reduced transcript is fed on stdin (argv is never used for
 // it — transcripts exceed the macOS argv cap).
-func newAnalyzeCommand(ctx context.Context, model, schema string, stdin []byte) *exec.Cmd {
+func newAnalyzeCommand(ctx context.Context, model, schema string, stdin []byte, configDir, workDir string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "claude", "-p", analysisSkillCommand,
 		"--output-format", "json",
 		"--json-schema", schema,
@@ -47,6 +51,15 @@ func newAnalyzeCommand(ctx context.Context, model, schema string, stdin []byte) 
 		"--no-session-persistence")
 	cmd.Stdin = bytes.NewReader(stdin)
 	cmd.Env = scrubbedEnv()
+	// Appended last so it wins over any inherited CLAUDE_CONFIG_DIR (os/exec
+	// keeps the last duplicate). Pinning both knobs keeps a nested claude from
+	// reading live global config or a project CLAUDE.md from the caller's cwd.
+	if configDir != "" {
+		cmd.Env = append(cmd.Env, "CLAUDE_CONFIG_DIR="+configDir)
+	}
+	if workDir != "" {
+		cmd.Dir = workDir
+	}
 	return cmd
 }
 
@@ -103,10 +116,16 @@ func (j claudeJudge) Judge(ctx context.Context, in ReducedInput) (JudgedFields, 
 // NewClaudeJudge returns a Judge that shells out to `claude -p` under subscription
 // auth (Opus 4.8, embedded schema). The caller's ctx governs the subprocess timeout;
 // a context with no deadline means no timeout — the step-6 caller must set one.
-func NewClaudeJudge() Judge {
+func NewClaudeJudge() Judge { return NewClaudeJudgePinned("", "") }
+
+// NewClaudeJudgePinned is NewClaudeJudge with the nested claude's config dir and
+// working directory pinned — the eval harness points these at an ephemeral copy of
+// the frozen config snapshot and an empty scratch dir. Empty strings leave the
+// corresponding knob inherited.
+func NewClaudeJudgePinned(configDir, workDir string) Judge {
 	j := claudeJudge{model: analysisModel, schema: analysisSchema}
 	j.run = func(ctx context.Context, stdin []byte) ([]byte, error) {
-		out, err := newAnalyzeCommand(ctx, j.model, j.schema, stdin).Output()
+		out, err := newAnalyzeCommand(ctx, j.model, j.schema, stdin, configDir, workDir).Output()
 		if err != nil {
 			var ee *exec.ExitError
 			if errors.As(err, &ee) {

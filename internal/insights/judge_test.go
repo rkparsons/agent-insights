@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -11,7 +12,7 @@ import (
 func TestNewAnalyzeCommandArgvAndEnv(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "sk-should-be-scrubbed")
 	t.Setenv("ANTHROPIC_AUTH_TOKEN", "tok-should-be-scrubbed")
-	cmd := newAnalyzeCommand(context.Background(), "claude-opus-4-8", `{"x":1}`, []byte("reduced input"))
+	cmd := newAnalyzeCommand(context.Background(), "claude-opus-4-8", `{"x":1}`, []byte("reduced input"), "", "")
 
 	args := strings.Join(cmd.Args, "\x00")
 	for _, want := range []string{"claude", "-p", "/analyzing-agent-sessions", "--output-format", "json", "--json-schema", `{"x":1}`, "--model", "claude-opus-4-8", "--no-session-persistence"} {
@@ -103,5 +104,24 @@ func TestNewClaudeJudgeConfigured(t *testing.T) {
 	}
 	if j.run == nil {
 		t.Error("runner is nil")
+	}
+}
+
+func TestNewAnalyzeCommandPinsConfigDirAndCwd(t *testing.T) {
+	cmd := newAnalyzeCommand(context.Background(), "m", "s", nil, "/tmp/cfg", "/tmp/work")
+	if cmd.Dir != "/tmp/work" {
+		t.Fatalf("Dir = %q", cmd.Dir)
+	}
+	if !slices.Contains(cmd.Env, "CLAUDE_CONFIG_DIR=/tmp/cfg") {
+		t.Fatal("env missing pinned CLAUDE_CONFIG_DIR")
+	}
+	unpinned := newAnalyzeCommand(context.Background(), "m", "s", nil, "", "")
+	if unpinned.Dir != "" {
+		t.Fatalf("unpinned Dir = %q", unpinned.Dir)
+	}
+	for _, kv := range unpinned.Env {
+		if kv == "CLAUDE_CONFIG_DIR=" {
+			t.Fatal("unpinned command must not append an empty CLAUDE_CONFIG_DIR")
+		}
 	}
 }

@@ -3,6 +3,7 @@ package synthesis
 import (
 	"context"
 	"os"
+	"slices"
 	"testing"
 )
 
@@ -33,5 +34,24 @@ func TestClaudeSynthesizerNullStructuredOutput(t *testing.T) {
 	}}
 	if _, err := s.Synthesize(context.Background(), EvidenceBundle{}); err == nil {
 		t.Error("expected error on null structured_output")
+	}
+}
+
+func TestNewSynthesizeCommandPinsConfigDirAndCwd(t *testing.T) {
+	cmd := newSynthesizeCommand(context.Background(), "m", "s", nil, "/tmp/cfg", "/tmp/work")
+	if cmd.Dir != "/tmp/work" {
+		t.Fatalf("Dir = %q", cmd.Dir)
+	}
+	if !slices.Contains(cmd.Env, "CLAUDE_CONFIG_DIR=/tmp/cfg") {
+		t.Fatal("env missing pinned CLAUDE_CONFIG_DIR")
+	}
+	unpinned := newSynthesizeCommand(context.Background(), "m", "s", nil, "", "")
+	if unpinned.Dir != "" {
+		t.Fatalf("unpinned Dir = %q", unpinned.Dir)
+	}
+	for _, kv := range unpinned.Env {
+		if kv == "CLAUDE_CONFIG_DIR=" {
+			t.Fatal("unpinned command must not append an empty CLAUDE_CONFIG_DIR")
+		}
 	}
 }

@@ -1,6 +1,10 @@
 package insights
 
-import _ "embed"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	_ "embed"
+)
 
 // analysisSchema is the JSON schema passed to `claude -p --json-schema`. It is a
 // committed copy of the analyzing-agent-sessions skill schema; TestSchemaMatchesLiveSkill
@@ -8,3 +12,10 @@ import _ "embed"
 //
 //go:embed schema.json
 var analysisSchema string
+
+// SchemaHash returns the sha256 (hex) of the embedded L1 analysis schema, for
+// eval cache keys and reproducibility records.
+func SchemaHash() string {
+	sum := sha256.Sum256([]byte(analysisSchema))
+	return hex.EncodeToString(sum[:])
+}
