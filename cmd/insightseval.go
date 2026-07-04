@@ -7,13 +7,14 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"time"
 
 	"tmux-ctrl/internal/insightseval"
 )
 
-// RunInsightsEval dispatches `tmux-ctrl insights eval <freeze|outcome|statuses>`.
+// RunInsightsEval dispatches `tmux-ctrl insights eval <freeze|outcome|score|adjudicate|probes|statuses>`.
 func RunInsightsEval(args []string) {
-	usage := "usage: tmux-ctrl insights eval freeze [--data <dir>] | outcome [--data <dir>] [--cache <dir>] [--scope l2|full] [--population scoring|as_consumed] [--samples N] [--l1-sample] | statuses [seed] [--data <dir>]"
+	usage := "usage: tmux-ctrl insights eval freeze [--data <dir>] | outcome [--data <dir>] [--cache <dir>] [--scope l2|full] [--population scoring|as_consumed] [--samples N] [--l1-sample] | score [--data <dir>] [--cache <dir>] [--record <path>] [--repeats N] | adjudicate <key-prefix> <accept|reject> [--note <s>] [--data <dir>] [--cache <dir>] | probes [--repeats N] [--data <dir>] [--cache <dir>] | statuses [seed] [--data <dir>]"
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
@@ -23,6 +24,12 @@ func RunInsightsEval(args []string) {
 		runEvalFreeze(args[1:])
 	case "outcome":
 		runEvalOutcome(args[1:])
+	case "score":
+		runEvalScore(args[1:])
+	case "adjudicate":
+		runEvalAdjudicate(args[1:])
+	case "probes":
+		runEvalProbes(args[1:])
 	case "statuses":
 		runEvalStatuses(args[1:])
 	default:
@@ -250,4 +257,179 @@ func poolNotWrittenMessage(v1Exists bool) string {
 func dirExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
+}
+
+func parseScoreArgs(args []string) (insightseval.ScoreOptions, error) {
+	opts := insightseval.ScoreOptions{DataDir: defaultDataDir(), CacheDir: defaultCacheDir()}
+	for i := 0; i < len(args); i++ {
+		next := func() (string, error) {
+			i++
+			if i >= len(args) {
+				return "", fmt.Errorf("%s needs a value", args[i-1])
+			}
+			return args[i], nil
+		}
+		var err error
+		switch args[i] {
+		case "--data":
+			opts.DataDir, err = next()
+		case "--cache":
+			opts.CacheDir, err = next()
+		case "--record":
+			opts.RecordPath, err = next()
+		case "--repeats":
+			var v string
+			if v, err = next(); err == nil {
+				opts.Repeats, err = strconv.Atoi(v)
+			}
+		default:
+			return opts, fmt.Errorf("unknown flag %q", args[i])
+		}
+		if err != nil {
+			return opts, err
+		}
+	}
+	return opts, nil
+}
+
+func runEvalScore(args []string) {
+	opts, err := parseScoreArgs(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval score: %v\n", err)
+		os.Exit(2)
+	}
+	opts.ClaudeVersion, err = insightseval.ClaudeVersionString()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval score: %v\n", err)
+		os.Exit(1)
+	}
+	v, arts, err := insightseval.ScoreRun(context.Background(), opts)
+	for _, w := range v.Warnings {
+		fmt.Fprintf(os.Stderr, "score: WARN %s\n", w)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval score: %v\n", err)
+		os.Exit(1)
+	}
+	printVerdict(v, arts)
+}
+
+func printVerdict(v insightseval.Verdict, arts insightseval.ScoreArtifacts) {
+	status := "PASS"
+	if v.HardFail {
+		status = "HARD FAIL"
+	}
+	fmt.Fprintf(os.Stderr, "score: %s · record %s · population=%s scope=%s pool=%s\n",
+		status, v.RecordName, v.Tuple.Population, v.Tuple.Scope, v.Tuple.PoolVersion)
+	for _, r := range v.HardFailReasons {
+		fmt.Fprintf(os.Stderr, "score: FAIL %s\n", r)
+	}
+	fmt.Fprintf(os.Stderr, "score: part A weighted recall %.2f (%d/%d targets)\n",
+		v.PartA.WeightedRecall, v.PartA.Passed, v.PartA.Scored)
+	for _, tv := range v.Targets {
+		mark := "MISS"
+		switch {
+		case tv.Pass:
+			mark = "pass"
+		case tv.ProvisionalFail:
+			mark = "PROVISIONAL-FAIL (card pending)"
+		case tv.MeetsExpectation:
+			mark = "expected"
+		}
+		fmt.Fprintf(os.Stderr, "score: %-6s %-22s %-16s %s (agreement %.2f)\n",
+			tv.ID, tv.Status, tv.Granularity, mark, tv.SampleAgreement)
+	}
+	if len(v.PartB) > 0 {
+		fmt.Fprintf(os.Stderr, "score: part B gap progress: %v\n", v.PartB)
+	}
+	for _, n := range v.Negatives {
+		fmt.Fprintf(os.Stderr, "score: NEGATIVE VIOLATION %s on samples %v\n", n.RubricID, n.SampleIndexes)
+	}
+	if v.Delta != nil {
+		if v.Delta.FreshBaseline {
+			fmt.Fprintln(os.Stderr, "score: delta: fresh baseline (no comparable prior verdict)")
+		} else {
+			fmt.Fprintf(os.Stderr, "score: delta vs %s: %d flip(s)\n", v.Delta.BaselineRun, len(v.Delta.Flips))
+			for _, f := range v.Delta.Flips {
+				fmt.Fprintf(os.Stderr, "score: FLIP %s %s → %s\n", f.TargetID, f.From, f.To)
+			}
+		}
+	}
+	fmt.Fprintf(os.Stderr, "score: %d card(s) → %s\n", v.CardCount, arts.CardsDir+"/cards.md")
+	if arts.RunsPath != "" {
+		fmt.Fprintf(os.Stderr, "score: verdict committed → %s\n", arts.RunsPath)
+	}
+}
+
+func runEvalAdjudicate(args []string) {
+	var positional []string
+	note := ""
+	dataDir, cacheDir := defaultDataDir(), defaultCacheDir()
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--note", "--data", "--cache":
+			flag := args[i]
+			i++
+			if i >= len(args) {
+				fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval adjudicate: %s needs a value\n", flag)
+				os.Exit(2)
+			}
+			switch flag {
+			case "--note":
+				note = args[i]
+			case "--data":
+				dataDir = args[i]
+			case "--cache":
+				cacheDir = args[i]
+			}
+		default:
+			positional = append(positional, args[i])
+		}
+	}
+	if len(positional) != 2 || (positional[1] != "accept" && positional[1] != "reject") {
+		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights eval adjudicate <key-prefix> <accept|reject> [--note <s>] [--data <dir>] [--cache <dir>]")
+		os.Exit(2)
+	}
+	card, err := insightseval.FindCardByPrefix(cacheDir, positional[0])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval adjudicate: %v\n", err)
+		os.Exit(1)
+	}
+	a := insightseval.Adjudication{Key: card.Key, Decision: positional[1], Note: note, DecidedAt: time.Now().UTC()}
+	if err := insightseval.SaveAdjudication(dataDir, a); err != nil {
+		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval adjudicate: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "adjudicate: %s %s/%s = %s (applies from the next score run)\n",
+		positional[0], card.TargetID, card.Trigger, positional[1])
+}
+
+func runEvalProbes(args []string) {
+	opts, err := parseScoreArgs(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval probes: %v\n", err)
+		os.Exit(2)
+	}
+	opts.ClaudeVersion, err = insightseval.ClaudeVersionString()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval probes: %v\n", err)
+		os.Exit(1)
+	}
+	probes, err := insightseval.ProbeRun(context.Background(), opts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval probes: %v\n", err)
+		os.Exit(1)
+	}
+	failed := false
+	for _, p := range probes {
+		verdict := "PASS"
+		if !p.Pass {
+			verdict, failed = "FAIL", true
+		}
+		fmt.Fprintf(os.Stderr, "probes: %-16s %s · majority %s over %v (rubric %s)\n",
+			p.Class, verdict, p.Majority, p.Granularities, p.RubricID)
+	}
+	if failed {
+		os.Exit(1)
+	}
 }

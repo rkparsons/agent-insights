@@ -85,3 +85,19 @@ func TestPoolSummaryMessage(t *testing.T) {
 		t.Fatalf("written wording: %q", got)
 	}
 }
+
+func TestParseScoreArgs(t *testing.T) {
+	opts, err := parseScoreArgs([]string{"--record", "/tmp/r.json", "--repeats", "5", "--data", "/d", "--cache", "/c"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.RecordPath != "/tmp/r.json" || opts.Repeats != 5 || opts.DataDir != "/d" || opts.CacheDir != "/c" {
+		t.Fatalf("opts: %+v", opts)
+	}
+	if _, err := parseScoreArgs([]string{"--bogus"}); err == nil {
+		t.Fatal("unknown flag must error")
+	}
+	if _, err := parseScoreArgs([]string{"--repeats"}); err == nil {
+		t.Fatal("missing value must error")
+	}
+}

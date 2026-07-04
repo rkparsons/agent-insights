@@ -38,7 +38,7 @@ func RunInsights(args []string) {
 	mode, target, opts, err := parseInsightsArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", err)
-		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights analyze <session-id|path> | --backfill [--force] [--dry-run] [--threshold N] [--timeout 10m] | synthesize [--repo <repo-key>] [--min-sessions N] [--dry-run] | eval <freeze|outcome|statuses> ...")
+		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights analyze <session-id|path> | --backfill [--force] [--dry-run] [--threshold N] [--timeout 10m] | synthesize [--repo <repo-key>] [--min-sessions N] [--dry-run] | eval <freeze|outcome|score|adjudicate|probes|statuses> ...")
 		os.Exit(2)
 	}
 
