@@ -18,15 +18,15 @@ const consecutiveLLMFailureLimit = 3
 
 type OutcomeOptions struct {
 	DataDir, CacheDir string
-	Scope         string // "l2" (default) | "full"
-	Population    string // "scoring" (default) | "as_consumed"
-	Samples       int    // default 3
-	L1Sample      bool   // Task 11
-	PoolVersion   string // default "v1"
-	ClaudeVersion string // injected; CLI fills via claudeVersionString()
-	SkillDirs     map[string]string      // nil → defaultSkillDirs()
-	Judge         insights.Judge         // nil → NewClaudeJudgePinned(pin) — Task 11/12
-	Synth         synthesis.Synthesizer  // nil → NewClaudeSynthesizerPinned(pin) — Task 12
+	Scope             string                // "l2" (default) | "full"
+	Population        string                // "scoring" (default) | "as_consumed"
+	Samples           int                   // default 3
+	L1Sample          bool                  // Task 11
+	PoolVersion       string                // default "v1"
+	ClaudeVersion     string                // injected; CLI fills via claudeVersionString()
+	SkillDirs         map[string]string     // nil → defaultSkillDirs()
+	Judge             insights.Judge        // nil → NewClaudeJudgePinned(pin) — Task 11/12
+	Synth             synthesis.Synthesizer // nil → NewClaudeSynthesizerPinned(pin) — Task 12
 }
 
 type SampleOutput struct {
@@ -78,8 +78,8 @@ type RunRecord struct { // the spec's reproducibility record
 }
 
 type VerifiedOutput struct {
-	Synthesis synthesis.RepoSynthesis   `json:"synthesis"`
-	Raw       synthesis.RawSynthesis    `json:"raw"` // spec enabler 1: RawSynthesis next to RepoSynthesis
+	Synthesis synthesis.RepoSynthesis    `json:"synthesis"`
+	Raw       synthesis.RawSynthesis     `json:"raw"` // spec enabler 1: RawSynthesis next to RepoSynthesis
 	Report    synthesis.ValidationReport `json:"report"`
 }
 
@@ -309,13 +309,20 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 		bo := BucketOutputs{Bucket: bucket, Population: ids, GapFallbacks: facts.GapFallbacks,
 			PoolSliceHash: facts.PoolSliceHash, BundleKey: bundleKey, BundleHash: bundleHash}
 
+		// appendBucketAndReturn appends the current (possibly partial) bucket to the record
+		// before returning an error, preserving in-flight state on park/error.
+		appendBucketAndReturn := func(err error) (RunRecord, error) {
+			rec.Buckets = append(rec.Buckets, bo)
+			return rec, err
+		}
+
 		for s := 0; s < opts.Samples; s++ {
 			rawKey := cacheKey("l2", bundleHash, pin.SkillHashes["synthesizing-workflow-insights"],
 				synthesis.SchemaHash(), synthesis.SynthesisModel, pin.EnvHash, strconv.Itoa(s))
 			var raw synthesis.RawSynthesis
 			hit, err := cache.Get("l2", rawKey, &raw)
 			if err != nil {
-				return rec, err
+				return appendBucketAndReturn(err)
 			}
 			fresh := !hit
 			if hit {
@@ -328,26 +335,26 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 					consecutiveFailures++
 					rec.Warnings = append(rec.Warnings, fmt.Sprintf("%s sample %d: L2 failed: %v", bucket, s, err))
 					if consecutiveFailures >= consecutiveLLMFailureLimit {
-						return rec, fmt.Errorf("parked after %d consecutive LLM failures (see warnings)", consecutiveFailures)
+						return appendBucketAndReturn(fmt.Errorf("parked after %d consecutive LLM failures (see warnings)", consecutiveFailures))
 					}
 					continue
 				}
 				consecutiveFailures = 0
 				rec.CacheMisses++
 				if err := cache.Put("l2", rawKey, raw); err != nil {
-					return rec, err
+					return appendBucketAndReturn(err)
 				}
 			}
 
 			rawJSON, err := json.Marshal(raw)
 			if err != nil {
-				return rec, err
+				return appendBucketAndReturn(err)
 			}
 			verKey := cacheKey("verify", sha256hex(rawJSON), bundleHash, bucket, rec.ConfigSnapshotHash, synthCV)
 			var vo VerifiedOutput
 			hit, err = cache.Get("verify", verKey, &vo)
 			if err != nil {
-				return rec, err
+				return appendBucketAndReturn(err)
 			}
 			if hit {
 				rec.CacheHits++
@@ -356,7 +363,7 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 				rs, report := synthesis.Finalize(bucket, bundle, raw, adopt, bench.FrozenAt)
 				vo = VerifiedOutput{Synthesis: rs, Raw: raw, Report: report}
 				if err := cache.Put("verify", verKey, vo); err != nil {
-					return rec, err
+					return appendBucketAndReturn(err)
 				}
 			}
 			bo.Samples = append(bo.Samples, SampleOutput{SampleIndex: s, Fresh: fresh, RawKey: rawKey, VerifiedKey: verKey})

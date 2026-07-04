@@ -3,6 +3,7 @@ package insightseval
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -149,9 +150,19 @@ func TestRunOutcomePopulationAndFailurePolicy(t *testing.T) {
 	}
 	opts.Population = ""
 	opts.Synth = failingSynth{}
-	_, err := RunOutcome(context.Background(), opts)
+	rec, err := RunOutcome(context.Background(), opts)
 	if err == nil {
 		t.Fatal("3 consecutive LLM failures must park the run")
+	}
+	// parked run must preserve the in-flight bucket with partial state
+	if len(rec.Buckets) != 1 {
+		t.Fatalf("parked bucket missing: got %d buckets", len(rec.Buckets))
+	}
+	if rec.Buckets[0].Bucket != "myrepo" {
+		t.Fatalf("bucket name mismatch: got %q", rec.Buckets[0].Bucket)
+	}
+	if rec.Buckets[0].PoolSliceHash == "" {
+		t.Fatal("partial bucket missing PoolSliceHash")
 	}
 }
 
@@ -159,4 +170,48 @@ type failingSynth struct{}
 
 func (failingSynth) Synthesize(context.Context, synthesis.EvidenceBundle) (synthesis.RawSynthesis, error) {
 	return synthesis.RawSynthesis{}, context.DeadlineExceeded
+}
+
+type flakySynth struct {
+	calls int
+}
+
+func (f *flakySynth) Synthesize(ctx context.Context, b synthesis.EvidenceBundle) (synthesis.RawSynthesis, error) {
+	f.calls++
+	if f.calls <= 2 {
+		return synthesis.RawSynthesis{}, context.DeadlineExceeded
+	}
+	return synthesis.RawSynthesis{
+		Themes: []synthesis.RawTheme{{Title: "T", Kind: "friction", Summary: "s", EvidenceIDs: []string{"F1"}}},
+	}, nil
+}
+
+func TestRunOutcomeConsecutiveFailureReset(t *testing.T) {
+	_, opts := buildOutcomeFixture(t)
+	fs := &flakySynth{}
+	opts.Synth = fs
+	// With 3 samples default, each sample is one call:
+	// call 1 (sample 0) fails, warn
+	// call 2 (sample 1) fails, warn
+	// call 3 (sample 2) succeeds → record has 1 sample, no park
+	rec, err := RunOutcome(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("flaky synth should recover after 2 failures: %v", err)
+	}
+	if len(rec.Buckets) != 1 {
+		t.Fatalf("expected 1 bucket, got %d", len(rec.Buckets))
+	}
+	if len(rec.Buckets[0].Samples) != 1 {
+		t.Fatalf("expected 1 sample after recovery, got %d", len(rec.Buckets[0].Samples))
+	}
+	// Verify warnings mention "L2 failed" for the two failures
+	l2FailedCount := 0
+	for _, w := range rec.Warnings {
+		if strings.Contains(w, "L2 failed") {
+			l2FailedCount++
+		}
+	}
+	if l2FailedCount < 2 {
+		t.Fatalf("expected at least 2 warnings with 'L2 failed', got %d (warnings: %v)", l2FailedCount, rec.Warnings)
+	}
 }
