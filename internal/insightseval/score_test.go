@@ -208,3 +208,18 @@ func TestScoreNegativeSample(t *testing.T) {
 		t.Fatal("1-of-3 match is not a majority violation")
 	}
 }
+
+func TestScoringRejectsNonPositiveRepeats(t *testing.T) {
+	cache := NewCache(t.TempDir())
+	q := &queueMatcher{}
+	if _, err := scoreTargetSample(context.Background(), cache, q, "env1", scoreRubric(), scoreItems(), nil, nil, 0, 0); err == nil {
+		t.Fatal("repeats=0 must error, not panic or score")
+	}
+	neg := Rubric{ID: "N-77", Part: "negative", Statement: "s", Hash: "nh1"}
+	if _, _, err := scoreNegativeSample(context.Background(), cache, q, "env1", neg, scoreItems(), -1); err == nil {
+		t.Fatal("negative repeats must error, not silently pass")
+	}
+	if q.calls != 0 {
+		t.Fatalf("guard must fire before any matcher call, got %d", q.calls)
+	}
+}

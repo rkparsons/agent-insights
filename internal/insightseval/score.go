@@ -182,6 +182,9 @@ func aggregateRepeat(r Rubric, items map[string]ScoredItem, res MatchResult, anc
 // surface/bucket filtering — is absent without an LLM call (fail-closed
 // against wasted spend, not against detection: nothing to detect).
 func scoreTargetSample(ctx context.Context, cache *Cache, m Matcher, envHash string, r Rubric, items []ScoredItem, anchors []string, adj map[string]Adjudication, sampleIndex, repeats int) (SampleScore, error) {
+	if repeats < 1 {
+		return SampleScore{}, fmt.Errorf("%s sample %d: repeats must be >= 1, got %d", r.ID, sampleIndex, repeats)
+	}
 	payload := BuildMatchPayload(r, items)
 	if len(payload.Items) == 0 {
 		return SampleScore{SampleIndex: sampleIndex, Granularity: "absent", RepeatAgreement: 1}, nil
@@ -232,6 +235,9 @@ func scoreTargetSample(ctx context.Context, cache *Cache, m Matcher, envHash str
 // bucket and no corroboration channel; the negative-recall probe guards this
 // path's detection power.
 func scoreNegativeSample(ctx context.Context, cache *Cache, m Matcher, envHash string, r Rubric, items []ScoredItem, repeats int) (bool, []string, error) {
+	if repeats < 1 {
+		return false, nil, fmt.Errorf("%s: repeats must be >= 1, got %d", r.ID, repeats)
+	}
 	payload := BuildMatchPayload(r, items)
 	if len(payload.Items) == 0 {
 		return false, nil, nil
