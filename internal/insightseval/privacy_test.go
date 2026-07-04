@@ -1,0 +1,29 @@
+package insightseval
+
+import "testing"
+
+func TestPrivacyScanCatchesEveryClass(t *testing.T) {
+	leaks := []string{
+		"session 00000000-0000-4000-8000-00000000dead did it", // session id
+		"path /Users/dev/x",                        // cwd/home
+		"path /home/rick/x",
+		"under $HOME/.claude",
+		"branch TICKET-0000",           // ticket-branch marker
+		"repo/.worktrees/insights", // worktree path
+	}
+	for _, l := range leaks {
+		if hits := privacyScan([]byte(l)); len(hits) == 0 {
+			t.Errorf("leak not caught: %q", l)
+		} else {
+			for _, h := range hits {
+				if h == l {
+					t.Errorf("scan finding restates the leak: %q", h)
+				}
+			}
+		}
+	}
+	clean := `{"target":"C-04","granularity":"partial","item_ref":"client-project/theme/3","hash":"0836c26e39ae4d35bc062471a187ce55deadbeef"}`
+	if hits := privacyScan([]byte(clean)); len(hits) != 0 {
+		t.Errorf("clean verdict flagged: %v", hits)
+	}
+}
