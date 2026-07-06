@@ -43,6 +43,51 @@ func TestEffectiveTargetOutcome(t *testing.T) {
 	if pass, _ := EffectiveTargetOutcome(mism, adj); pass {
 		t.Fatal("membership acceptance applies from the next re-score, not retroactively")
 	}
+
+	// multi-trigger: EVERY provisional trigger must be accepted; membership
+	// triggers alongside them never gate the lift
+	multi := TargetVerdict{ID: "C-G", Pass: false, ProvisionalFail: true, Granularity: "full", PassAt: "full",
+		Triggers: []Trigger{
+			{Type: "first_pass_no_anchor", KeyHash: "p1"},
+			{Type: "flip", KeyHash: "p2"},
+			{Type: "anchor_mismatch", KeyHash: "m1"},
+		}}
+	madj := map[string]Adjudication{"p1": {KeyHash: "p1", Decision: "accept"}}
+	if pass, _ := EffectiveTargetOutcome(multi, madj); pass {
+		t.Fatal("partial acceptance (one of two provisional triggers) stays failed")
+	}
+	madj["p2"] = Adjudication{KeyHash: "p2", Decision: "accept"}
+	if pass, gran := EffectiveTargetOutcome(multi, madj); !pass || gran != "full" {
+		t.Fatal("all provisional triggers accepted lifts despite the unadjudicated membership trigger")
+	}
+}
+
+func TestComputeDeltaProvisionalBaselineFlip(t *testing.T) {
+	// baseline committed C-G as provisional-fail; a later accepted adjudication
+	// makes its EFFECTIVE outcome a pass — delta must compare against that
+	base := committedVerdict("base.json", time.Now().UTC(),
+		TargetVerdict{ID: "C-G", Pass: false, ProvisionalFail: true, Granularity: "full", PassAt: "full",
+			Triggers: []Trigger{{Type: "first_pass_no_anchor", KeyHash: "k1"}}})
+	adj := map[string]Adjudication{"k1": {KeyHash: "k1", Decision: "accept"}}
+
+	same := []TargetVerdict{{ID: "C-G", Pass: true, Granularity: "full", PassAt: "full"}}
+	if d := ComputeDelta(same, &base, adj); len(d.Flips) != 0 {
+		t.Fatalf("current pass vs effectively-passing baseline is not a flip: %+v", d.Flips)
+	}
+
+	regressed := []TargetVerdict{{ID: "C-G", Pass: false, Granularity: "partial", PassAt: "full"}}
+	d := ComputeDelta(regressed, &base, adj)
+	want := []Flip{{TargetID: "C-G", From: "full", To: "partial", PassChanged: true}}
+	if !reflect.DeepEqual(d.Flips, want) {
+		t.Fatalf("effective-baseline flip: %+v", d.Flips)
+	}
+
+	// without the adjudication the baseline stays failed: granularity flip only
+	d = ComputeDelta(regressed, &base, nil)
+	want = []Flip{{TargetID: "C-G", From: "full", To: "partial", PassChanged: false}}
+	if !reflect.DeepEqual(d.Flips, want) {
+		t.Fatalf("unadjudicated baseline: %+v", d.Flips)
+	}
 }
 
 func TestFindBaselineAndTupleMatching(t *testing.T) {

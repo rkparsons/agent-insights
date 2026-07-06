@@ -170,6 +170,23 @@ func TestAggregateTargetSideMatchTriggers(t *testing.T) {
 	}
 }
 
+func TestAggregateTargetAdjudicationAppliedTrigger(t *testing.T) {
+	r := scoreRubric()
+	samples := []SampleScore{sample(0, "full"), sample(1, "full"), sample(2, "absent")}
+	samples[0].AdjApplied = []string{"hX"}
+	samples[2].AdjApplied = []string{"hY"} // non-deciding sample: never emitted
+	tv, _ := AggregateTarget(r, "must_pass", samples, 2, nil, true)
+	tr := hasTrigger(tv, "adjudication_applied")
+	if tr == nil || tr.KeyHash != "hX" || tr.Adjudicated != "accept" {
+		t.Fatalf("adjudication_applied trigger: %+v", tv.Triggers)
+	}
+	for _, x := range tv.Triggers {
+		if x.Type == "adjudication_applied" && x.KeyHash == "hY" {
+			t.Fatal("non-deciding sample's adjudications must not emit triggers")
+		}
+	}
+}
+
 func TestAggregateTargetEmptySamplesNeverVacuouslyPasses(t *testing.T) {
 	r := scoreRubric()
 	tv, cards := AggregateTarget(r, "must_pass", nil, 2, nil, true)
