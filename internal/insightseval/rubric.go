@@ -15,7 +15,7 @@ import (
 //go:embed rubrics/*.yaml
 var rubricFS embed.FS
 
-// Rubric encodes one eval target from insights-eval-spec.md. Rubrics co-evolve
+// Rubric encodes one eval target from docs/insights-eval/insights-eval-spec.md. Rubrics co-evolve
 // with the harness and scoring code, so they live embedded here, not in the
 // append-only data repo.
 type Rubric struct {
