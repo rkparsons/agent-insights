@@ -119,7 +119,9 @@ func TestAnchorThemeResolvesPreStripAnchors(t *testing.T) {
 			t.Errorf("%s: pre-strip set (%d) smaller than stripped anchors (%d)", r.ID, len(pre), len(r.AnchorSessionIDs))
 		}
 	}
-	if anchored != 21 {
-		t.Fatalf("anchored rubrics = %d, want 21", anchored)
+	// 21 at freeze; anchor-QA pass 1 (2026-07-07) degraded C-A and C-D1 to
+	// no-anchor targets (< 50% of raw source theme kept).
+	if anchored != 19 {
+		t.Fatalf("anchored rubrics = %d, want 19", anchored)
 	}
 }
