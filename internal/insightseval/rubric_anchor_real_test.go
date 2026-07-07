@@ -72,6 +72,14 @@ func TestPartARubricsAnchorsResolveInFrozenData(t *testing.T) {
 				t.Errorf("%s: anchor %s not in %s scoring population (meta id not stripped?)", r.ID, id, expected)
 			}
 		}
+		for _, id := range r.SourceThemeSessionIDs {
+			if !themeIDs[expected][id] {
+				t.Errorf("%s: source-theme id %s not in any frozen %s theme", r.ID, id, expected)
+			}
+			if !scoring[expected][id] {
+				t.Errorf("%s: source-theme id %s not in %s scoring population (meta id not stripped?)", r.ID, id, expected)
+			}
+		}
 	}
 	if regressions != 24 {
 		t.Fatalf("regression rubrics = %d, want 24", regressions)

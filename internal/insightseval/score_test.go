@@ -115,7 +115,7 @@ func TestScoreTargetSampleMajorityAndDetail(t *testing.T) {
 	full := MatchResult{Matches: []ItemMatch{match("client-project/theme/0", "full", []bool{true})}}
 	absent := MatchResult{}
 	q := &queueMatcher{results: []MatchResult{full, absent, full}}
-	s, err := scoreTargetSample(context.Background(), cache, q, "env1", r, items, []string{"a1", "a2"}, nil, 0, 3)
+	s, err := scoreTargetSample(context.Background(), cache, q, "env1", r, items, []string{"a1", "a2"}, nil, nil, 0, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,20 +140,20 @@ func TestAggregateRepeatRules(t *testing.T) {
 		match("client-project/theme/0", "full", []bool{true}),
 		match("tmux-ctrl/theme/0", "partial", []bool{false}, 0),
 	}}
-	rep := aggregateRepeat(r, items, res, anchors, nil)
+	rep := aggregateRepeat(r, items, res, anchors, nil, nil)
 	if rep.Granularity != "over_generalized" {
 		t.Fatalf("forbidden hit must cap the whole target: %+v", rep)
 	}
 
 	// full granularity without all nuances downgrades to partial
 	res = MatchResult{Matches: []ItemMatch{match("client-project/theme/0", "full", []bool{false})}}
-	if rep = aggregateRepeat(r, items, res, anchors, nil); rep.Granularity != "partial" {
+	if rep = aggregateRepeat(r, items, res, anchors, nil, nil); rep.Granularity != "partial" {
 		t.Fatalf("nuance downgrade: %+v", rep)
 	}
 
 	// anchor mismatch is never counted → absent, but kept as a side match
 	res = MatchResult{Matches: []ItemMatch{match("client-project/theme/0", "full", []bool{true})}}
-	rep = aggregateRepeat(r, items, res, []string{"b1", "b2", "b3", "b4"}, nil)
+	rep = aggregateRepeat(r, items, res, []string{"b1", "b2", "b3", "b4"}, nil, nil)
 	if rep.Granularity != "absent" || len(rep.SideMatches) != 1 || rep.SideMatches[0].Corroboration != CorroborationMismatch {
 		t.Fatalf("uncounted mismatch: %+v", rep)
 	}
@@ -162,21 +162,21 @@ func TestAggregateRepeatRules(t *testing.T) {
 	k := AdjKey{TargetID: "C-77", Statement: normalizeStatement("Verify claims"),
 		IDSetHash: idSetHash([]string{"a1", "a2", "x1"}), RubricHash: "rh1", Trigger: CorroborationMismatch}
 	adj := map[string]Adjudication{k.Hash(): {Key: k, KeyHash: k.Hash(), Decision: "accept"}}
-	rep = aggregateRepeat(r, items, res, []string{"b1", "b2", "b3", "b4"}, adj)
+	rep = aggregateRepeat(r, items, res, []string{"b1", "b2", "b3", "b4"}, nil, adj)
 	if rep.Granularity != "full" || len(rep.AdjApplied) != 1 {
 		t.Fatalf("adjudicated mismatch must count: %+v", rep)
 	}
 
 	// cross-bucket match: never counted, always a side match
 	res = MatchResult{Matches: []ItemMatch{match("tmux-ctrl/theme/0", "full", []bool{true})}}
-	rep = aggregateRepeat(r, items, res, anchors, nil)
+	rep = aggregateRepeat(r, items, res, anchors, nil, nil)
 	if rep.Granularity != "absent" || len(rep.SideMatches) != 1 || rep.SideMatches[0].Corroboration != CorroborationCrossBucket {
 		t.Fatalf("cross bucket: %+v", rep)
 	}
 
 	// no-anchor rubric: match counts (first-pass carding is Task 8's job)
 	res = MatchResult{Matches: []ItemMatch{match("client-project/theme/0", "partial", []bool{false})}}
-	rep = aggregateRepeat(r, items, res, nil, nil)
+	rep = aggregateRepeat(r, items, res, nil, nil, nil)
 	if rep.Granularity != "partial" || rep.Corroboration != CorroborationNoAnchors {
 		t.Fatalf("no-anchor count: %+v", rep)
 	}
@@ -186,7 +186,7 @@ func TestScoreTargetSampleEmptyPayloadSkipsMatcher(t *testing.T) {
 	q := &queueMatcher{}
 	r := scoreRubric()
 	r.Surface = "recommendation" // fixture items are all themes → empty payload
-	s, err := scoreTargetSample(context.Background(), NewCache(t.TempDir()), q, "env1", r, scoreItems(), nil, nil, 0, 3)
+	s, err := scoreTargetSample(context.Background(), NewCache(t.TempDir()), q, "env1", r, scoreItems(), nil, nil, nil, 0, 3)
 	if err != nil || s.Granularity != "absent" || q.calls != 0 {
 		t.Fatalf("empty payload must be absent without LLM calls: %+v calls=%d err=%v", s, q.calls, err)
 	}
@@ -212,7 +212,7 @@ func TestScoreNegativeSample(t *testing.T) {
 func TestScoringRejectsNonPositiveRepeats(t *testing.T) {
 	cache := NewCache(t.TempDir())
 	q := &queueMatcher{}
-	if _, err := scoreTargetSample(context.Background(), cache, q, "env1", scoreRubric(), scoreItems(), nil, nil, 0, 0); err == nil {
+	if _, err := scoreTargetSample(context.Background(), cache, q, "env1", scoreRubric(), scoreItems(), nil, nil, nil, 0, 0); err == nil {
 		t.Fatal("repeats=0 must error, not panic or score")
 	}
 	neg := Rubric{ID: "N-77", Part: "negative", Statement: "s", Hash: "nh1"}

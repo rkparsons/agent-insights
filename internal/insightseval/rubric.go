@@ -28,7 +28,12 @@ type Rubric struct {
 	RequiredNuances          []string `yaml:"required_nuances"`
 	ForbiddenGeneralizations []string `yaml:"forbidden_generalizations"`
 	AnchorSessionIDs         []string `yaml:"anchor_session_ids"`
-	AnchorTheme              string   `yaml:"anchor_theme,omitempty"` // "<bucket>/<theme-index>" in frozen ground truth (pre-strip anchor source)
+	// SourceThemeSessionIDs is the effective pre-QA source-theme id set (the
+	// freeze-time, post-meta-strip anchors, before any anchor-QA removal): the
+	// size-cap denominator, immutable across QA passes so removals never
+	// tighten the cap.
+	SourceThemeSessionIDs []string `yaml:"source_theme_session_ids,omitempty"`
+	AnchorTheme           string   `yaml:"anchor_theme,omitempty"` // "<bucket>/<theme-index>" in frozen ground truth (pre-strip anchor source)
 	Surface                  string   `yaml:"surface"`
 	PassAt                   string   `yaml:"pass_at"`
 	SeedStatus               string   `yaml:"seed_status,omitempty"`
@@ -79,8 +84,22 @@ func parseRubric(name string, raw []byte) (Rubric, error) {
 			if bucket != r.Repos[0] {
 				return fail("anchor_theme bucket must be repos[0] (the anchor source bucket)")
 			}
-		} else if r.AnchorTheme != "" {
-			return fail("anchor_theme requires anchor_session_ids")
+			if len(r.SourceThemeSessionIDs) == 0 {
+				return fail("source_theme_session_ids required with anchors (anchor-QA size-cap denominator)")
+			}
+			src := stringSet(r.SourceThemeSessionIDs)
+			for _, id := range r.AnchorSessionIDs {
+				if !src[id] {
+					return fail(fmt.Sprintf("anchor %s not in source_theme_session_ids (kept anchors must be a subset)", id))
+				}
+			}
+		} else {
+			if r.AnchorTheme != "" {
+				return fail("anchor_theme requires anchor_session_ids")
+			}
+			if len(r.SourceThemeSessionIDs) > 0 {
+				return fail("source_theme_session_ids requires anchor_session_ids")
+			}
 		}
 	case "negative":
 		if len(r.AnchorSessionIDs) > 0 {
@@ -88,6 +107,9 @@ func parseRubric(name string, raw []byte) (Rubric, error) {
 		}
 		if r.AnchorTheme != "" {
 			return fail("negative rubrics carry no anchor_theme")
+		}
+		if len(r.SourceThemeSessionIDs) > 0 {
+			return fail("negative rubrics carry no source_theme_session_ids")
 		}
 	default:
 		return fail("part must be regression|gap|negative")
@@ -250,6 +272,11 @@ func PreStripAnchors(truths map[string]synthesis.RepoSynthesis, r Rubric) ([]str
 	for _, id := range r.AnchorSessionIDs {
 		if !preSet[id] {
 			return nil, fmt.Errorf("rubric %s: anchor %s not in ground-truth theme %s (anchor_theme wrong?)", r.ID, id, r.AnchorTheme)
+		}
+	}
+	for _, id := range r.SourceThemeSessionIDs {
+		if !preSet[id] {
+			return nil, fmt.Errorf("rubric %s: source-theme id %s not in ground-truth theme %s (anchor_theme wrong?)", r.ID, id, r.AnchorTheme)
 		}
 	}
 	return pre, nil

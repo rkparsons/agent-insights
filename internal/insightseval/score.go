@@ -101,7 +101,7 @@ type repeatScore struct {
 // (corroborated, anchorless, or human-accepted via adjudication). Uncounted
 // matches that outrank the decision — and every cross-bucket match — are kept
 // as side matches for cards.
-func aggregateRepeat(r Rubric, items map[string]ScoredItem, res MatchResult, anchors []string, adj map[string]Adjudication) repeatScore {
+func aggregateRepeat(r Rubric, items map[string]ScoredItem, res MatchResult, anchors, capAnchors []string, adj map[string]Adjudication) repeatScore {
 	out := repeatScore{Granularity: "absent"}
 	type cand struct {
 		gran, corro string
@@ -122,7 +122,7 @@ func aggregateRepeat(r Rubric, items map[string]ScoredItem, res MatchResult, anc
 		if gran == "full" && !allTrue(m.NuanceResults) {
 			gran = "partial" // full requires every nuance; enforce even if the matcher slipped
 		}
-		c := cand{gran: gran, corro: Corroborate(it, r.Repos[0], anchors), item: it, nuances: m.NuanceResults}
+		c := cand{gran: gran, corro: Corroborate(it, r.Repos[0], anchors, capAnchors), item: it, nuances: m.NuanceResults}
 		switch c.corro {
 		case CorroborationOK, CorroborationNoAnchors:
 			c.counted = true
@@ -181,7 +181,7 @@ func aggregateRepeat(r Rubric, items map[string]ScoredItem, res MatchResult, anc
 // the median carries the detail forward. An empty payload — no items after
 // surface/bucket filtering — is absent without an LLM call (fail-closed
 // against wasted spend, not against detection: nothing to detect).
-func scoreTargetSample(ctx context.Context, cache *Cache, m Matcher, envHash string, r Rubric, items []ScoredItem, anchors []string, adj map[string]Adjudication, sampleIndex, repeats int) (SampleScore, error) {
+func scoreTargetSample(ctx context.Context, cache *Cache, m Matcher, envHash string, r Rubric, items []ScoredItem, anchors, capAnchors []string, adj map[string]Adjudication, sampleIndex, repeats int) (SampleScore, error) {
 	if repeats < 1 {
 		return SampleScore{}, fmt.Errorf("%s sample %d: repeats must be >= 1, got %d", r.ID, sampleIndex, repeats)
 	}
@@ -199,7 +199,7 @@ func scoreTargetSample(ctx context.Context, cache *Cache, m Matcher, envHash str
 		if err != nil {
 			return SampleScore{}, fmt.Errorf("%s sample %d repeat %d: %w", r.ID, sampleIndex, k, err)
 		}
-		reps = append(reps, aggregateRepeat(r, byID, res, anchors, adj))
+		reps = append(reps, aggregateRepeat(r, byID, res, anchors, capAnchors, adj))
 	}
 	grans := make([]string, len(reps))
 	for i, rep := range reps {

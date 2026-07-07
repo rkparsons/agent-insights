@@ -39,16 +39,38 @@ func EffectiveAnchors(r Rubric, population []string, preStrip []string) []string
 	return out
 }
 
-// Corroborate classifies one matched item's session set against the effective
-// anchors. Matches outside the expected bucket skip anchor corroboration
-// entirely (their session sets are disjoint from expected-bucket anchors by
-// construction) and are always carded by the caller.
-func Corroborate(item ScoredItem, expectedBucket string, anchors []string) string {
+// AnchorSets computes one rubric's two effective anchor denominators: hits
+// count against the kept (post-QA) anchors, the size cap against the pre-QA
+// source-theme ids, so an anchor-QA removal can never tighten the cap (spec:
+// anchor-QA denominator split). preStrip (the as_consumed control) replaces
+// both wholesale.
+func AnchorSets(r Rubric, population []string, preStrip []string) (anchors, capAnchors []string) {
+	anchors = EffectiveAnchors(r, population, preStrip)
+	capSource := preStrip
+	if capSource == nil {
+		capSource = r.SourceThemeSessionIDs
+	}
+	if capSource == nil {
+		return anchors, anchors
+	}
+	return anchors, EffectiveAnchors(r, population, capSource)
+}
+
+// Corroborate classifies one matched item's session set: anchor hits against
+// the kept anchors, the size cap against capAnchors (the effective pre-QA
+// source theme; nil falls back to anchors). Matches outside the expected
+// bucket skip anchor corroboration entirely (their session sets are disjoint
+// from expected-bucket anchors by construction) and are always carded by the
+// caller.
+func Corroborate(item ScoredItem, expectedBucket string, anchors, capAnchors []string) string {
 	if item.Bucket != expectedBucket {
 		return CorroborationCrossBucket
 	}
 	if len(anchors) == 0 {
 		return CorroborationNoAnchors
+	}
+	if len(capAnchors) == 0 {
+		capAnchors = anchors
 	}
 	set := stringSet(item.SessionIDs)
 	hit := 0
@@ -60,7 +82,7 @@ func Corroborate(item ScoredItem, expectedBucket string, anchors []string) strin
 	if float64(hit) < anchorThreshold*float64(len(anchors)) {
 		return CorroborationMismatch
 	}
-	if len(set) > sizeCapFactor*len(anchors)+sizeCapSlack {
+	if len(set) > sizeCapFactor*len(capAnchors)+sizeCapSlack {
 		return CorroborationSizeCap
 	}
 	return CorroborationOK

@@ -281,7 +281,7 @@ func ScoreRun(ctx context.Context, opts ScoreOptions) (Verdict, ScoreArtifacts, 
 				return Verdict{}, none, err
 			}
 		}
-		anchors := EffectiveAnchors(r, bd.outputs.Population, preStrip)
+		anchors, capAnchors := AnchorSets(r, bd.outputs.Population, preStrip)
 		if len(r.AnchorSessionIDs) > 0 && len(anchors) == 0 {
 			warnings = append(warnings, fmt.Sprintf("%s: no effective anchors in the active population — corroboration degraded to no-anchor", r.ID))
 		}
@@ -289,7 +289,7 @@ func ScoreRun(ctx context.Context, opts ScoreOptions) (Verdict, ScoreArtifacts, 
 		var samples []SampleScore
 		for _, s := range bd.outputs.Samples {
 			items := itemsForSample(buckets, r.Repos, s.SampleIndex)
-			ss, err := scoreTargetSample(ctx, cache, m, pin.EnvHash, r, items, anchors, adj, s.SampleIndex, opts.Repeats)
+			ss, err := scoreTargetSample(ctx, cache, m, pin.EnvHash, r, items, anchors, capAnchors, adj, s.SampleIndex, opts.Repeats)
 			if err != nil {
 				return Verdict{}, none, err
 			}
