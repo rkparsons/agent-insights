@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "required": ["verdicts"],
+  "additionalProperties": false,
+  "properties": {
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["session_id", "verdict", "rationale"],
+        "additionalProperties": false,
+        "properties": {
+          "session_id": { "type": "string" },
+          "verdict": { "type": "string", "enum": ["keep", "remove"] },
+          "rationale": { "type": "string" }
+        }
+      }
+    }
+  }
+}
