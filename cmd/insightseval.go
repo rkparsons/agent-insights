@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"tmux-ctrl/internal/insightseval"
@@ -14,7 +15,7 @@ import (
 
 // RunInsightsEval dispatches `tmux-ctrl insights eval <freeze|outcome|score|adjudicate|probes|statuses>`.
 func RunInsightsEval(args []string) {
-	usage := "usage: tmux-ctrl insights eval freeze [--data <dir>] | outcome [--data <dir>] [--cache <dir>] [--scope l2|full] [--population scoring|as_consumed] [--samples N] [--l1-sample] | score [--data <dir>] [--cache <dir>] [--record <path>] [--repeats N] | adjudicate <key-prefix> <accept|reject> [--note <s>] [--data <dir>] [--cache <dir>] | probes [--repeats N] [--data <dir>] [--cache <dir>] | statuses [seed] [--data <dir>]"
+	usage := "usage: tmux-ctrl insights eval freeze [--data <dir>] | outcome [--data <dir>] [--cache <dir>] [--scope l2|full] [--population scoring|as_consumed] [--samples N] [--l1-sample] | score [--data <dir>] [--cache <dir>] [--record <path>] [--repeats N] [--targets <ids> [--samples N]] | adjudicate <key-prefix> <accept|reject> [--note <s>] [--data <dir>] [--cache <dir>] | probes [--repeats N] [--data <dir>] [--cache <dir>] | statuses [seed] [--data <dir>]"
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
@@ -282,12 +283,32 @@ func parseScoreArgs(args []string) (insightseval.ScoreOptions, error) {
 			if v, err = next(); err == nil {
 				opts.Repeats, err = strconv.Atoi(v)
 			}
+		case "--targets":
+			var v string
+			if v, err = next(); err == nil {
+				for _, id := range strings.Split(v, ",") {
+					if id = strings.TrimSpace(id); id != "" {
+						opts.Targets = append(opts.Targets, id)
+					}
+				}
+				if len(opts.Targets) == 0 {
+					err = fmt.Errorf("--targets needs at least one id")
+				}
+			}
+		case "--samples":
+			var v string
+			if v, err = next(); err == nil {
+				opts.MaxSamples, err = strconv.Atoi(v)
+			}
 		default:
 			return opts, fmt.Errorf("unknown flag %q", args[i])
 		}
 		if err != nil {
 			return opts, err
 		}
+	}
+	if opts.MaxSamples != 0 && len(opts.Targets) == 0 {
+		return opts, fmt.Errorf("--samples is dev-loop only — requires --targets (the committed sweep always scores all samples)")
 	}
 	return opts, nil
 }
@@ -303,6 +324,10 @@ func runEvalScore(args []string) {
 		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval score: %v\n", err)
 		os.Exit(1)
 	}
+	if len(opts.Targets) > 0 {
+		runEvalScoreTargets(opts)
+		return
+	}
 	v, arts, err := insightseval.ScoreRun(context.Background(), opts)
 	for _, w := range v.Warnings {
 		fmt.Fprintf(os.Stderr, "score: WARN %s\n", w)
@@ -312,6 +337,45 @@ func runEvalScore(args []string) {
 		os.Exit(1)
 	}
 	printVerdict(v, arts)
+}
+
+// runEvalScoreTargets prints the dev loop's per-target results; nothing is
+// committed, so every line is diagnostic detail the full sweep would fold up.
+func runEvalScoreTargets(opts insightseval.ScoreOptions) {
+	results, warnings, err := insightseval.ScoreTargets(context.Background(), opts)
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "score: WARN %s\n", w)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval score: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Fprintln(os.Stderr, "score: DEV LOOP — no verdict composed, nothing written to runs/ or cards/")
+	for _, res := range results {
+		tv := res.Verdict
+		mark := "MISS"
+		switch {
+		case tv.Pass:
+			mark = "pass"
+		case tv.ProvisionalFail:
+			mark = "PROVISIONAL-FAIL (card pending)"
+		case tv.MeetsExpectation:
+			mark = "expected"
+		}
+		fmt.Fprintf(os.Stderr, "score: %-6s %-22s %-16s %s (agreement %.2f, pass_at %s)\n",
+			tv.ID, tv.Status, tv.Granularity, mark, tv.SampleAgreement, tv.PassAt)
+		for _, s := range res.Samples {
+			detail := ""
+			if s.ItemRef != "" {
+				detail = fmt.Sprintf(" · %s · %s", s.Corroboration, s.ItemRef)
+			}
+			fmt.Fprintf(os.Stderr, "score:   sample %d: %s · repeat agreement %.2f over %d read(s)%s\n",
+				s.SampleIndex, s.Granularity, s.RepeatAgreement, s.RepeatsTaken, detail)
+		}
+		if n := len(res.Pending); n > 0 {
+			fmt.Fprintf(os.Stderr, "score:   %d pending card trigger(s) — a full sweep would card these\n", n)
+		}
+	}
 }
 
 func printVerdict(v insightseval.Verdict, arts insightseval.ScoreArtifacts) {

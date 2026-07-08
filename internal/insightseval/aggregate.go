@@ -19,6 +19,7 @@ type TargetSampleVerdict struct {
 	SampleIndex     int     `json:"sample_index"`
 	Granularity     string  `json:"granularity"`
 	RepeatAgreement float64 `json:"repeat_agreement"`
+	RepeatsTaken    int     `json:"repeats_taken,omitempty"` // 0 = no reads (empty payload) or pre-early-exit verdict
 	Corroboration   string  `json:"corroboration,omitempty"`
 	ItemRef         string  `json:"item_ref,omitempty"`
 }
@@ -102,7 +103,7 @@ func AggregateTarget(r Rubric, status string, samples []SampleScore, effectiveAn
 		grans[i] = s.Granularity
 		tv.Samples = append(tv.Samples, TargetSampleVerdict{SampleIndex: s.SampleIndex,
 			Granularity: s.Granularity, RepeatAgreement: s.RepeatAgreement,
-			Corroboration: s.Corroboration, ItemRef: s.ItemRef})
+			RepeatsTaken: s.RepeatsTaken, Corroboration: s.Corroboration, ItemRef: s.ItemRef})
 	}
 	tv.Granularity = medianGranularity(grans)
 	agree := 0

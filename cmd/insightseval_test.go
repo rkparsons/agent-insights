@@ -100,4 +100,18 @@ func TestParseScoreArgs(t *testing.T) {
 	if _, err := parseScoreArgs([]string{"--repeats"}); err == nil {
 		t.Fatal("missing value must error")
 	}
+
+	dev, err := parseScoreArgs([]string{"--targets", "C-02,C-05", "--samples", "1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dev.Targets) != 2 || dev.Targets[0] != "C-02" || dev.Targets[1] != "C-05" || dev.MaxSamples != 1 {
+		t.Fatalf("dev opts: %+v", dev)
+	}
+	if _, err := parseScoreArgs([]string{"--samples", "1"}); err == nil {
+		t.Fatal("--samples without --targets must error: the committed sweep always scores all samples")
+	}
+	if _, err := parseScoreArgs([]string{"--targets", ""}); err == nil {
+		t.Fatal("empty --targets must error")
+	}
 }

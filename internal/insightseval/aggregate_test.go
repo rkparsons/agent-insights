@@ -5,7 +5,7 @@ import (
 )
 
 func sample(idx int, gran string) SampleScore {
-	return SampleScore{SampleIndex: idx, Granularity: gran, RepeatAgreement: 1,
+	return SampleScore{SampleIndex: idx, Granularity: gran, RepeatAgreement: 1, RepeatsTaken: 2,
 		Corroboration: CorroborationOK, ItemRef: "client-project/theme/0", ItemText: "Verify claims",
 		ItemSessionIDs: []string{"a1", "a2"}, ItemQuotes: []string{"q"}}
 }
@@ -28,6 +28,12 @@ func TestAggregateTargetMustPassMajorityAndSplit(t *testing.T) {
 	}
 	if tv.SampleAgreement < 0.66 || tv.SampleAgreement > 0.67 {
 		t.Fatalf("agreement: %v", tv.SampleAgreement)
+	}
+	// early-exit honesty: the committed sample verdict carries reads taken
+	for _, sv := range tv.Samples {
+		if sv.RepeatsTaken != 2 {
+			t.Fatalf("sample verdict must record repeats actually taken: %+v", sv)
+		}
 	}
 	// sample-split: card WITHOUT provisional-fail — the majority stands (spec)
 	tr := hasTrigger(tv, "sample_split")

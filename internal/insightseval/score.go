@@ -11,24 +11,42 @@ import (
 
 const matcherAttempts = 3
 
-// matchOnce serves one (payload, repeat) from the match cache or the matcher,
-// retrying transient failures. Output is validated against the payload before
-// caching — an inconsistent read is a failed attempt, never a cached lie. The
-// key hashes the exact stdin payload: anything the matcher can see re-keys,
-// nothing else does (see plan decision 4).
-func matchOnce(ctx context.Context, cache *Cache, m Matcher, envHash string, p MatchPayload, repeat int) (MatchResult, bool, error) {
+// matchKey hashes the exact stdin payload: anything the matcher can see
+// re-keys, nothing else does (see plan decision 4).
+func matchKey(p MatchPayload, envHash string, repeat int) (string, error) {
 	pj, err := json.Marshal(p)
+	if err != nil {
+		return "", err
+	}
+	return cacheKey("match", sha256hex(pj), MatcherModel, MatcherCodeVersion(), envHash, strconv.Itoa(repeat)), nil
+}
+
+// matchFromCache is the cache-only half of matchOnce: it serves a previously
+// scored (payload, repeat) without any matcher spend, or reports a miss.
+func matchFromCache(cache *Cache, envHash string, p MatchPayload, repeat int) (MatchResult, bool, error) {
+	key, err := matchKey(p, envHash, repeat)
 	if err != nil {
 		return MatchResult{}, false, err
 	}
-	key := cacheKey("match", sha256hex(pj), MatcherModel, MatcherCodeVersion(), envHash, strconv.Itoa(repeat))
 	var res MatchResult
 	hit, err := cache.Get("match", key, &res)
+	return res, hit, err
+}
+
+// matchOnce serves one (payload, repeat) from the match cache or the matcher,
+// retrying transient failures. Output is validated against the payload before
+// caching — an inconsistent read is a failed attempt, never a cached lie.
+func matchOnce(ctx context.Context, cache *Cache, m Matcher, envHash string, p MatchPayload, repeat int) (MatchResult, bool, error) {
+	res, hit, err := matchFromCache(cache, envHash, p, repeat)
 	if err != nil {
 		return res, false, err
 	}
 	if hit {
 		return res, true, nil
+	}
+	key, err := matchKey(p, envHash, repeat)
+	if err != nil {
+		return MatchResult{}, false, err
 	}
 	var lastErr error
 	for attempt := 0; attempt < matcherAttempts; attempt++ {
@@ -43,6 +61,21 @@ func matchOnce(ctx context.Context, cache *Cache, m Matcher, envHash string, p M
 		}
 	}
 	return MatchResult{}, false, fmt.Errorf("matcher failed after %d attempts: %w", matcherAttempts, lastErr)
+}
+
+// medianDecided reports whether the reads taken so far already fix the median
+// over the full requested run: once one granularity holds a strict majority of
+// the requested repeats it occupies the middle of any completed ordering, so
+// no combination of remaining reads can move the median.
+func medianDecided(grans []string, repeats int) bool {
+	counts := map[string]int{}
+	for _, g := range grans {
+		counts[g]++
+		if counts[g]*2 > repeats {
+			return true
+		}
+	}
+	return false
 }
 
 // medianGranularity picks the middle of the ordered granularity scale: the
@@ -73,6 +106,7 @@ type SampleScore struct {
 	SampleIndex     int
 	Granularity     string
 	RepeatAgreement float64
+	RepeatsTaken    int
 	Corroboration   string
 	ItemRef         string
 	ItemText        string
@@ -194,16 +228,30 @@ func scoreTargetSample(ctx context.Context, cache *Cache, m Matcher, envHash str
 		byID[it.ID] = it
 	}
 	var reps []repeatScore
+	var grans []string
 	for k := 0; k < repeats; k++ {
-		res, _, err := matchOnce(ctx, cache, m, envHash, payload, k)
-		if err != nil {
-			return SampleScore{}, fmt.Errorf("%s sample %d repeat %d: %w", r.ID, sampleIndex, k, err)
+		var res MatchResult
+		if medianDecided(grans, repeats) {
+			// The median cannot move: a cached read is free and keeps
+			// re-scores of fully-scored records identical, but a fresh
+			// matcher call would buy nothing — stop at the first miss.
+			cached, hit, err := matchFromCache(cache, envHash, payload, k)
+			if err != nil {
+				return SampleScore{}, fmt.Errorf("%s sample %d repeat %d: %w", r.ID, sampleIndex, k, err)
+			}
+			if !hit {
+				break
+			}
+			res = cached
+		} else {
+			fresh, _, err := matchOnce(ctx, cache, m, envHash, payload, k)
+			if err != nil {
+				return SampleScore{}, fmt.Errorf("%s sample %d repeat %d: %w", r.ID, sampleIndex, k, err)
+			}
+			res = fresh
 		}
 		reps = append(reps, aggregateRepeat(r, byID, res, anchors, capAnchors, adj))
-	}
-	grans := make([]string, len(reps))
-	for i, rep := range reps {
-		grans[i] = rep.Granularity
+		grans = append(grans, reps[len(reps)-1].Granularity)
 	}
 	median := medianGranularity(grans)
 	agree, pick := 0, -1
@@ -216,7 +264,7 @@ func scoreTargetSample(ctx context.Context, cache *Cache, m Matcher, envHash str
 		}
 	}
 	out := SampleScore{SampleIndex: sampleIndex, Granularity: median,
-		RepeatAgreement: float64(agree) / float64(len(reps))}
+		RepeatAgreement: float64(agree) / float64(len(reps)), RepeatsTaken: len(reps)}
 	rep := reps[pick]
 	out.Corroboration = rep.Corroboration
 	out.ItemRef = rep.ItemRef

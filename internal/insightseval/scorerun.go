@@ -22,6 +22,8 @@ type ScoreOptions struct {
 	ClaudeVersion     string
 	Matcher           Matcher   // nil → NewClaudeMatcherPinned(pin)
 	ScoredAt          time.Time // zero → time.Now().UTC(); injected for verdict-purity tests
+	Targets           []string  // ScoreTargets dev loop only: positive rubric ids to score
+	MaxSamples        int       // ScoreTargets dev loop only: 0 = all record samples
 }
 
 type ScoreArtifacts struct {
@@ -123,6 +125,205 @@ func sortedBucketNames(buckets map[string]bucketData) []string {
 	return names
 }
 
+// loadScoreableRecord resolves the record (explicit path or newest) and fails
+// closed on non-scoreable shapes: an --l1-sample run writes a SUCCESSFUL
+// record with zero buckets, which would otherwise score as a vacuous PASS,
+// land in runs/, and poison later delta baselines; a skipped-samples bucket
+// exits outcome with 0, so the fail-closed duty lives here (phase-2 seam).
+func loadScoreableRecord(opts ScoreOptions) (RunRecord, string, error) {
+	var rec RunRecord
+	recPath := opts.RecordPath
+	var err error
+	if recPath != "" {
+		rec, err = LoadRunRecord(recPath)
+	} else {
+		rec, recPath, err = LatestRunRecord(opts.CacheDir)
+	}
+	if err != nil {
+		return RunRecord{}, "", err
+	}
+	if len(rec.Buckets) == 0 || rec.L1Sample != nil {
+		return RunRecord{}, "", fmt.Errorf("record %s has no scoreable buckets (l1-sample or empty record) — run a full `insights eval outcome` first", recPath)
+	}
+	for _, b := range rec.Buckets {
+		if len(b.Samples) == 0 {
+			return RunRecord{}, "", fmt.Errorf("bucket %s has zero samples — scoring fails closed, never vacuously passes", b.Bucket)
+		}
+	}
+	return rec, recPath, nil
+}
+
+// scoreSession is the shared setup behind ScoreRun and the ScoreTargets dev
+// loop — one loading/validation/probe path so the dev loop always predicts
+// the committed sweep. Creation is fail-closed before any target spend.
+type scoreSession struct {
+	rec        RunRecord
+	recPath    string
+	rubrics    []Rubric
+	statuses   map[string]string
+	adj        map[string]Adjudication
+	prior      []namedVerdict
+	ever       map[string]bool
+	cache      *Cache
+	envHash    string
+	m          Matcher
+	probes     []ProbeResult
+	buckets    map[string]bucketData
+	oneLines   map[string]map[string]string
+	truths     map[string]synthesis.RepoSynthesis
+	repeats    int
+	warnings   []string
+	hardErrors []string // per-sample synthesis hard-error tallies, gate input
+}
+
+func newScoreSession(ctx context.Context, opts ScoreOptions, scratchStamp time.Time) (*scoreSession, func(), error) {
+	s := &scoreSession{repeats: opts.Repeats}
+	var err error
+	if s.rec, s.recPath, err = loadScoreableRecord(opts); err != nil {
+		return nil, nil, err
+	}
+	if s.rubrics, err = LoadRubrics(); err != nil {
+		return nil, nil, err
+	}
+	if s.statuses, err = Statuses(opts.DataDir); err != nil {
+		return nil, nil, err
+	}
+	if err = validateStatusCoverage(s.rubrics, s.statuses); err != nil {
+		return nil, nil, err
+	}
+	if s.adj, err = LoadAdjudications(opts.DataDir); err != nil {
+		return nil, nil, err
+	}
+	if s.prior, err = LoadCommittedVerdicts(opts.DataDir); err != nil {
+		return nil, nil, err
+	}
+	s.ever = everPassedTargets(s.prior, s.adj)
+	s.cache = NewCache(opts.CacheDir)
+
+	// Cached material loads before any matcher spend so pre-spend gates (hard
+	// synthesis errors) fire without costing a probe read.
+	if err = s.loadBuckets(); err != nil {
+		return nil, nil, err
+	}
+	if len(s.hardErrors) > 0 {
+		return nil, nil, fmt.Errorf("record %s carries synthesis hard errors (%s) — scoring refused before any matcher spend; fix the pipeline and re-run `insights eval outcome`",
+			filepath.Base(s.recPath), strings.Join(s.hardErrors, "; "))
+	}
+	if s.rec.Population == "as_consumed" {
+		// the run-0 control scores against PRE-strip anchors from ground-truth/
+		if s.truths, err = loadGroundTruth(filepath.Join(opts.DataDir, "ground-truth")); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	// Same scratch discipline as RunOutcome: stale credential copies must
+	// never outlive their run. No skill overlay — the matcher is not a skill;
+	// the EnvHash formula (claude version + snapshot hash) matches the
+	// record's, so CLI/config drift between outcome and score is detectable.
+	scratchRoot := filepath.Join(opts.CacheDir, "scratch")
+	if err := os.RemoveAll(scratchRoot); err != nil {
+		return nil, nil, err
+	}
+	cleanup := func() { os.RemoveAll(scratchRoot) }
+	scratch := filepath.Join(scratchRoot, strconv.FormatInt(scratchStamp.UnixNano(), 10))
+	pin, err := ComposeEnvPin(opts.DataDir, scratch, map[string]string{}, opts.ClaudeVersion)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	s.envHash = pin.EnvHash
+	if pin.EnvHash != s.rec.EnvHash {
+		s.warnings = append(s.warnings, fmt.Sprintf("matcher env %s differs from the record's pipeline env %s (claude updated between outcome and score?)", pin.EnvHash, s.rec.EnvHash))
+	}
+	s.m = opts.Matcher
+	if s.m == nil {
+		s.m = NewClaudeMatcherPinned(pin.ConfigDir, pin.WorkDir)
+	}
+
+	// Probes first, fail-closed: a failed majority invalidates the scoring
+	// stage before any target spend.
+	if s.probes, err = RunProbes(ctx, s.cache, s.m, s.envHash, s.rubrics, s.repeats); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	for _, p := range s.probes {
+		if !p.Pass {
+			cleanup()
+			return nil, nil, fmt.Errorf("matcher integrity probe %s FAILED (majority %s over %v) — scoring invalidated, recalibrate first", p.Class, p.Majority, p.Granularities)
+		}
+	}
+	return s, cleanup, nil
+}
+
+func (s *scoreSession) loadBuckets() error {
+	s.buckets = map[string]bucketData{}
+	s.oneLines = map[string]map[string]string{}
+	for _, b := range s.rec.Buckets {
+		var bundle synthesis.EvidenceBundle
+		hit, err := s.cache.Get("bundle", b.BundleKey, &bundle)
+		if err != nil {
+			return err
+		}
+		if !hit {
+			return fmt.Errorf("bucket %s: bundle missing from cache — re-run `insights eval outcome`", b.Bucket)
+		}
+		bd := bucketData{outputs: b, items: map[int][]ScoredItem{}, oneLines: sessionOneLines(bundle)}
+		for _, smp := range b.Samples {
+			var vo VerifiedOutput
+			hit, err := s.cache.Get("verify", smp.VerifiedKey, &vo)
+			if err != nil {
+				return err
+			}
+			if !hit {
+				return fmt.Errorf("bucket %s sample %d: verified output missing from cache — re-run `insights eval outcome`", b.Bucket, smp.SampleIndex)
+			}
+			if n := len(vo.Report.HardErrors); n > 0 {
+				s.hardErrors = append(s.hardErrors, fmt.Sprintf("%s sample %d: %d hard error(s), first: %s", b.Bucket, smp.SampleIndex, n, vo.Report.HardErrors[0]))
+			}
+			bd.items[smp.SampleIndex] = BuildScoredItems(b.Bucket, vo, bundle)
+		}
+		s.buckets[b.Bucket] = bd
+		s.oneLines[b.Bucket] = bd.oneLines
+	}
+	return nil
+}
+
+// scoreTarget scores one positive rubric over the record's samples
+// (maxSamples > 0 keeps only the first ones — dev loop) and aggregates its
+// verdict. Returns the effective anchors for card building.
+func (s *scoreSession) scoreTarget(ctx context.Context, r Rubric, maxSamples int) (TargetResult, []string, error) {
+	bd, haveBucket := s.buckets[r.Repos[0]]
+	if !haveBucket {
+		s.warnings = append(s.warnings, fmt.Sprintf("%s: expected bucket %s not in record — scored absent", r.ID, r.Repos[0]))
+	}
+	var preStrip []string
+	var err error
+	if s.truths != nil && r.AnchorTheme != "" {
+		if preStrip, err = PreStripAnchors(s.truths, r); err != nil {
+			return TargetResult{}, nil, err
+		}
+	}
+	anchors, capAnchors := AnchorSets(r, bd.outputs.Population, preStrip)
+	if len(r.AnchorSessionIDs) > 0 && len(anchors) == 0 {
+		s.warnings = append(s.warnings, fmt.Sprintf("%s: no effective anchors in the active population — corroboration degraded to no-anchor", r.ID))
+	}
+	sampleOuts := bd.outputs.Samples
+	if maxSamples > 0 && maxSamples < len(sampleOuts) {
+		sampleOuts = sampleOuts[:maxSamples]
+	}
+	var samples []SampleScore
+	for _, so := range sampleOuts {
+		items := itemsForSample(s.buckets, r.Repos, so.SampleIndex)
+		ss, err := scoreTargetSample(ctx, s.cache, s.m, s.envHash, r, items, anchors, capAnchors, s.adj, so.SampleIndex, s.repeats)
+		if err != nil {
+			return TargetResult{}, nil, err
+		}
+		samples = append(samples, ss)
+	}
+	tv, cards := AggregateTarget(r, s.statuses[r.ID], samples, len(anchors), s.adj, s.ever[r.ID])
+	return TargetResult{Rubric: r, Verdict: tv, Samples: samples, Pending: cards}, anchors, nil
+}
+
 // ScoreRun scores one run record end to end: probes (fail-closed), per-target
 // matcher scoring over cached verified outputs, aggregation, cards, verdict
 // composition, delta, persistence. A pure function of its inputs — re-running
@@ -136,177 +337,43 @@ func ScoreRun(ctx context.Context, opts ScoreOptions) (Verdict, ScoreArtifacts, 
 	if opts.ScoredAt.IsZero() {
 		opts.ScoredAt = time.Now().UTC()
 	}
-	var rec RunRecord
-	recPath := opts.RecordPath
-	var err error
-	if recPath != "" {
-		rec, err = LoadRunRecord(recPath)
-	} else {
-		rec, recPath, err = LatestRunRecord(opts.CacheDir)
-	}
-	if err != nil {
-		return Verdict{}, none, err
-	}
-	// Fail closed on non-scoreable records: an --l1-sample run writes a
-	// SUCCESSFUL record with zero buckets, which would otherwise score as a
-	// vacuous PASS, land in runs/, and poison later delta baselines.
-	if len(rec.Buckets) == 0 || rec.L1Sample != nil {
-		return Verdict{}, none, fmt.Errorf("record %s has no scoreable buckets (l1-sample or empty record) — run a full `insights eval outcome` first", recPath)
-	}
-	for _, b := range rec.Buckets {
-		if len(b.Samples) == 0 {
-			// phase-2 seam contract: outcome exits 0 on a skipped-samples
-			// bucket; the fail-closed duty lives here
-			return Verdict{}, none, fmt.Errorf("bucket %s has zero samples — scoring fails closed, never vacuously passes", b.Bucket)
-		}
-	}
-
-	rubrics, err := LoadRubrics()
-	if err != nil {
-		return Verdict{}, none, err
-	}
 	rubricSetHash, err := RubricSetHash()
 	if err != nil {
 		return Verdict{}, none, err
 	}
-	statuses, err := Statuses(opts.DataDir)
+	s, cleanup, err := newScoreSession(ctx, opts, opts.ScoredAt)
 	if err != nil {
 		return Verdict{}, none, err
 	}
-	if err := validateStatusCoverage(rubrics, statuses); err != nil {
-		return Verdict{}, none, err
-	}
-	adj, err := LoadAdjudications(opts.DataDir)
-	if err != nil {
-		return Verdict{}, none, err
-	}
-	prior, err := LoadCommittedVerdicts(opts.DataDir)
-	if err != nil {
-		return Verdict{}, none, err
-	}
-	ever := everPassedTargets(prior, adj)
-	cache := NewCache(opts.CacheDir)
-
-	// Same scratch discipline as RunOutcome: stale credential copies must
-	// never outlive their run. No skill overlay — the matcher is not a skill;
-	// the EnvHash formula (claude version + snapshot hash) matches the
-	// record's, so CLI/config drift between outcome and score is detectable.
-	scratchRoot := filepath.Join(opts.CacheDir, "scratch")
-	if err := os.RemoveAll(scratchRoot); err != nil {
-		return Verdict{}, none, err
-	}
-	scratch := filepath.Join(scratchRoot, strconv.FormatInt(opts.ScoredAt.UnixNano(), 10))
-	defer os.RemoveAll(scratchRoot)
-	pin, err := ComposeEnvPin(opts.DataDir, scratch, map[string]string{}, opts.ClaudeVersion)
-	if err != nil {
-		return Verdict{}, none, err
-	}
-	var warnings []string
-	if pin.EnvHash != rec.EnvHash {
-		warnings = append(warnings, fmt.Sprintf("matcher env %s differs from the record's pipeline env %s (claude updated between outcome and score?)", pin.EnvHash, rec.EnvHash))
-	}
-	m := opts.Matcher
-	if m == nil {
-		m = NewClaudeMatcherPinned(pin.ConfigDir, pin.WorkDir)
-	}
-
-	// Probes first, fail-closed: a failed majority invalidates the scoring
-	// stage before any target spend.
-	probes, err := RunProbes(ctx, cache, m, pin.EnvHash, rubrics, opts.Repeats)
-	if err != nil {
-		return Verdict{}, none, err
-	}
-	for _, p := range probes {
-		if !p.Pass {
-			return Verdict{}, none, fmt.Errorf("matcher integrity probe %s FAILED (majority %s over %v) — scoring invalidated, recalibrate first", p.Class, p.Majority, p.Granularities)
-		}
-	}
-
-	buckets := map[string]bucketData{}
-	oneLines := map[string]map[string]string{}
-	for _, b := range rec.Buckets {
-		var bundle synthesis.EvidenceBundle
-		hit, err := cache.Get("bundle", b.BundleKey, &bundle)
-		if err != nil {
-			return Verdict{}, none, err
-		}
-		if !hit {
-			return Verdict{}, none, fmt.Errorf("bucket %s: bundle missing from cache — re-run `insights eval outcome`", b.Bucket)
-		}
-		bd := bucketData{outputs: b, items: map[int][]ScoredItem{}, oneLines: sessionOneLines(bundle)}
-		for _, s := range b.Samples {
-			var vo VerifiedOutput
-			hit, err := cache.Get("verify", s.VerifiedKey, &vo)
-			if err != nil {
-				return Verdict{}, none, err
-			}
-			if !hit {
-				return Verdict{}, none, fmt.Errorf("bucket %s sample %d: verified output missing from cache — re-run `insights eval outcome`", b.Bucket, s.SampleIndex)
-			}
-			bd.items[s.SampleIndex] = BuildScoredItems(b.Bucket, vo, bundle)
-		}
-		buckets[b.Bucket] = bd
-		oneLines[b.Bucket] = bd.oneLines
-	}
-
-	var truths map[string]synthesis.RepoSynthesis
-	if rec.Population == "as_consumed" {
-		// the run-0 control scores against PRE-strip anchors from ground-truth/
-		truths, err = loadGroundTruth(filepath.Join(opts.DataDir, "ground-truth"))
-		if err != nil {
-			return Verdict{}, none, err
-		}
-	}
+	defer cleanup()
 
 	var results []TargetResult
 	var invalidated []string
 	anchorsByTarget := map[string][]string{}
-	for _, r := range rubrics {
+	for _, r := range s.rubrics {
 		if r.Part == "negative" {
 			continue
 		}
-		status := statuses[r.ID]
-		if status == "invalidated" {
+		if s.statuses[r.ID] == "invalidated" {
 			invalidated = append(invalidated, r.ID)
 			continue
 		}
-		bd, haveBucket := buckets[r.Repos[0]]
-		if !haveBucket {
-			warnings = append(warnings, fmt.Sprintf("%s: expected bucket %s not in record — scored absent", r.ID, r.Repos[0]))
-		}
-		var preStrip []string
-		if truths != nil && r.AnchorTheme != "" {
-			preStrip, err = PreStripAnchors(truths, r)
-			if err != nil {
-				return Verdict{}, none, err
-			}
-		}
-		anchors, capAnchors := AnchorSets(r, bd.outputs.Population, preStrip)
-		if len(r.AnchorSessionIDs) > 0 && len(anchors) == 0 {
-			warnings = append(warnings, fmt.Sprintf("%s: no effective anchors in the active population — corroboration degraded to no-anchor", r.ID))
+		res, anchors, err := s.scoreTarget(ctx, r, 0)
+		if err != nil {
+			return Verdict{}, none, err
 		}
 		anchorsByTarget[r.ID] = anchors
-		var samples []SampleScore
-		for _, s := range bd.outputs.Samples {
-			items := itemsForSample(buckets, r.Repos, s.SampleIndex)
-			ss, err := scoreTargetSample(ctx, cache, m, pin.EnvHash, r, items, anchors, capAnchors, adj, s.SampleIndex, opts.Repeats)
-			if err != nil {
-				return Verdict{}, none, err
-			}
-			samples = append(samples, ss)
-		}
-		tv, cards := AggregateTarget(r, status, samples, len(anchors), adj, ever[r.ID])
-		results = append(results, TargetResult{Rubric: r, Verdict: tv, Samples: samples, Pending: cards})
+		results = append(results, res)
 	}
 
 	var negatives []NegativeViolation
-	allBuckets := sortedBucketNames(buckets)
-	for _, r := range rubrics {
+	allBuckets := sortedBucketNames(s.buckets)
+	for _, r := range s.rubrics {
 		if r.Part != "negative" {
 			continue
 		}
 		idxSet := map[int]bool{}
-		for _, bd := range buckets {
+		for _, bd := range s.buckets {
 			for idx := range bd.items {
 				idxSet[idx] = true
 			}
@@ -319,7 +386,7 @@ func ScoreRun(ctx context.Context, opts ScoreOptions) (Verdict, ScoreArtifacts, 
 		var vioIdx []int
 		var refs []string
 		for _, idx := range idxs {
-			violated, matched, err := scoreNegativeSample(ctx, cache, m, pin.EnvHash, r, itemsForSample(buckets, allBuckets, idx), opts.Repeats)
+			violated, matched, err := scoreNegativeSample(ctx, s.cache, s.m, s.envHash, r, itemsForSample(s.buckets, allBuckets, idx), opts.Repeats)
 			if err != nil {
 				return Verdict{}, none, err
 			}
@@ -333,10 +400,10 @@ func ScoreRun(ctx context.Context, opts ScoreOptions) (Verdict, ScoreArtifacts, 
 		}
 	}
 
-	v, extra, err := ComposeVerdict(VerdictInputs{Record: rec, RecordName: recPath,
-		ScoredAt: opts.ScoredAt, RubricSetHash: rubricSetHash, MatcherEnvHash: pin.EnvHash,
-		Results: results, Negatives: negatives, Probes: probes,
-		Invalidated: invalidated, Warnings: warnings, Adj: adj, Prior: prior}, cache)
+	v, extra, err := ComposeVerdict(VerdictInputs{Record: s.rec, RecordName: s.recPath,
+		ScoredAt: opts.ScoredAt, RubricSetHash: rubricSetHash, MatcherEnvHash: s.envHash,
+		Results: results, Negatives: negatives, Probes: s.probes,
+		Invalidated: invalidated, Warnings: s.warnings, Adj: s.adj, Prior: s.prior}, s.cache)
 	if err != nil {
 		return Verdict{}, none, err
 	}
@@ -349,7 +416,7 @@ func ScoreRun(ctx context.Context, opts ScoreOptions) (Verdict, ScoreArtifacts, 
 			results[i].Pending = append(results[i].Pending, c)
 		}
 	}
-	cards, err := BuildCards(results, anchorsByTarget, oneLines)
+	cards, err := BuildCards(results, anchorsByTarget, s.oneLines)
 	if err != nil {
 		return Verdict{}, none, err
 	}
@@ -363,6 +430,63 @@ func ScoreRun(ctx context.Context, opts ScoreOptions) (Verdict, ScoreArtifacts, 
 		return v, ScoreArtifacts{CardsDir: cardsDir}, err
 	}
 	return v, ScoreArtifacts{CardsDir: cardsDir, RunsPath: runsPath}, nil
+}
+
+// ScoreTargets is the dev loop: score only opts.Targets against the record
+// and return the per-target results — no verdict composition, no cards, no
+// delta, and NOTHING persisted beyond the content-addressed match cache
+// (runs/ and verdicts/ are never written). MaxSamples > 0 limits samples per
+// target for cheaper reads. The same session setup as ScoreRun (fail-closed
+// record checks, status validation, probes) keeps its results predictive of
+// the committed sweep.
+func ScoreTargets(ctx context.Context, opts ScoreOptions) ([]TargetResult, []string, error) {
+	if len(opts.Targets) == 0 {
+		return nil, nil, errors.New("no targets requested")
+	}
+	if opts.Repeats <= 0 {
+		opts.Repeats = 3
+	}
+	// Id validation precedes the session: a typo'd target must be named
+	// before any cache loading or probe spend.
+	rubrics, err := LoadRubrics()
+	if err != nil {
+		return nil, nil, err
+	}
+	byID := map[string]Rubric{}
+	for _, r := range rubrics {
+		if r.Part != "negative" {
+			byID[r.ID] = r
+		}
+	}
+	var unknown []string
+	for _, id := range opts.Targets {
+		if _, ok := byID[id]; !ok {
+			unknown = append(unknown, id)
+		}
+	}
+	if len(unknown) > 0 {
+		return nil, nil, fmt.Errorf("unknown target id(s) %v — positive rubric ids only (negative rubrics have no per-target dev loop)", unknown)
+	}
+
+	s, cleanup, err := newScoreSession(ctx, opts, time.Now().UTC())
+	if err != nil {
+		return nil, nil, err
+	}
+	defer cleanup()
+
+	var results []TargetResult
+	for _, id := range opts.Targets {
+		if s.statuses[id] == "invalidated" {
+			s.warnings = append(s.warnings, id+": invalidated — skipped")
+			continue
+		}
+		res, _, err := s.scoreTarget(ctx, byID[id], opts.MaxSamples)
+		if err != nil {
+			return nil, nil, err
+		}
+		results = append(results, res)
+	}
+	return results, s.warnings, nil
 }
 
 // ProbeRun runs only the integrity probes — the calibration entry point.

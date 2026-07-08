@@ -77,8 +77,10 @@ func (s *scriptedMatcher) Match(_ context.Context, p MatchPayload) (MatchResult,
 func runScoreFixture(t *testing.T) (OutcomeOptions, RunRecord) {
 	t.Helper()
 	_, opts := buildScoreFixture(t)
+	// no EvidenceIDs: the fixture bundle has zero friction items, and any F
+	// ref would be a synthesis hard error — the pre-spend gate refuses those
 	fs := &fakeSynth{raw: synthesis.RawSynthesis{
-		Themes: []synthesis.RawTheme{{Title: "T", Kind: "friction", Summary: "s", EvidenceIDs: []string{"F1"}}},
+		Themes: []synthesis.RawTheme{{Title: "T", Kind: "friction", Summary: "s"}},
 	}}
 	opts.Synth = fs
 	rec, err := RunOutcome(context.Background(), opts)
@@ -234,6 +236,108 @@ func TestFindCardByPrefix(t *testing.T) {
 	}
 	if _, err := FindCardByPrefix(cacheDir, cards[1].KeyHash[:12]); err == nil || !strings.Contains(err.Error(), "not adjudicable") {
 		t.Fatalf("informational card must refuse adjudication: %v", err)
+	}
+}
+
+func TestScoreRefusesRecordWithSynthesisHardErrors(t *testing.T) {
+	_, opts := buildScoreFixture(t)
+	fs := &fakeSynth{raw: synthesis.RawSynthesis{
+		Themes: []synthesis.RawTheme{{Title: "T", Kind: "friction", Summary: "s", EvidenceIDs: []string{"F1"}}},
+		Recommendations: []synthesis.RawRec{{Type: "workflow_change",
+			Statement: "retry failed runs 3 times", EvidenceIDs: []string{"F1"}}},
+	}}
+	opts.Synth = fs
+	if _, err := RunOutcome(context.Background(), opts); err != nil {
+		t.Fatal(err)
+	}
+	sm := &scriptedMatcher{}
+	sopts := ScoreOptions{DataDir: opts.DataDir, CacheDir: opts.CacheDir,
+		ClaudeVersion: "1.0.0 (test)", Matcher: sm,
+		ScoredAt: time.Date(2026, 7, 5, 10, 0, 0, 0, time.UTC)}
+	_, _, err := ScoreRun(context.Background(), sopts)
+	if err == nil || !strings.Contains(err.Error(), "hard error") {
+		t.Fatalf("a record carrying synthesis hard errors must refuse the sweep: %v", err)
+	}
+	if sm.calls != 0 {
+		t.Fatalf("the gate must fire before ANY matcher spend (probes included), calls = %d", sm.calls)
+	}
+	devOpts := sopts
+	devOpts.Targets = []string{"M1"}
+	if _, _, err := ScoreTargets(context.Background(), devOpts); err == nil || !strings.Contains(err.Error(), "hard error") {
+		t.Fatalf("the dev loop shares the gate: %v", err)
+	}
+	if sm.calls != 0 {
+		t.Fatalf("dev loop gate must also fire pre-spend, calls = %d", sm.calls)
+	}
+}
+
+func TestScoreTargetsDevLoopNeverCommits(t *testing.T) {
+	opts, _ := runScoreFixture(t)
+	sm := &scriptedMatcher{responses: map[string]MatchResult{"M1": m1Match()}}
+	results, _, err := ScoreTargets(context.Background(), ScoreOptions{
+		DataDir: opts.DataDir, CacheDir: opts.CacheDir, ClaudeVersion: "1.0.0 (test)",
+		Matcher: sm, Targets: []string{"M1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Rubric.ID != "M1" {
+		t.Fatalf("only requested targets score: %+v", results)
+	}
+	if results[0].Verdict.Granularity != "full" || len(results[0].Samples) != 3 {
+		t.Fatalf("M1 verdict: %+v", results[0].Verdict)
+	}
+	if _, err := os.Stat(filepath.Join(opts.DataDir, "runs")); !os.IsNotExist(err) {
+		t.Fatalf("dev loop must never write runs/: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(opts.CacheDir, "verdicts")); !os.IsNotExist(err) {
+		t.Fatalf("dev loop must never persist a verdict: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(opts.CacheDir, "cards")); !os.IsNotExist(err) {
+		t.Fatalf("dev loop must never write cards: %v", err)
+	}
+}
+
+func TestScoreTargetsSampleLimitAndValidation(t *testing.T) {
+	opts, rec := runScoreFixture(t)
+	sm := &scriptedMatcher{responses: map[string]MatchResult{"M1": m1Match()}}
+	base := ScoreOptions{DataDir: opts.DataDir, CacheDir: opts.CacheDir,
+		ClaudeVersion: "1.0.0 (test)", Matcher: sm}
+
+	limited := base
+	limited.Targets, limited.MaxSamples = []string{"M1"}, 1
+	results, _, err := ScoreTargets(context.Background(), limited)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results[0].Samples) != 1 {
+		t.Fatalf("--samples 1 must score one sample: %+v", results[0].Samples)
+	}
+
+	// Empty cache + explicit record: a typo'd id must be named BEFORE any
+	// session loading — not drowned in a bundle-missing error, and never
+	// after probe spend.
+	unknown := base
+	unknown.Targets = []string{"M1", "C-99"}
+	unknown.CacheDir = t.TempDir()
+	unknown.RecordPath = rec.RecordPath
+	unknown.Matcher = &scriptedMatcher{}
+	if _, _, err := ScoreTargets(context.Background(), unknown); err == nil || !strings.Contains(err.Error(), "C-99") {
+		t.Fatalf("unknown target id must fail closed pre-session: %v", err)
+	}
+	if calls := unknown.Matcher.(*scriptedMatcher).calls; calls != 0 {
+		t.Fatalf("a typo'd target id must error before any matcher spend (probes included), calls = %d", calls)
+	}
+
+	negative := base
+	negative.Targets = []string{"N-01"}
+	negative.CacheDir = t.TempDir()
+	negative.RecordPath = rec.RecordPath
+	negative.Matcher = &scriptedMatcher{}
+	if _, _, err := ScoreTargets(context.Background(), negative); err == nil || !strings.Contains(err.Error(), "N-01") {
+		t.Fatalf("negative rubrics have no per-target dev loop; must error pre-session: %v", err)
+	}
+	if calls := negative.Matcher.(*scriptedMatcher).calls; calls != 0 {
+		t.Fatalf("negative-id rejection must also fire pre-spend, calls = %d", calls)
 	}
 }
 

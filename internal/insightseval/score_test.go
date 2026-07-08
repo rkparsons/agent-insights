@@ -119,11 +119,58 @@ func TestScoreTargetSampleMajorityAndDetail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Granularity != "full" || s.RepeatAgreement < 0.66 || s.RepeatAgreement > 0.67 {
+	if q.calls != 3 {
+		t.Fatalf("first two repeats disagree — no early exit, calls = %d", q.calls)
+	}
+	if s.Granularity != "full" || s.RepeatAgreement < 0.66 || s.RepeatAgreement > 0.67 || s.RepeatsTaken != 3 {
 		t.Fatalf("sample: %+v", s)
 	}
 	if s.ItemRef != "client-project/theme/0" || s.Corroboration != CorroborationOK || len(s.ItemQuotes) != 1 {
 		t.Fatalf("deciding detail: %+v", s)
+	}
+}
+
+func TestScoreTargetSampleEarlyExitAfterDecidedMedian(t *testing.T) {
+	cache := NewCache(t.TempDir())
+	r := scoreRubric()
+	items := scoreItems()
+	full := MatchResult{Matches: []ItemMatch{match("client-project/theme/0", "full", []bool{true})}}
+	q := &queueMatcher{results: []MatchResult{full, full}}
+	s, err := scoreTargetSample(context.Background(), cache, q, "env1", r, items, []string{"a1", "a2"}, nil, nil, 0, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.calls != 2 {
+		t.Fatalf("repeats 0 and 1 agree — repeat 2 must not spend a fresh call, calls = %d", q.calls)
+	}
+	if s.Granularity != "full" || s.RepeatsTaken != 2 || s.RepeatAgreement != 1.0 {
+		t.Fatalf("early exit must record reads actually taken: %+v", s)
+	}
+}
+
+func TestScoreTargetSampleEarlyExitConsumesCachedThirdRepeat(t *testing.T) {
+	cache := NewCache(t.TempDir())
+	r := scoreRubric()
+	items := scoreItems()
+	payload := BuildMatchPayload(r, items)
+	full := MatchResult{Matches: []ItemMatch{match("client-project/theme/0", "full", []bool{true})}}
+	// a fully-scored record: all three repeats cached, repeat 2 disagreeing
+	seed := &queueMatcher{results: []MatchResult{full, full, {}}}
+	for k := 0; k < 3; k++ {
+		if _, _, err := matchOnce(context.Background(), cache, seed, "env1", payload, k); err != nil {
+			t.Fatal(err)
+		}
+	}
+	q := &queueMatcher{}
+	s, err := scoreTargetSample(context.Background(), cache, q, "env1", r, items, []string{"a1", "a2"}, nil, nil, 0, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.calls != 0 {
+		t.Fatalf("all repeats cached — re-score must not call the matcher, got %d", q.calls)
+	}
+	if s.RepeatsTaken != 3 || s.Granularity != "full" || s.RepeatAgreement < 0.66 || s.RepeatAgreement > 0.67 {
+		t.Fatalf("cached re-score must reproduce the full three-read result: %+v", s)
 	}
 }
 
