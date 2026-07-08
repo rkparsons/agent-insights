@@ -17,6 +17,11 @@ import (
 
 const consecutiveLLMFailureLimit = 3
 
+// l2SynthesisTimeout bounds one L2 synthesis subprocess. v4-era syntheses run
+// 8–14 minutes; a kill at the deadline discards the output but not the spend,
+// so the bound errs generous.
+const l2SynthesisTimeout = 20 * time.Minute
+
 type OutcomeOptions struct {
 	DataDir, CacheDir string
 	Scope             string                // "l2" (default) | "full"
@@ -325,7 +330,7 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 			if hit {
 				rec.CacheHits++
 			} else {
-				rctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+				rctx, cancel := context.WithTimeout(ctx, l2SynthesisTimeout)
 				raw, err = synth.Synthesize(rctx, bundle)
 				cancel()
 				if err != nil {
