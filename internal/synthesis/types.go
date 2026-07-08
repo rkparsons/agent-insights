@@ -12,7 +12,7 @@ type Theme struct {
 	TypeBreakdown   map[string]int `json:"type_breakdown,omitempty"`
 	Quotes          []string       `json:"quotes"`
 	SessionIDs      []string       `json:"session_ids"`
-	SignalRefs      []string       `json:"-"` // G ids the opportunity theme anchored on (eval-only)
+	SignalRefs      []string       `json:"signal_refs,omitempty"` // G ids the opportunity theme anchored on; must survive the verify-cache round-trip for the opp-recall probe
 	OverGeneralized bool           `json:"over_generalized,omitempty"`
 }
 type Recommendation struct {

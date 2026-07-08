@@ -26,6 +26,26 @@ func TestOpportunityRecallReferencedIsNotAMiss(t *testing.T) {
 	}
 }
 
+func TestOpportunityRecallSurvivesJSONRoundTrip(t *testing.T) {
+	// The verdict probe reads verified outputs back from the JSON cache; a
+	// serialization tag that strips SignalRefs makes every G signal an
+	// eternal miss regardless of what L2 produced.
+	b := EvidenceBundle{Signals: []OppSignal{{ID: "G1", Kind: "high_read", Magnitude: 12}}}
+	s := RepoSynthesis{Themes: []Theme{{Kind: "opportunity", Title: "Read-heavy", SignalRefs: []string{"G1"}}}}
+	data, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back RepoSynthesis
+	if err := json.Unmarshal(data, &back); err != nil {
+		t.Fatal(err)
+	}
+	res := EvaluateRun(back, back, ValidationReport{}, b)
+	if len(res.OpportunityRecallMisses) != 0 {
+		t.Errorf("misses = %v, want 0: SignalRefs must survive the cache round-trip", res.OpportunityRecallMisses)
+	}
+}
+
 func TestOpportunityRecallBelowFloorNotAMiss(t *testing.T) {
 	b := EvidenceBundle{Signals: []OppSignal{{ID: "G1", Kind: "high_read", Magnitude: signalFloor - 1}}}
 	s := RepoSynthesis{}
