@@ -362,12 +362,21 @@ func runEvalScoreTargets(opts insightseval.ScoreOptions) {
 		case tv.MeetsExpectation:
 			mark = "expected"
 		}
-		fmt.Fprintf(os.Stderr, "score: %-6s %-22s %-16s %s (agreement %.2f, pass_at %s)\n",
-			tv.ID, tv.Status, tv.Granularity, mark, tv.SampleAgreement, tv.PassAt)
+		fmt.Fprintf(os.Stderr, "score: %-6s %-22s %-16s %s (agreement %.2f, pass_at %s, nuance median %d/%d)\n",
+			tv.ID, tv.Status, tv.Granularity, mark, tv.SampleAgreement, tv.PassAt, tv.NuancePassMedian, len(res.Rubric.RequiredNuances))
 		for _, s := range res.Samples {
 			detail := ""
 			if s.ItemRef != "" {
 				detail = fmt.Sprintf(" · %s · %s", s.Corroboration, s.ItemRef)
+			}
+			if s.NuancePasses != nil {
+				passed := 0
+				for _, ok := range s.NuancePasses {
+					if ok {
+						passed++
+					}
+				}
+				detail += fmt.Sprintf(" · nuances %d/%d", passed, len(s.NuancePasses))
 			}
 			fmt.Fprintf(os.Stderr, "score:   sample %d: %s · repeat agreement %.2f over %d read(s)%s\n",
 				s.SampleIndex, s.Granularity, s.RepeatAgreement, s.RepeatsTaken, detail)

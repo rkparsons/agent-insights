@@ -126,6 +126,9 @@ type VerdictInputs struct {
 	Warnings       []string
 	Adj            map[string]Adjudication
 	Prior          []namedVerdict
+	// Watermarks holds benchmark.json's per-target nuance_watermarks —
+	// recalibrated (pass_at lowered) targets whose depth must stay visible.
+	Watermarks map[string]int
 }
 
 func baselineTargetVerdict(v Verdict, id string) (TargetVerdict, bool) {
@@ -258,6 +261,11 @@ func ComposeVerdict(in VerdictInputs, cache *Cache) (Verdict, []PendingCard, err
 
 	for _, res := range in.Results {
 		tv := res.Verdict
+		if wm, ok := in.Watermarks[tv.ID]; ok && len(res.Samples) > 0 && tv.NuancePassMedian < wm {
+			v.Warnings = append(v.Warnings, fmt.Sprintf(
+				"recalibrated target %s nuance-pass median %d below watermark %d — depth regression on a pass_at-lowered target",
+				tv.ID, tv.NuancePassMedian, wm))
+		}
 		v.Targets = append(v.Targets, tv)
 		switch tv.Status {
 		case "must_pass":

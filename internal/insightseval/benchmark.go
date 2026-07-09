@@ -30,6 +30,11 @@ type Benchmark struct {
 	FrozenAt time.Time                    `json:"frozen_at"`
 	Buckets  map[string]BucketPopulations `json:"buckets"`
 	Statuses map[string]string            `json:"statuses"`
+	// NuanceWatermarks: per-target median nuance-pass count recorded when a
+	// target's pass_at was recalibrated full->partial (spec amendment
+	// 2026-07-09). Lives here, not in the rubric file, so watermark upkeep
+	// never re-keys the rubric hash or its adjudications.
+	NuanceWatermarks map[string]int `json:"nuance_watermarks,omitempty"`
 }
 
 // loadGroundTruth reads the newest RepoSynthesis per repo dir under

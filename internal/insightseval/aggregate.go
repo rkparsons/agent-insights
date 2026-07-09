@@ -1,6 +1,9 @@
 package insightseval
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 // tierWeights drive Part-A recall (plan decision 7).
 var tierWeights = map[string]float64{"HIGH": 3, "MODERATE-HIGH": 2, "MODERATE": 1, "MEDIUM": 1}
@@ -37,6 +40,7 @@ type TargetVerdict struct {
 	HardFail         bool                  `json:"hard_fail,omitempty"`
 	SampleAgreement  float64               `json:"sample_agreement"`
 	EffectiveAnchors int                   `json:"effective_anchors"`
+	NuancePassMedian int                   `json:"nuance_pass_median"`
 	Samples          []TargetSampleVerdict `json:"samples"`
 	Triggers         []Trigger             `json:"triggers,omitempty"`
 }
@@ -63,6 +67,22 @@ type TargetResult struct {
 	Verdict TargetVerdict
 	Samples []SampleScore
 	Pending []PendingCard
+}
+
+// medianNuancePasses takes the conservative lower-middle of the per-sample
+// counted-item nuance-pass counts (a sample with no counted item counts 0) —
+// the depth figure the recalibration watermark compares against.
+func medianNuancePasses(samples []SampleScore) int {
+	counts := make([]int, len(samples))
+	for i, s := range samples {
+		for _, ok := range s.NuancePasses {
+			if ok {
+				counts[i]++
+			}
+		}
+	}
+	sort.Ints(counts)
+	return counts[(len(counts)-1)/2]
 }
 
 func decidingSample(samples []SampleScore, median string) *SampleScore {
@@ -106,6 +126,7 @@ func AggregateTarget(r Rubric, status string, samples []SampleScore, effectiveAn
 			RepeatsTaken: s.RepeatsTaken, Corroboration: s.Corroboration, ItemRef: s.ItemRef})
 	}
 	tv.Granularity = medianGranularity(grans)
+	tv.NuancePassMedian = medianNuancePasses(samples)
 	agree := 0
 	for _, g := range grans {
 		if g == tv.Granularity {

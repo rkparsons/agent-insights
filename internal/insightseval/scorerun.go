@@ -161,6 +161,7 @@ type scoreSession struct {
 	recPath    string
 	rubrics    []Rubric
 	statuses   map[string]string
+	watermarks map[string]int
 	adj        map[string]Adjudication
 	prior      []namedVerdict
 	ever       map[string]bool
@@ -189,6 +190,9 @@ func newScoreSession(ctx context.Context, opts ScoreOptions, scratchStamp time.T
 		return nil, nil, err
 	}
 	if err = validateStatusCoverage(s.rubrics, s.statuses); err != nil {
+		return nil, nil, err
+	}
+	if s.watermarks, err = NuanceWatermarks(opts.DataDir); err != nil {
 		return nil, nil, err
 	}
 	if s.adj, err = LoadAdjudications(opts.DataDir); err != nil {
@@ -403,7 +407,8 @@ func ScoreRun(ctx context.Context, opts ScoreOptions) (Verdict, ScoreArtifacts, 
 	v, extra, err := ComposeVerdict(VerdictInputs{Record: s.rec, RecordName: s.recPath,
 		ScoredAt: opts.ScoredAt, RubricSetHash: rubricSetHash, MatcherEnvHash: s.envHash,
 		Results: results, Negatives: negatives, Probes: s.probes,
-		Invalidated: invalidated, Warnings: s.warnings, Adj: s.adj, Prior: s.prior}, s.cache)
+		Invalidated: invalidated, Warnings: s.warnings, Adj: s.adj, Prior: s.prior,
+		Watermarks: s.watermarks}, s.cache)
 	if err != nil {
 		return Verdict{}, none, err
 	}

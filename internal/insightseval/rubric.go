@@ -233,6 +233,19 @@ func Statuses(dataDir string) (map[string]string, error) {
 	return b.Statuses, nil
 }
 
+// NuanceWatermarks returns benchmark.json's per-target nuance watermarks
+// (empty when none are recorded — only recalibrated targets carry one).
+func NuanceWatermarks(dataDir string) (map[string]int, error) {
+	b, ok, err := loadBenchmark(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("no benchmark.json in %s", dataDir)
+	}
+	return b.NuanceWatermarks, nil
+}
+
 // parseAnchorTheme splits "<bucket>/<theme-index>" — the frozen ground-truth
 // theme the rubric's anchors were copied from.
 func parseAnchorTheme(s string) (string, int, error) {
