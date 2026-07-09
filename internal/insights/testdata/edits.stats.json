@@ -42,6 +42,14 @@
   "user_turn_fingerprints": [
     "395d610789735e6b"
   ],
+  "directive_clauses": [
+    {
+      "norm": "create a logger and wire it into main",
+      "exemplar": "Create a logger and wire it into main",
+      "count": 1,
+      "first_turn": 1
+    }
+  ],
   "canary": {
     "unknown_line_types": {},
     "unknown_block_types": {},

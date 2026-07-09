@@ -2,6 +2,7 @@ package insights
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -178,5 +179,54 @@ func TestUserTurnFingerprints(t *testing.T) {
 	s2 := runExtract(t, in, noRepo).Stats
 	if s.UserTurnFingerprints[0] != s2.UserTurnFingerprints[0] {
 		t.Fatalf("fingerprint not stable/content-derived across sessions")
+	}
+}
+
+func TestMechanicalFrictionClassification(t *testing.T) {
+	rejNoReason := `The user doesn't want to proceed with this tool use. The tool use was rejected. STOP what you are doing and wait for the user to tell you how to proceed.`
+	rejReasoned := `The user doesn't want to proceed with this tool use. To tell you how to proceed, the user said: use rtk proxy instead`
+	in := `{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"Exit code 1\n(eval):cd:1: no such file or directory: src"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"<tool_use_error>String to replace not found in file.</tool_use_error>"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"Exit code 1\nmake: *** Error 2"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"` + rejNoReason + `"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"` + rejReasoned + `"}]}}`
+	s := runExtract(t, in, noRepo).Stats
+	if s.MechanicalFriction[modeEditBeforeRead] != 2 || s.MechanicalFriction[modeWrongCwd] != 1 ||
+		s.MechanicalFriction[modePermission] != 1 || s.MechanicalFriction[modeOther] != 2 {
+		t.Errorf("MechanicalFriction = %v", s.MechanicalFriction)
+	}
+	if s.Rejections != 2 {
+		t.Errorf("Rejections = %d, want 2 (classification must not change the rejection split)", s.Rejections)
+	}
+	if s.ToolErrors != 5 {
+		t.Errorf("ToolErrors = %d, want 5", s.ToolErrors)
+	}
+	if got := s.MechanicalExemplars[modeEditBeforeRead]; got != "File has not been read yet. Read it first before writing to it." {
+		t.Errorf("exemplar = %q", got)
+	}
+	if _, ok := s.MechanicalExemplars[modePermission]; ok {
+		t.Error("permission mode must carry no exemplar (boilerplate)")
+	}
+	if s.OtherErrorSignatures["String to replace not found in file."] != 1 ||
+		s.OtherErrorSignatures["Exit code N"] != 1 {
+		t.Errorf("OtherErrorSignatures = %v", s.OtherErrorSignatures)
+	}
+}
+
+func TestDirectiveClausesAggregation(t *testing.T) {
+	in := `{"type":"user","message":{"content":"please assign an opus subagent to do a critical review"}}
+{"type":"user","message":{"content":"please assign an opus subagent to do a critical review"}}
+{"type":"user","message":{"content":"now leave the branch as-is for manual testing"}}`
+	s := runExtract(t, in, noRepo).Stats
+	want := []DirectiveClause{
+		{Norm: "now leave the branch as-is for manual testing",
+			Exemplar: "now leave the branch as-is for manual testing", Count: 1, FirstTurn: 0},
+		{Norm: "please assign an opus subagent to do a critical review",
+			Exemplar: "please assign an opus subagent to do a critical review", Count: 2, FirstTurn: 1},
+	}
+	if !reflect.DeepEqual(s.DirectiveClauses, want) {
+		t.Errorf("DirectiveClauses = %#v\nwant %#v", s.DirectiveClauses, want)
 	}
 }

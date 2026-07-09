@@ -40,6 +40,26 @@
     "ce4a4bcaaa62f0db",
     "549f813c567e55fa"
   ],
+  "directive_clauses": [
+    {
+      "norm": "and quoting the user doesn't want to proceed with this tool use in prose must not become a rejection",
+      "exemplar": "And quoting The user doesn't want to proceed with this tool use in prose must not become a rejection",
+      "count": 1,
+      "first_turn": 0
+    },
+    {
+      "norm": "look at friction.go and explain how interrupt and rejection detection works",
+      "exemplar": "Look at friction.go and explain how interrupt and rejection detection works",
+      "count": 1,
+      "first_turn": 1
+    },
+    {
+      "norm": "right, so a turn that merely mentions [request interrupted by user] should never be flagged as an interrupt",
+      "exemplar": "Right, so a turn that merely mentions [Request interrupted by user] should never be flagged as an interrupt",
+      "count": 1,
+      "first_turn": 0
+    }
+  ],
   "canary": {
     "unknown_line_types": {},
     "unknown_block_types": {},

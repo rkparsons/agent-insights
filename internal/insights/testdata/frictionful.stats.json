@@ -40,6 +40,26 @@
     "61b18f92d2a4544e",
     "c839e92bec42ec65"
   ],
+  "mechanical_friction": {
+    "other": 1
+  },
+  "other_error_signatures": {
+    "build failed: undefined: retry": 1
+  },
+  "directive_clauses": [
+    {
+      "norm": "add retry logic to the fetcher",
+      "exemplar": "Add retry logic to the fetcher",
+      "count": 1,
+      "first_turn": 1
+    },
+    {
+      "norm": "use the backoff helper in util, not a new one",
+      "exemplar": "use the backoff helper in util, not a new one",
+      "count": 1,
+      "first_turn": 0
+    }
+  ],
   "canary": {
     "unknown_line_types": {},
     "unknown_block_types": {},

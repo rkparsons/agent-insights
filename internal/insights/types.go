@@ -59,6 +59,12 @@ type AgentSessionStats struct {
 
 	UserTurnFingerprints []string `json:"user_turn_fingerprints"`
 
+	// Phase-3 deterministic detectors (facts tier).
+	MechanicalFriction   map[string]int    `json:"mechanical_friction,omitempty"`
+	MechanicalExemplars  map[string]string `json:"mechanical_exemplars,omitempty"`
+	OtherErrorSignatures map[string]int    `json:"other_error_signatures,omitempty"`
+	DirectiveClauses     []DirectiveClause `json:"directive_clauses,omitempty"`
+
 	Canary claude.Canary `json:"canary"`
 }
 

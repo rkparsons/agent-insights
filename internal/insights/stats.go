@@ -57,19 +57,28 @@ type statsBuilder struct {
 	taskNotifications int
 
 	userTurnFingerprints []string
+
+	mechFriction    map[string]int
+	mechExemplars   map[string]string
+	otherSignatures map[string]int
+	directiveAgg    map[string]*DirectiveClause
 }
 
 func newStatsBuilder(sessionID string, repo RepoResolver) *statsBuilder {
 	return &statsBuilder{
-		sessionID:   sessionID,
-		repo:        repo,
-		seenMsg:     map[string]bool{},
-		modelMix:    map[string]int{},
-		toolCounts:  map[string]int{},
-		subagentSet: map[string]bool{},
-		skillsSet:   map[string]bool{},
-		pluginsSet:  map[string]bool{},
-		filesSet:    map[string]bool{},
+		sessionID:       sessionID,
+		repo:            repo,
+		seenMsg:         map[string]bool{},
+		modelMix:        map[string]int{},
+		toolCounts:      map[string]int{},
+		subagentSet:     map[string]bool{},
+		skillsSet:       map[string]bool{},
+		pluginsSet:      map[string]bool{},
+		filesSet:        map[string]bool{},
+		mechFriction:    map[string]int{},
+		mechExemplars:   map[string]string{},
+		otherSignatures: map[string]int{},
+		directiveAgg:    map[string]*DirectiveClause{},
 	}
 }
 
@@ -149,8 +158,10 @@ func (b *statsBuilder) addUserEvent(m *claude.Message) {
 					b.interrupts++
 				case isRejectionText(body):
 					b.rejections++
+					b.classifyRejection(body)
 				default:
 					b.toolErrors++
+					b.classifyToolError(body)
 				}
 			} else if isInterruptText(body) {
 				b.interrupts++
@@ -170,6 +181,7 @@ func (b *statsBuilder) addUserEvent(m *claude.Message) {
 		b.interrupts++
 	case isRejectionText(joined):
 		b.rejections++
+		b.classifyRejection(joined)
 	case isSyntheticUserText(joined):
 		// injected pseudo-user content: dropped
 	default:
@@ -177,6 +189,41 @@ func (b *statsBuilder) addUserEvent(m *claude.Message) {
 		if norm := normalizeFingerprintText(joined); !isTrivialTurn(norm) {
 			b.userTurnFingerprints = append(b.userTurnFingerprints, fingerprint(norm))
 		}
+		first := b.userTurns == 1
+		for _, clause := range extractClauses(joined) {
+			norm := normalizeClause(clause)
+			dc, ok := b.directiveAgg[norm]
+			if !ok {
+				dc = &DirectiveClause{Norm: norm, Exemplar: clause}
+				b.directiveAgg[norm] = dc
+			}
+			dc.Count++
+			if first {
+				dc.FirstTurn++
+			}
+		}
+	}
+}
+
+// classifyRejection counts only reason-less rejections as mechanical
+// permission friction — a rejection carrying an inline user correction is
+// deliberate steering, not friction. No exemplar: the body is boilerplate.
+func (b *statsBuilder) classifyRejection(body string) {
+	if _, reasoned := rejectionReason(body); !reasoned {
+		b.mechFriction[modePermission]++
+	}
+}
+
+func (b *statsBuilder) classifyToolError(body string) {
+	mode, ok := classifyMechanicalError(body)
+	if !ok {
+		b.mechFriction[modeOther]++
+		b.otherSignatures[errorSignature(body)]++
+		return
+	}
+	b.mechFriction[mode]++
+	if _, seen := b.mechExemplars[mode]; !seen {
+		b.mechExemplars[mode] = SanitizeEvidenceText(body)
 	}
 }
 
@@ -259,5 +306,24 @@ func (b *statsBuilder) finish() AgentSessionStats {
 	s.UserTurns = b.userTurns
 	s.TaskNotifications = b.taskNotifications
 	s.UserTurnFingerprints = b.userTurnFingerprints
+	if len(b.mechFriction) > 0 {
+		s.MechanicalFriction = b.mechFriction
+	}
+	if len(b.mechExemplars) > 0 {
+		s.MechanicalExemplars = b.mechExemplars
+	}
+	if len(b.otherSignatures) > 0 {
+		s.OtherErrorSignatures = b.otherSignatures
+	}
+	if len(b.directiveAgg) > 0 {
+		norms := make([]string, 0, len(b.directiveAgg))
+		for n := range b.directiveAgg {
+			norms = append(norms, n)
+		}
+		sort.Strings(norms)
+		for _, n := range norms {
+			s.DirectiveClauses = append(s.DirectiveClauses, *b.directiveAgg[n])
+		}
+	}
 	return s
 }

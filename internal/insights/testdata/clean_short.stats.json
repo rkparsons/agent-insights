@@ -38,6 +38,14 @@
   "user_turn_fingerprints": [
     "e5dd3d9344922bea"
   ],
+  "directive_clauses": [
+    {
+      "norm": "what does the config loader do",
+      "exemplar": "What does the config loader do?",
+      "count": 1,
+      "first_turn": 1
+    }
+  ],
   "canary": {
     "unknown_line_types": {},
     "unknown_block_types": {},

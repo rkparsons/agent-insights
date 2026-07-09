@@ -40,6 +40,14 @@
   "user_turn_fingerprints": [
     "5d9c6de048baaf27"
   ],
+  "directive_clauses": [
+    {
+      "norm": "review the open prs and summarise",
+      "exemplar": "Review the open PRs and summarise",
+      "count": 1,
+      "first_turn": 1
+    }
+  ],
   "canary": {
     "unknown_line_types": {},
     "unknown_block_types": {},
