@@ -108,6 +108,23 @@ func TestRetypingKindSplit(t *testing.T) {
 	}
 }
 
+func TestRetypeThresholdBoundary(t *testing.T) {
+	// sim(X, Y) is exactly 0.6 (inter 6 / union 10): the pair must cluster at
+	// the pinned >= 0.6 threshold. Any raised threshold (or a >= -> > flip)
+	// splits them below the floor and empties the signal.
+	x := "please run the full eval suite before the bump"
+	y := "please run the full eval suite tonight"
+	group := []insights.AgentSessionAnalysis{
+		dirSession("s1", dc(x, 1, 0)),
+		dirSession("s2", dc(x, 1, 0)),
+		dirSession("s3", dc(y, 1, 0)),
+	}
+	directives, _ := retypingSignals(group)
+	if want := []string{"s1", "s2", "s3"}; !reflect.DeepEqual(directives.Members, want) {
+		t.Errorf("members = %v, want %v (boundary pair must cluster at exactly 0.6)", directives.Members, want)
+	}
+}
+
 func TestRetypingBelowFloorClustersExcluded(t *testing.T) {
 	// A 2-session echo must not contribute members or detail.
 	group := []insights.AgentSessionAnalysis{

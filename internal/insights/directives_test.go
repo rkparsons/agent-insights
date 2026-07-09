@@ -30,6 +30,7 @@ func TestExtractClauses(t *testing.T) {
 			"[image: source: /var/folders/rq/xyz/screenshot.png]\nmake the header look like this screenshot",
 			[]string{"make the header look like this screenshot"}},
 		{"under 4 tokens dropped", "run the tests. yes go ahead now then", []string{"yes go ahead now then"}},
+		{"under 4 tokens dropped even when over 16 runes", "recompile everything everywhere", nil},
 		{"under 16 runes dropped", "do it all now", nil},
 	}
 	for _, c := range cases {
