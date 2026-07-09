@@ -3,6 +3,7 @@ package synthesis
 import (
 	"reflect"
 	"regexp"
+	"sort"
 	"testing"
 
 	"tmux-ctrl/internal/insights"
@@ -56,6 +57,109 @@ func TestMechanicalFrictionSignalOrdering(t *testing.T) {
 	}
 	if !reflect.DeepEqual(detail, want) {
 		t.Errorf("detail = %#v\nwant %#v", detail, want)
+	}
+}
+
+func dirSession(id string, clauses ...insights.DirectiveClause) insights.AgentSessionAnalysis {
+	return insights.AgentSessionAnalysis{Stats: insights.AgentSessionStats{
+		SessionID: id, DirectiveClauses: clauses,
+	}}
+}
+
+func dc(norm string, count, first int) insights.DirectiveClause {
+	return insights.DirectiveClause{Norm: norm, Exemplar: norm, Count: count, FirstTurn: first}
+}
+
+func TestRetypingSignalsClusterAcrossVariants(t *testing.T) {
+	// Three near-verbatim variants (multiset sim >= 0.6 pairwise via
+	// single-link) across three sessions -> one contributing cluster.
+	group := []insights.AgentSessionAnalysis{
+		dirSession("s1", dc("leave the branch as it is for manual testing", 1, 0)),
+		dirSession("s2", dc("leave the branch as it is for manual testing please", 1, 0)),
+		dirSession("s3", dc("leave the branch as it is for my manual testing", 1, 0)),
+		dirSession("s4", dc("a completely unrelated clause about weather panels", 1, 0)),
+	}
+	directives, kickoffs := retypingSignals(group)
+	if want := []string{"s1", "s2", "s3"}; !reflect.DeepEqual(directives.Members, want) {
+		t.Fatalf("directive members = %v, want %v", directives.Members, want)
+	}
+	if len(directives.Detail) != 1 || directives.Detail[0] != "leave the branch as it is for manual testing" {
+		t.Errorf("detail = %#v (want the highest-occurrence variant as representative)", directives.Detail)
+	}
+	if len(kickoffs.Members) != 0 {
+		t.Errorf("kickoff members = %v, want none", kickoffs.Members)
+	}
+}
+
+func TestRetypingKindSplit(t *testing.T) {
+	// All occurrences in first prose turns -> kickoffs, not directives.
+	group := []insights.AgentSessionAnalysis{
+		dirSession("s1", dc("please diagnose this panic and fix cleanly", 1, 1)),
+		dirSession("s2", dc("please diagnose this panic and fix cleanly", 1, 1)),
+		dirSession("s3", dc("please diagnose this panic and fix cleanly", 1, 1)),
+	}
+	directives, kickoffs := retypingSignals(group)
+	if len(directives.Members) != 0 {
+		t.Errorf("directives = %v, want none", directives.Members)
+	}
+	if want := []string{"s1", "s2", "s3"}; !reflect.DeepEqual(kickoffs.Members, want) {
+		t.Errorf("kickoffs = %v, want %v", kickoffs.Members, want)
+	}
+}
+
+func TestRetypingBelowFloorClustersExcluded(t *testing.T) {
+	// A 2-session echo must not contribute members or detail.
+	group := []insights.AgentSessionAnalysis{
+		dirSession("s1", dc("what do you think about this approach", 1, 0)),
+		dirSession("s2", dc("what do you think about this approach", 1, 0)),
+		dirSession("s3", dc("entirely different clause content here", 1, 0)),
+	}
+	directives, _ := retypingSignals(group)
+	if len(directives.Members) != 0 || len(directives.Detail) != 0 {
+		t.Errorf("below-floor cluster leaked: %+v", directives)
+	}
+}
+
+func TestRetypingSessionOrderIndependence(t *testing.T) {
+	mk := func(ids ...string) []insights.AgentSessionAnalysis {
+		var g []insights.AgentSessionAnalysis
+		for _, id := range ids {
+			g = append(g, dirSession(id,
+				dc("please assign an opus subagent to do a critical review", 1, 0),
+				dc("write the implementation plan for the next phase", 1, 0)))
+		}
+		return g
+	}
+	a, _ := retypingSignals(mk("s1", "s2", "s3"))
+	b, _ := retypingSignals(mk("s3", "s1", "s2"))
+	if !reflect.DeepEqual(a.Detail, b.Detail) {
+		t.Errorf("detail order depends on session order: %v vs %v", a.Detail, b.Detail)
+	}
+	sort.Strings(a.Members)
+	sort.Strings(b.Members)
+	if !reflect.DeepEqual(a.Members, b.Members) {
+		t.Errorf("membership depends on session order")
+	}
+}
+
+func TestRetypingDetailDedupeAndCap(t *testing.T) {
+	// One pasted template = many clauses over an identical session set ->
+	// exactly one detail line (probe consequence ii). Norms are pairwise
+	// dissimilar so the dedupe path is exercised, not the merge path.
+	var g []insights.AgentSessionAnalysis
+	for _, id := range []string{"s1", "s2", "s3"} {
+		g = append(g, dirSession(id,
+			dc("alpha entirely distinct first clause body", 1, 0),
+			dc("totally different second ritual invocation text", 1, 0),
+			dc("third unrelated directive sentence for testing", 1, 0),
+		))
+	}
+	directives, _ := retypingSignals(g)
+	if len(directives.Detail) != 1 {
+		t.Errorf("detail = %#v, want 1 line (identical session sets dedupe)", directives.Detail)
+	}
+	if want := []string{"s1", "s2", "s3"}; !reflect.DeepEqual(directives.Members, want) {
+		t.Errorf("members = %v, want %v", directives.Members, want)
 	}
 }
 

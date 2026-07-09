@@ -179,6 +179,9 @@ func computeSignals(group []insights.AgentSessionAnalysis) []OppSignal {
 	add("unskilled_toil", unskilled, nil)
 	mm, md := mechanicalFrictionMembers(group)
 	add("mechanical_friction", mm, md)
+	rd, rk := retypingSignals(group)
+	add("retyped_directives", rd.Members, rd.Detail)
+	add("retyped_kickoffs", rk.Members, rk.Detail)
 	return out
 }
 
