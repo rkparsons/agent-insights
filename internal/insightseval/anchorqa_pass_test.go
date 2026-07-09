@@ -105,8 +105,11 @@ func TestDevAnchorQAPass(t *testing.T) {
 		removals += rm
 		t.Logf("%s: %d sessions judged, %d removals", r.ID, len(res.Verdicts), rm)
 	}
-	if audited != 21 {
-		t.Fatalf("audited %d anchored rubrics, want 21 (symmetry violated)", audited)
+	// 21 at pass 1; C-A/C-D1 degraded to no-anchor there; the rec-surface
+	// corroboration amendment (2026-07-09) dropped C-E2's anchors; pass 2
+	// (run at 18) degraded C-D2.
+	if audited != 17 {
+		t.Fatalf("audited %d anchored rubrics, want 17 (symmetry violated)", audited)
 	}
 	t.Logf("pass complete: %d rubrics audited, %d total removals proposed", audited, removals)
 }
