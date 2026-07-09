@@ -1,6 +1,7 @@
 package synthesis
 
 import (
+	"encoding/json"
 	"reflect"
 	"regexp"
 	"sort"
@@ -160,6 +161,42 @@ func TestRetypingDetailDedupeAndCap(t *testing.T) {
 	}
 	if want := []string{"s1", "s2", "s3"}; !reflect.DeepEqual(directives.Members, want) {
 		t.Errorf("members = %v, want %v", directives.Members, want)
+	}
+}
+
+// Detail's privacy guarantee is structural — everything entering it passed
+// insights.SanitizeEvidenceText at stats-build time. This test pins the
+// invariant end-to-end over real corpus error texts and clauses carrying
+// every committed-artifact privacy class.
+func TestDetailPassesCommittedArtifactPrivacyClasses(t *testing.T) {
+	cwdErr := insights.SanitizeEvidenceText("File does not exist. Note: your current working directory is /Users/dev/Developer/terminal-app/.worktrees/preview-issues.")
+	clause := insights.SanitizeEvidenceText("resume session 8f3d2a1b-4c5d-6e7f-8a9b-0c1d2e3f4a5b in the /Users/dev/Developer/tmux-ctrl/.worktrees/insights-generation worktree for TICKET-0000")
+	group := []insights.AgentSessionAnalysis{
+		mechSession("s1", map[string]int{"wrong_cwd": 1}, map[string]string{"wrong_cwd": cwdErr}, nil),
+		mechSession("s2", map[string]int{"wrong_cwd": 2}, map[string]string{"wrong_cwd": cwdErr}, nil),
+		mechSession("s3", map[string]int{"edit_before_read": 1},
+			map[string]string{"edit_before_read": "File has not been read yet. Read it first before writing to it."}, nil),
+		dirSession("s4", insights.DirectiveClause{Norm: clause, Exemplar: clause, Count: 1}),
+		dirSession("s5", insights.DirectiveClause{Norm: clause, Exemplar: clause, Count: 1}),
+		dirSession("s6", insights.DirectiveClause{Norm: clause, Exemplar: clause, Count: 1}),
+	}
+	b := BuildBundle("r", group)
+	var kinds []string
+	for _, g := range b.Signals {
+		kinds = append(kinds, g.Kind)
+	}
+	if !reflect.DeepEqual(kinds, []string{"mechanical_friction", "retyped_directives"}) {
+		t.Fatalf("signals = %v, want both detector kinds emitted", kinds)
+	}
+	raw, err := json.Marshal(b.Signals)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, pat := range []string{`/Users/`, `/home/`, `\$HOME`, `\.worktrees/`,
+		`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`, `\bsc-\d+\b`} {
+		if regexp.MustCompile(`(?i)` + pat).Match(raw) {
+			t.Errorf("privacy class %s present in emitted signals: %s", pat, raw)
+		}
 	}
 }
 
