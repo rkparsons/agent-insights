@@ -56,6 +56,50 @@ func TestCorroborateTwoSided(t *testing.T) {
 	}
 }
 
+func recCorroItem(bucket string, n int, hit ...string) ScoredItem {
+	it := corroItem(bucket, n, hit...)
+	it.ID = bucket + "/rec/0"
+	it.Surface = "recommendation"
+	return it
+}
+
+func TestCorroborateRecGrounding(t *testing.T) {
+	anchors := []string{"a1", "a2", "a3", "a4"}
+	// grounding path: 1 hit / 2 sessions = exact 50% precision corroborates a
+	// rec that the recall bar (≥2.0 hits) would reject — reported as the
+	// distinct "grounded" outcome so verdicts and the HIGH oversight card can
+	// see which path counted
+	if got := Corroborate(recCorroItem("client-project", 2, "a1"), "client-project", anchors, nil); got != CorroborationGrounded {
+		t.Fatalf("rec at exact 50%% precision must ground: %s", got)
+	}
+	// below the precision bar: 1 hit / 3 sessions
+	if got := Corroborate(recCorroItem("client-project", 3, "a1"), "client-project", anchors, nil); got != CorroborationMismatch {
+		t.Fatalf("rec at 33%% precision must mismatch: %s", got)
+	}
+	// zero-overlap guard: an empty session set must never corroborate
+	if got := Corroborate(recCorroItem("client-project", 0), "client-project", anchors, nil); got != CorroborationMismatch {
+		t.Fatalf("rec with no sessions must mismatch: %s", got)
+	}
+	// the recall bar still suffices on its own: 2/4 hits, precision 2/9 —
+	// and reports plain "corroborated", not "grounded"
+	if got := Corroborate(recCorroItem("client-project", 9, "a1", "a2"), "client-project", anchors, nil); got != CorroborationOK {
+		t.Fatalf("rec clearing the recall bar must corroborate regardless of precision: %s", got)
+	}
+	// grounding path stays behind the size cap
+	wide := []string{"a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9", "a10", "a11", "a12"}
+	if got := Corroborate(recCorroItem("client-project", 6, "a1", "a2", "a3"), "client-project", wide, []string{"a1"}); got != CorroborationSizeCap {
+		t.Fatalf("grounded rec breaching the cap must fail it: %s", got)
+	}
+	// surface isolation: identical arithmetic on a theme keeps the recall bar
+	if got := Corroborate(corroItem("client-project", 2, "a1"), "client-project", anchors, nil); got != CorroborationMismatch {
+		t.Fatalf("theme at 25%% recall must mismatch regardless of precision: %s", got)
+	}
+	// no-anchor precedence unchanged for recs
+	if got := Corroborate(recCorroItem("client-project", 2, "a1"), "client-project", nil, nil); got != CorroborationNoAnchors {
+		t.Fatalf("no anchors: %s", got)
+	}
+}
+
 func TestAnchorSetsSelectsCapDenominator(t *testing.T) {
 	r := Rubric{ID: "C-77",
 		AnchorSessionIDs:      []string{"a1", "a2"},

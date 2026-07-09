@@ -120,8 +120,11 @@ func TestAnchorThemeResolvesPreStripAnchors(t *testing.T) {
 		}
 	}
 	// 21 at freeze; anchor-QA pass 1 (2026-07-07) degraded C-A and C-D1 to
-	// no-anchor targets (< 50% of raw source theme kept).
-	if anchored != 19 {
-		t.Fatalf("anchored rubrics = %d, want 19", anchored)
+	// no-anchor targets (< 50% of raw source theme kept); the rec-surface
+	// corroboration amendment (2026-07-09) dropped C-E2's anchors as a
+	// freeze-time category error (P-corroborated practice target inherited
+	// friction-theme anchors).
+	if anchored != 18 {
+		t.Fatalf("anchored rubrics = %d, want 18", anchored)
 	}
 }

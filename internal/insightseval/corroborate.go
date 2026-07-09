@@ -3,15 +3,24 @@ package insightseval
 // Two-sided corroboration (spec): a matched item must contain enough of the
 // effective anchors AND stay within a size cap, so over-generalization is
 // never rewarded — a mega-theme containing everything fails the cap.
+// Recommendation-surface items get a grounding alternative to the recall bar
+// (spec: rec-surface corroboration amendment 2026-07-09): their session sets
+// are recovered from cited per-practice evidence, so they are checked for
+// being drawn FROM the anchors (precision), not for covering them.
 const (
 	anchorThreshold = 0.5 // item must contain ≥ this share of effective anchors
+	recPrecision    = 0.5 // rec alternative: ≥ this share of item sessions are anchors
 	sizeCapFactor   = 3   // |item set| ≤ sizeCapFactor×|anchors| + sizeCapSlack
 	sizeCapSlack    = 2
 )
 
 // Corroboration outcomes; the failure values double as card trigger types.
+// Grounded is a counted outcome distinct from OK so verdicts show which path
+// corroborated and the HIGH-tier oversight card can fire on grounding-only
+// passes (amendment review C1).
 const (
 	CorroborationOK          = "corroborated"
+	CorroborationGrounded    = "grounded"
 	CorroborationMismatch    = "anchor_mismatch"
 	CorroborationSizeCap     = "size_cap"
 	CorroborationNoAnchors   = "no_anchors"
@@ -79,11 +88,17 @@ func Corroborate(item ScoredItem, expectedBucket string, anchors, capAnchors []s
 			hit++
 		}
 	}
-	if float64(hit) < anchorThreshold*float64(len(anchors)) {
+	recall := float64(hit) >= anchorThreshold*float64(len(anchors))
+	grounded := item.Surface == "recommendation" && hit >= 1 &&
+		float64(hit) >= recPrecision*float64(len(set))
+	if !recall && !grounded {
 		return CorroborationMismatch
 	}
 	if len(set) > sizeCapFactor*len(capAnchors)+sizeCapSlack {
 		return CorroborationSizeCap
+	}
+	if !recall {
+		return CorroborationGrounded
 	}
 	return CorroborationOK
 }

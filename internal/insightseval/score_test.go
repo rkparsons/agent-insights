@@ -229,6 +229,64 @@ func TestAggregateRepeatRules(t *testing.T) {
 	}
 }
 
+func TestAggregateRepeatTieBreakPrefersNuanceCarriage(t *testing.T) {
+	r := scoreRubric()
+	items := map[string]ScoredItem{}
+	for _, it := range scoreItems() {
+		items[it.ID] = it
+	}
+	// grounded rec (1 hit / 1 session) whose ID sorts before the theme's
+	items["client-project/rec/0"] = ScoredItem{ID: "client-project/rec/0", Bucket: "client-project",
+		Surface: "recommendation", Text: "Verify claims rec", SessionIDs: []string{"a1"}}
+	anchors := []string{"a1", "a2"}
+
+	// equal granularity: the match carrying more required nuances wins,
+	// regardless of item-ID order
+	res := MatchResult{Matches: []ItemMatch{
+		match("client-project/rec/0", "partial", []bool{false, false}),
+		match("client-project/theme/0", "partial", []bool{true, false}),
+	}}
+	rep := aggregateRepeat(r, items, res, anchors, nil, nil)
+	if rep.ItemRef != "client-project/theme/0" {
+		t.Fatalf("nuance-richer match must win the granularity tie: %+v", rep)
+	}
+
+	// equal granularity AND equal nuance count: smaller ID stays the tie-break
+	res = MatchResult{Matches: []ItemMatch{
+		match("client-project/rec/0", "partial", []bool{false, true}),
+		match("client-project/theme/0", "partial", []bool{true, false}),
+	}}
+	rep = aggregateRepeat(r, items, res, anchors, nil, nil)
+	if rep.ItemRef != "client-project/rec/0" {
+		t.Fatalf("equal nuances must fall back to ID order: %+v", rep)
+	}
+
+	// equal granularity and nuances but different corroboration path: the
+	// recall-corroborated item outranks the grounded one, so grounding-only
+	// oversight never fires when an equally-good fully-corroborated item counts
+	anchors4 := []string{"a1", "a2", "x1", "a4"} // theme/0 hits 3/4 (recall), rec/9 hits 1, precision 0.5 (grounded)
+	items["client-project/rec/9"] = ScoredItem{ID: "client-project/rec/9", Bucket: "client-project",
+		Surface: "recommendation", Text: "Verify claims rec narrow", SessionIDs: []string{"a1", "x9"}}
+	res = MatchResult{Matches: []ItemMatch{
+		match("client-project/rec/9", "partial", []bool{true, false}),
+		match("client-project/theme/0", "partial", []bool{true, false}),
+	}}
+	rep = aggregateRepeat(r, items, res, anchors4, nil, nil)
+	if rep.ItemRef != "client-project/theme/0" || rep.Corroboration != CorroborationOK {
+		t.Fatalf("recall corroboration must outrank grounding at equal quality: %+v", rep)
+	}
+
+	// higher granularity still beats more nuances
+	res = MatchResult{Matches: []ItemMatch{
+		match("client-project/rec/0", "full", []bool{true, true}),
+		match("client-project/theme/0", "partial", []bool{true, false}),
+	}}
+	rep = aggregateRepeat(r, items, res, anchors, nil, nil)
+	if rep.ItemRef != "client-project/rec/0" || rep.Granularity != "full" {
+		t.Fatalf("granularity outranks nuance count: %+v", rep)
+	}
+}
+
 func TestScoreTargetSampleEmptyPayloadSkipsMatcher(t *testing.T) {
 	q := &queueMatcher{}
 	r := scoreRubric()

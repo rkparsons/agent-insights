@@ -189,6 +189,24 @@ func AggregateTarget(r Rubric, status string, samples []SampleScore, effectiveAn
 		}
 	}
 
+	// Grounding-only oversight (rec-surface corroboration amendment, review
+	// C1): a HIGH pass carried by grounded — precision-path — samples gets a
+	// standing informational card; the pass stands, no provisional-fail.
+	if status == "must_pass" && wouldPass && r.Tier == "HIGH" {
+		var groundedIdx []int
+		for _, s := range samples {
+			if s.Corroboration == CorroborationGrounded {
+				groundedIdx = append(groundedIdx, s.SampleIndex)
+			}
+		}
+		if len(groundedIdx) > 0 {
+			tv.Triggers = append(tv.Triggers, Trigger{Type: "grounded_pass", SampleIndexes: groundedIdx})
+			cards = append(cards, PendingCard{TargetID: r.ID, Trigger: "grounded_pass",
+				ItemText: textOf(deciding), Quotes: quotesOf(deciding), Granularity: tv.Granularity,
+				Note: fmt.Sprintf("HIGH pass with grounding-only corroboration on samples %v (≥1 anchor hit + precision, under the recall bar) — oversight only, pass stands", groundedIdx)})
+		}
+	}
+
 	provisional := false
 	if status == "must_pass" && wouldPass && effectiveAnchors == 0 && !everPassed && deciding != nil {
 		k := AdjKey{TargetID: r.ID, Statement: normalizeStatement(deciding.ItemText),

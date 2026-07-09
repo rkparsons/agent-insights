@@ -60,6 +60,60 @@ func TestAggregateTargetMustPassMajorityAndSplit(t *testing.T) {
 	}
 }
 
+func TestAggregateTargetGroundedPassOversight(t *testing.T) {
+	r := scoreRubric() // HIGH, pass_at full
+	grounded := func(idx int, gran string) SampleScore {
+		s := sample(idx, gran)
+		s.Corroboration = CorroborationGrounded
+		s.ItemRef = "client-project/rec/0"
+		return s
+	}
+
+	// HIGH must_pass passing with a grounded-only counted sample: informational
+	// card, no provisional-fail, pass stands
+	samples := []SampleScore{grounded(0, "full"), sample(1, "full"), sample(2, "full")}
+	tv, cards := AggregateTarget(r, "must_pass", samples, 4, nil, true)
+	if !tv.Pass || tv.ProvisionalFail {
+		t.Fatalf("grounded pass must stand: %+v", tv)
+	}
+	tr := hasTrigger(tv, "grounded_pass")
+	if tr == nil || len(tr.SampleIndexes) != 1 || tr.SampleIndexes[0] != 0 {
+		t.Fatalf("grounded_pass trigger with grounded sample indexes: %+v", tv.Triggers)
+	}
+	found := false
+	for _, c := range cards {
+		if c.Trigger == "grounded_pass" {
+			found = true
+			if c.Adjudicable {
+				t.Fatal("grounded_pass is oversight, not an adjudication channel")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("grounded_pass card missing")
+	}
+
+	// recall-corroborated pass: no oversight card
+	tv, cards = AggregateTarget(r, "must_pass", []SampleScore{sample(0, "full"), sample(1, "full"), sample(2, "full")}, 4, nil, true)
+	if hasTrigger(tv, "grounded_pass") != nil || len(cards) != 0 {
+		t.Fatalf("recall-corroborated pass must not card: %+v", tv.Triggers)
+	}
+
+	// non-HIGH tier: grounded pass is the amendment's intended cheap path, no card
+	r.Tier = "MEDIUM"
+	tv, cards = AggregateTarget(r, "must_pass", []SampleScore{grounded(0, "full"), grounded(1, "full"), grounded(2, "full")}, 4, nil, true)
+	if hasTrigger(tv, "grounded_pass") != nil || len(cards) != 0 {
+		t.Fatalf("non-HIGH grounded pass must not card: %+v", tv.Triggers)
+	}
+
+	// a grounded MISS does not card (the miss channels already cover it)
+	r.Tier = "HIGH"
+	tv, _ = AggregateTarget(r, "must_pass", []SampleScore{grounded(0, "partial"), grounded(1, "partial"), grounded(2, "partial")}, 4, nil, true)
+	if hasTrigger(tv, "grounded_pass") != nil {
+		t.Fatalf("grounded miss must not emit the oversight trigger: %+v", tv.Triggers)
+	}
+}
+
 func TestAggregateTargetFirstPassNoAnchor(t *testing.T) {
 	r := scoreRubric()
 	r.AnchorSessionIDs = nil

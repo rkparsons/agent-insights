@@ -129,6 +129,16 @@ type repeatScore struct {
 	AdjApplied     []string
 }
 
+func nuancePassCount(nuances []bool) int {
+	n := 0
+	for _, ok := range nuances {
+		if ok {
+			n++
+		}
+	}
+	return n
+}
+
 // aggregateRepeat folds one matcher read into a target outcome: forbidden-form
 // cap first (one bad item caps the whole target at over_generalized — spec),
 // then deterministic corroboration; the best counted match decides
@@ -158,7 +168,7 @@ func aggregateRepeat(r Rubric, items map[string]ScoredItem, res MatchResult, anc
 		}
 		c := cand{gran: gran, corro: Corroborate(it, r.Repos[0], anchors, capAnchors), item: it, nuances: m.NuanceResults}
 		switch c.corro {
-		case CorroborationOK, CorroborationNoAnchors:
+		case CorroborationOK, CorroborationGrounded, CorroborationNoAnchors:
 			c.counted = true
 		case CorroborationMismatch, CorroborationSizeCap:
 			k := AdjKey{TargetID: r.ID, Statement: normalizeStatement(it.Text),
@@ -170,14 +180,38 @@ func aggregateRepeat(r Rubric, items map[string]ScoredItem, res MatchResult, anc
 		}
 		cands = append(cands, c)
 	}
+	// Counting order: granularity, then nuance carriage, then corroboration
+	// strength, then ID. Nuance-richer ties keep the depth metric (nuance
+	// medians, watermarks) from degrading when several items count equally;
+	// recall-corroborated over grounded keeps grounding-only oversight from
+	// firing when an equally-good fully-corroborated item counts.
+	rank := func(c cand) [3]int {
+		strength := 0
+		if c.corro == CorroborationOK {
+			strength = 1
+		}
+		return [3]int{granularityRank[c.gran], nuancePassCount(c.nuances), strength}
+	}
 	best := -1
 	for i, c := range cands {
 		if !c.counted {
 			continue
 		}
-		if best < 0 || granularityRank[c.gran] > granularityRank[cands[best].gran] ||
-			(granularityRank[c.gran] == granularityRank[cands[best].gran] && c.item.ID < cands[best].item.ID) {
+		if best < 0 {
 			best = i
+			continue
+		}
+		cr, br := rank(c), rank(cands[best])
+		for d := range cr {
+			if cr[d] != br[d] {
+				if cr[d] > br[d] {
+					best = i
+				}
+				break
+			}
+			if d == len(cr)-1 && c.item.ID < cands[best].item.ID {
+				best = i
+			}
 		}
 	}
 	if best >= 0 {
