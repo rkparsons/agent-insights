@@ -149,3 +149,37 @@ func TestComputeSignalsZeroHeavyFrictionDensity(t *testing.T) {
 		t.Errorf("friction_density magnitude = %d, want 3", fd.Magnitude)
 	}
 }
+
+func TestMechanicalFrictionSignalFloor(t *testing.T) {
+	group := []insights.AgentSessionAnalysis{
+		mechSession("s1", map[string]int{"edit_before_read": 1}, nil, nil),
+		mechSession("s2", map[string]int{"wrong_cwd": 1}, nil, nil),
+	}
+	b := BuildBundle("r", group)
+	for _, g := range b.Signals {
+		if g.Kind == "mechanical_friction" {
+			t.Errorf("signal emitted below floor: %+v", g)
+		}
+	}
+}
+
+func TestMechanicalFrictionSignalEmitted(t *testing.T) {
+	group := []insights.AgentSessionAnalysis{
+		mechSession("s1", map[string]int{"edit_before_read": 1}, nil, nil),
+		mechSession("s2", map[string]int{"wrong_cwd": 1}, nil, nil),
+		mechSession("s3", map[string]int{"permission": 2}, nil, nil),
+	}
+	b := BuildBundle("r", group)
+	var found *OppSignal
+	for i := range b.Signals {
+		if b.Signals[i].Kind == "mechanical_friction" {
+			found = &b.Signals[i]
+		}
+	}
+	if found == nil {
+		t.Fatal("mechanical_friction signal missing at floor")
+	}
+	if found.Magnitude != 3 || len(found.MemberSessions) != 3 {
+		t.Errorf("signal = %+v, want magnitude 3", found)
+	}
+}

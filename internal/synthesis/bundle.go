@@ -38,6 +38,10 @@ type OppSignal struct {
 	Kind           string   `json:"kind"`
 	Magnitude      int      `json:"magnitude"`
 	MemberSessions []string `json:"member_sessions"`
+	// Detail: mode names / verbatim exemplar text only, ranked by array order —
+	// never counts (the numberClaim guard has holes; if Detail carries no
+	// numbers, none can leak into prose).
+	Detail []string `json:"detail,omitempty"`
 }
 type ContextRollup struct {
 	Skills       map[string]int `json:"skills"`
@@ -164,14 +168,17 @@ func computeSignals(group []insights.AgentSessionAnalysis) []OppSignal {
 	}
 
 	var out []OppSignal
-	add := func(kind string, members []string) {
+	add := func(kind string, members, detail []string) {
 		if len(members) >= signalFloor {
-			out = append(out, OppSignal{ID: fmt.Sprintf("G%d", len(out)+1), Kind: kind, Magnitude: len(members), MemberSessions: members})
+			out = append(out, OppSignal{ID: fmt.Sprintf("G%d", len(out)+1), Kind: kind,
+				Magnitude: len(members), MemberSessions: members, Detail: detail})
 		}
 	}
-	add("high_read", highRead)
-	add("friction_density", fricDensity)
-	add("unskilled_toil", unskilled)
+	add("high_read", highRead, nil)
+	add("friction_density", fricDensity, nil)
+	add("unskilled_toil", unskilled, nil)
+	mm, md := mechanicalFrictionMembers(group)
+	add("mechanical_friction", mm, md)
 	return out
 }
 
