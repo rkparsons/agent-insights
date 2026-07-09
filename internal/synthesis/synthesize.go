@@ -13,6 +13,10 @@ type ValidationReport struct {
 	HardErrors       []string
 }
 
+var validAudiences = map[string]bool{
+	"user": true, "orchestrator": true, "subagents": true, "both": true, "automation": true,
+}
+
 func Synthesize(ctx context.Context, repoKey string, group []insights.AgentSessionAnalysis, syn Synthesizer, adopt AdoptChecker) (RepoSynthesis, ValidationReport, error) {
 	b := BuildBundle(repoKey, group)
 	raw, err := syn.Synthesize(ctx, b)
@@ -68,10 +72,16 @@ func Finalize(repoKey string, b EvidenceBundle, raw RawSynthesis, adopt AdoptChe
 				}
 			}
 		}
+		if rr.Audience != "" && !validAudiences[rr.Audience] {
+			hard = append(hard, "invalid audience "+rr.Audience+": "+rr.Statement)
+		}
+		if rr.Type == "claude_md_rule" && rr.Audience == "" {
+			hard = append(hard, "claude_md_rule missing audience: "+rr.Statement)
+		}
 		kept, dropped := qi.filter(rr.CitedQuotes)
 		rawCited += len(rr.CitedQuotes)
 		droppedCited += dropped
-		rec := Recommendation{Type: rr.Type, Statement: rr.Statement, ThemeRefs: rr.ThemeRefs, Quotes: kept}
+		rec := Recommendation{Type: rr.Type, Statement: rr.Statement, ThemeRefs: rr.ThemeRefs, Quotes: kept, Audience: rr.Audience}
 		rec.SessionCount = distinctSessions(b, rr.EvidenceIDs)
 		rec.AlreadyAdopted = adopt(rec)
 		recs = append(recs, rec)

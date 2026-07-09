@@ -30,7 +30,9 @@
           "statement": {"type": "string"},
           "evidence_ids": {"type": "array", "items": {"type": "string"}},
           "theme_refs": {"type": "array", "items": {"type": "integer"}},
-          "cited_quotes": {"type": "array", "items": {"type": "string"}}
+          "cited_quotes": {"type": "array", "items": {"type": "string"}},
+          "audience": {"type": "string", "enum": ["user", "orchestrator", "subagents", "both", "automation"],
+            "description": "Who must see the asset for it to bind. REQUIRED for claude_md_rule; optional otherwise."}
         }
       }
     }

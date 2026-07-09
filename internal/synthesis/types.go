@@ -22,6 +22,7 @@ type Recommendation struct {
 	SessionCount   int      `json:"session_count"`
 	Quotes         []string `json:"quotes"`
 	AlreadyAdopted string   `json:"already_adopted"`
+	Audience       string   `json:"audience,omitempty"` // must survive the verify-cache round-trip
 }
 type Window struct {
 	From          string `json:"from"`

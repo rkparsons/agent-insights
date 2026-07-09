@@ -14,6 +14,7 @@ type RawRec struct {
 	EvidenceIDs []string `json:"evidence_ids"`
 	ThemeRefs   []int    `json:"theme_refs"`
 	CitedQuotes []string `json:"cited_quotes"`
+	Audience    string   `json:"audience,omitempty"`
 }
 type RawSynthesis struct {
 	Themes          []RawTheme `json:"themes"`

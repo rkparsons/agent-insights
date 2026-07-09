@@ -2,6 +2,7 @@ package synthesis
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ func TestSynthesizeEndToEnd(t *testing.T) {
 		Themes: []RawTheme{{Title: "Investigate first", Kind: "friction", EvidenceIDs: []string{"F1", "F2"},
 			Summary: "asks what the codebase answers", CitedQuotes: []string{"investigate the existing pattern first"}}},
 		Recommendations: []RawRec{{Type: "claude_md_rule", Statement: "Investigate existing patterns before writing new code",
-			EvidenceIDs: []string{"F1"}, ThemeRefs: []int{0}, CitedQuotes: []string{"investigate the existing pattern first"}}},
+			EvidenceIDs: []string{"F1"}, ThemeRefs: []int{0}, CitedQuotes: []string{"investigate the existing pattern first"}, Audience: "orchestrator"}},
 	}}
 	adopt := func(r Recommendation) string { return "no" }
 
@@ -99,7 +100,7 @@ func TestSynthesizeClaudeMdRuleRejectsSuccessOnlyEvidence(t *testing.T) {
 func TestSynthesizeClaudeMdRuleAcceptsPrefEvidence(t *testing.T) {
 	group := []insights.AgentSessionAnalysis{prefAnalysis("s1", "no bloat", "please avoid bloat in this codebase")}
 	fake := fakeSynth{raw: RawSynthesis{
-		Recommendations: []RawRec{{Type: "claude_md_rule", Statement: "Avoid unnecessary bloat", EvidenceIDs: []string{"P1"}}},
+		Recommendations: []RawRec{{Type: "claude_md_rule", Statement: "Avoid unnecessary bloat", EvidenceIDs: []string{"P1"}, Audience: "both"}},
 	}}
 	adopt := func(r Recommendation) string { return "unknown" }
 
@@ -199,6 +200,46 @@ func TestFinalizeIsDeterministicAndUsesProvidedTime(t *testing.T) {
 	}
 	if rs1.Repo != "myrepo" || len(rs1.Themes) != 1 {
 		t.Fatalf("unexpected synthesis: %+v", rs1)
+	}
+}
+
+func TestAudienceValidation(t *testing.T) {
+	b := EvidenceBundle{Prefs: []PrefItem{{ID: "P1", Rule: "r", Quote: "q", SessionID: "s1"}}}
+	adopt := func(Recommendation) string { return "unknown" }
+	cases := []struct {
+		name     string
+		rec      RawRec
+		wantHard bool
+	}{
+		{"claude_md_rule with valid audience", RawRec{Type: "claude_md_rule", Statement: "s", EvidenceIDs: []string{"P1"}, Audience: "subagents"}, false},
+		{"claude_md_rule missing audience", RawRec{Type: "claude_md_rule", Statement: "s", EvidenceIDs: []string{"P1"}}, true},
+		{"invalid audience value", RawRec{Type: "habit", Statement: "s", Audience: "everyone"}, true},
+		{"non-rule without audience is fine", RawRec{Type: "habit", Statement: "s"}, false},
+		{"user audience valid", RawRec{Type: "new_skill", Statement: "s", Audience: "user"}, false},
+	}
+	for _, c := range cases {
+		rs, rep := Finalize("r", b, RawSynthesis{Recommendations: []RawRec{c.rec}}, adopt, time.Unix(0, 0).UTC())
+		if got := len(rep.HardErrors) > 0; got != c.wantHard {
+			t.Errorf("%s: hard=%v (%v), want %v", c.name, got, rep.HardErrors, c.wantHard)
+		}
+		if !c.wantHard && rs.Recommendations[0].Audience != c.rec.Audience {
+			t.Errorf("%s: audience not carried: %+v", c.name, rs.Recommendations[0])
+		}
+	}
+}
+
+func TestAudienceSurvivesRoundTrip(t *testing.T) {
+	rec := Recommendation{Type: "claude_md_rule", Statement: "s", Audience: "both"}
+	raw, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back Recommendation
+	if err := json.Unmarshal(raw, &back); err != nil {
+		t.Fatal(err)
+	}
+	if back.Audience != "both" {
+		t.Errorf("audience lost in round-trip (the SignalRefs json:\"-\" lesson): %+v", back)
 	}
 }
 
