@@ -38,6 +38,9 @@ func Finalize(repoKey string, b EvidenceBundle, raw RawSynthesis, adopt AdoptChe
 	for _, p := range b.Prefs {
 		poolQuotes = append(poolQuotes, p.Quote)
 	}
+	for _, g := range b.Signals {
+		poolQuotes = append(poolQuotes, g.Detail...)
+	}
 	qi := newQuoteIndex(poolQuotes)
 
 	themes, unthemed, hard := validateAndCount(b, raw)

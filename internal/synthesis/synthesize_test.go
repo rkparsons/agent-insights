@@ -201,3 +201,23 @@ func TestFinalizeIsDeterministicAndUsesProvidedTime(t *testing.T) {
 		t.Fatalf("unexpected synthesis: %+v", rs1)
 	}
 }
+
+func TestDetailExemplarsQuotable(t *testing.T) {
+	b := EvidenceBundle{
+		Signals: []OppSignal{{ID: "G1", Kind: "retyped_directives", Magnitude: 3,
+			MemberSessions: []string{"s1", "s2", "s3"},
+			Detail:         []string{"please assign an opus subagent to do a critical review"}}},
+	}
+	raw := RawSynthesis{Themes: []RawTheme{{
+		Title: "Recurring review ritual", Kind: "opportunity", Summary: "promote the ritual to a skill",
+		SignalRefs:  []string{"G1"},
+		CitedQuotes: []string{"please assign an opus subagent to do a critical review"},
+	}}}
+	rs, rep := Finalize("r", b, raw, func(Recommendation) string { return "unknown" }, time.Unix(0, 0).UTC())
+	if len(rep.HardErrors) != 0 {
+		t.Fatalf("hard errors: %v", rep.HardErrors)
+	}
+	if len(rs.Themes[0].Quotes) != 1 {
+		t.Errorf("detail exemplar quote was dropped: %+v", rs.Themes[0])
+	}
+}
