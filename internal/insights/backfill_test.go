@@ -139,3 +139,41 @@ func TestBackfillSkipStaleGateOnThresholdChange(t *testing.T) {
 		t.Error("lower threshold should re-evaluate (not skip)")
 	}
 }
+
+func TestMetaTranscriptExclusion(t *testing.T) {
+	meta := []string{
+		"/h/.claude/projects/-Users-r-Developer-tmux-ctrl--worktrees-insights-generation/aa.jsonl",
+		"/h/.claude/projects/-Users-r-Developer-tmux-ctrl--worktrees-insights-generation-src/bb.jsonl",
+		"/h/.claude/projects/-Users-r-Developer-insights-eval-data/cc.jsonl",
+		"/h/.claude/projects/-Users-r-Developer-client-project--worktrees-run-insights-command/dd.jsonl",
+		"/h/.claude/projects/-Users-r-Developer-client-project--worktrees-facet-extractor/ee.jsonl",
+		"/h/.claude/projects/-private-tmp-claude-501--Users-r--worktrees-insights-generation-x-scratchpad/ff.jsonl",
+	}
+	for _, p := range meta {
+		if !metaTranscript(p) {
+			t.Errorf("want meta-excluded: %s", p)
+		}
+	}
+	nonMeta := []string{
+		"/h/.claude/projects/-Users-r-Developer-tmux-ctrl/gg.jsonl",
+		"/h/.claude/projects/-Users-r-Developer-client-project--worktrees-fix-login/hh.jsonl",
+		"/h/.claude/projects/-Users-r-Developer-dotfiles/ii.jsonl",
+	}
+	for _, p := range nonMeta {
+		if metaTranscript(p) {
+			t.Errorf("want kept: %s", p)
+		}
+	}
+}
+
+func TestPlanCountsMetaEvenUnderForce(t *testing.T) {
+	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	refs := []claude.TranscriptRef{
+		{SessionID: "meta1", Path: "/h/.claude/projects/-Users-r-Developer-insights-eval-data/meta1.jsonl"},
+		{SessionID: "real1", Path: "/h/.claude/projects/-Users-r-Developer-tmux-ctrl/real1.jsonl"},
+	}
+	c := planCounts(refs, map[string]ManifestEntry{}, Options{Force: true, MinAssistantTurns: 5})
+	if c.Meta != 1 || c.ToProcess != 1 {
+		t.Errorf("want Meta=1 ToProcess=1 under --force, got %+v", c)
+	}
+}

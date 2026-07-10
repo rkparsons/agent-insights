@@ -24,6 +24,7 @@ type RunSummary struct {
 	Analyzed           int
 	SkippedIncremental int
 	SkippedGate        int
+	SkippedMeta        int
 	Errored            int
 	DroppedPreferences int
 

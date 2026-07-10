@@ -61,7 +61,7 @@ func RunInsights(args []string) {
 		if opts.DryRun {
 			label = "insights (dry-run):"
 		}
-		fmt.Fprintf(os.Stderr, "%s %d to process · %d already done · %d gated\n", label, plan.ToProcess, plan.Done, plan.Gated)
+		fmt.Fprintf(os.Stderr, "%s %d to process · %d already done · %d gated · %d meta-excluded\n", label, plan.ToProcess, plan.Done, plan.Gated, plan.Meta)
 		if opts.DryRun {
 			return
 		}
@@ -74,8 +74,8 @@ func RunInsights(args []string) {
 	case "backfill":
 		sum, err = insights.RunBackfill(context.Background(), repo, judge, opts)
 	}
-	fmt.Fprintf(os.Stderr, "insights: scanned=%d analyzed=%d skipped-incremental=%d skipped-gate=%d errored=%d dropped-preferences=%d\n",
-		sum.Scanned, sum.Analyzed, sum.SkippedIncremental, sum.SkippedGate, sum.Errored, sum.DroppedPreferences)
+	fmt.Fprintf(os.Stderr, "insights: scanned=%d analyzed=%d skipped-incremental=%d skipped-gate=%d skipped-meta=%d errored=%d dropped-preferences=%d\n",
+		sum.Scanned, sum.Analyzed, sum.SkippedIncremental, sum.SkippedGate, sum.SkippedMeta, sum.Errored, sum.DroppedPreferences)
 	if sum.Parked {
 		fmt.Fprintf(os.Stderr, "insights: parked — %d done · %d remaining · re-run the same command to continue\n", sum.Analyzed, sum.Remaining)
 	}

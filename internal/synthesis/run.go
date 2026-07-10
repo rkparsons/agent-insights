@@ -56,7 +56,9 @@ func RunSynthesize(ctx context.Context, syn Synthesizer, opts Options) (Summary,
 	date := time.Now().UTC().Format("2006-01-02")
 	for _, k := range keys {
 		adopt := NewAdoptChecker(repoPathFor(groups[k]))
-		rctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+		// v4+ skill syntheses run 8–14 min; 10m killed them after burning
+		// spend (same raise as insightseval's l2SynthesisTimeout).
+		rctx, cancel := context.WithTimeout(ctx, 20*time.Minute)
 		rs, report, err := Synthesize(rctx, k, groups[k], syn, adopt)
 		cancel()
 		if err != nil {

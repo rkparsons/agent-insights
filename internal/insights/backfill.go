@@ -2,6 +2,8 @@ package insights
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"tmux-ctrl/internal/sources/claude"
@@ -35,6 +37,10 @@ func RunBackfill(ctx context.Context, repo RepoResolver, judge Judge, opts Optio
 	for _, ref := range refs {
 		sum.Scanned++
 
+		if metaTranscript(ref.Path) {
+			sum.SkippedMeta++
+			continue
+		}
 		if !opts.Force {
 			if reason, skip := backfillSkip(ref, manifest, opts.MinAssistantTurns); skip {
 				switch reason {
@@ -93,35 +99,52 @@ func RunBackfill(ctx context.Context, repo RepoResolver, judge Judge, opts Optio
 // the signature of a hit usage window (rate-limited claude -p calls fail or hang).
 const consecutiveFailureLimit = 3
 
+// metaTranscript reports whether a transcript belongs to insights/facet
+// meta-work (the tuning worktrees, the eval data repo, their scratchpads).
+// Those sessions quote rubric statements, pool preferences, and eval output as
+// data, so analyzing them inverts findings — a discussed rule reads as a live
+// user preference. Keyed on the project-dir segment (the flattened cwd), so
+// the exclusion is pre-decode and holds even under --force; `analyze
+// <session>` single mode stays the explicit override.
+func metaTranscript(path string) bool {
+	dir := filepath.Base(filepath.Dir(path))
+	return strings.Contains(dir, "insights") || strings.Contains(dir, "facet")
+}
+
 // countRemaining reports how many deduped sessions still need analysis: neither done (a
 // current analysis file) nor gated at the current threshold. Errored sessions count as
 // remaining. Read-only over the analysis files + in-memory manifest; no transcript decode.
 func countRemaining(refs []claude.TranscriptRef, manifest map[string]ManifestEntry, opts Options) int {
-	_, _, pending := planCounts(refs, manifest, opts)
-	return pending
+	return planCounts(refs, manifest, opts).ToProcess
 }
 
-// planCounts classifies each deduped ref by the cheap pre-decode signals: done (current
-// analysis file), gated (manifest entry at this threshold), or pending (everything else —
-// including previously-errored and never-seen sessions). Under --force nothing is skipped,
-// so every session is pending. No transcript decode, so pending is an upper bound: a
-// never-seen session that turns out trivial gates only once actually decoded.
-func planCounts(refs []claude.TranscriptRef, manifest map[string]ManifestEntry, opts Options) (done, gated, pending int) {
+// planCounts classifies each deduped ref by the cheap pre-decode signals: meta
+// (insights/facet meta-work, excluded even under --force), done (current
+// analysis file), gated (manifest entry at this threshold), or pending
+// (everything else — including previously-errored and never-seen sessions).
+// No transcript decode, so pending is an upper bound: a never-seen session
+// that turns out trivial gates only once actually decoded.
+func planCounts(refs []claude.TranscriptRef, manifest map[string]ManifestEntry, opts Options) BackfillCounts {
+	var c BackfillCounts
 	for _, ref := range refs {
+		if metaTranscript(ref.Path) {
+			c.Meta++
+			continue
+		}
 		if !opts.Force {
 			if reason, skip := backfillSkip(ref, manifest, opts.MinAssistantTurns); skip {
 				switch reason {
 				case "incremental":
-					done++
+					c.Done++
 				case "gate":
-					gated++
+					c.Gated++
 				}
 				continue
 			}
 		}
-		pending++
+		c.ToProcess++
 	}
-	return done, gated, pending
+	return c
 }
 
 // BackfillCounts is the pre-run split surfaced by BackfillPlan.
@@ -129,6 +152,7 @@ type BackfillCounts struct {
 	ToProcess int // sessions lacking a current analysis file and not gated (upper bound; see planCounts)
 	Done      int // sessions with a current analysis file
 	Gated     int // sessions recorded gated at the current threshold
+	Meta      int // insights/facet meta-work sessions, never analyzed
 }
 
 // BackfillPlan classifies every top-level session by the cheap pre-decode signals and
@@ -144,8 +168,7 @@ func BackfillPlan(opts Options) (BackfillCounts, error) {
 	if err != nil {
 		return BackfillCounts{}, err
 	}
-	done, gated, pending := planCounts(dedupNewest(refs), manifest, opts)
-	return BackfillCounts{ToProcess: pending, Done: done, Gated: gated}, nil
+	return planCounts(dedupNewest(refs), manifest, opts), nil
 }
 
 func recordErrored(sum *RunSummary, manifest *map[string]ManifestEntry, ref claude.TranscriptRef, err error) {
