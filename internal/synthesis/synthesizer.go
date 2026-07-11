@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	_ "embed"
 )
@@ -115,6 +116,10 @@ func newSynthesizeCommand(ctx context.Context, model, schema string, stdin []byt
 		// suppressed.
 		"--no-session-persistence")
 	cmd.Stdin = bytes.NewReader(stdin)
+	// A context kill only signals the direct child; claude's own subprocesses
+	// inherit the stdout pipe and can strand Output() long past the deadline
+	// (observed: a 20m kill draining for hours). WaitDelay forcibly closes.
+	cmd.WaitDelay = 30 * time.Second
 	cmd.Env = scrubbedEnv()
 	// Appended last so it wins over any inherited CLAUDE_CONFIG_DIR (os/exec
 	// keeps the last duplicate). Pinning both knobs keeps a nested claude from
