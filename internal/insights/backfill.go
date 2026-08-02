@@ -34,6 +34,7 @@ func RunBackfill(ctx context.Context, repo RepoResolver, judge Judge, opts Optio
 	refs = dedupNewest(refs)
 	var sum RunSummary
 	consecutiveFailures := 0
+	now := time.Now()
 	for _, ref := range refs {
 		sum.Scanned++
 
@@ -42,12 +43,14 @@ func RunBackfill(ctx context.Context, repo RepoResolver, judge Judge, opts Optio
 			continue
 		}
 		if !opts.Force {
-			if reason, skip := backfillSkip(ref, manifest, opts.MinAssistantTurns); skip {
+			if reason, skip := backfillSkip(ref, manifest, opts, now); skip {
 				switch reason {
 				case "incremental":
 					sum.SkippedIncremental++
 				case "gate":
 					sum.SkippedGate++
+				case "quiet":
+					sum.SkippedQuiet++
 				}
 				continue
 			}
@@ -115,16 +118,16 @@ func metaTranscript(path string) bool {
 // current analysis file) nor gated at the current threshold. Errored sessions count as
 // remaining. Read-only over the analysis files + in-memory manifest; no transcript decode.
 func countRemaining(refs []claude.TranscriptRef, manifest map[string]ManifestEntry, opts Options) int {
-	return planCounts(refs, manifest, opts).ToProcess
+	return planCounts(refs, manifest, opts, time.Now()).ToProcess
 }
 
 // planCounts classifies each deduped ref by the cheap pre-decode signals: meta
 // (insights/facet meta-work, excluded even under --force), done (current
-// analysis file), gated (manifest entry at this threshold), or pending
-// (everything else — including previously-errored and never-seen sessions).
-// No transcript decode, so pending is an upper bound: a never-seen session
-// that turns out trivial gates only once actually decoded.
-func planCounts(refs []claude.TranscriptRef, manifest map[string]ManifestEntry, opts Options) BackfillCounts {
+// analysis file), gated (manifest entry at this threshold), quiet (inside the
+// quiet-for window), or pending (everything else — including previously-errored
+// and never-seen sessions). No transcript decode, so pending is an upper bound: a
+// never-seen session that turns out trivial gates only once actually decoded.
+func planCounts(refs []claude.TranscriptRef, manifest map[string]ManifestEntry, opts Options, now time.Time) BackfillCounts {
 	var c BackfillCounts
 	for _, ref := range refs {
 		if metaTranscript(ref.Path) {
@@ -132,12 +135,14 @@ func planCounts(refs []claude.TranscriptRef, manifest map[string]ManifestEntry, 
 			continue
 		}
 		if !opts.Force {
-			if reason, skip := backfillSkip(ref, manifest, opts.MinAssistantTurns); skip {
+			if reason, skip := backfillSkip(ref, manifest, opts, now); skip {
 				switch reason {
 				case "incremental":
 					c.Done++
 				case "gate":
 					c.Gated++
+				case "quiet":
+					c.Quiet++
 				}
 				continue
 			}
@@ -152,6 +157,7 @@ type BackfillCounts struct {
 	ToProcess int // sessions lacking a current analysis file and not gated (upper bound; see planCounts)
 	Done      int // sessions with a current analysis file
 	Gated     int // sessions recorded gated at the current threshold
+	Quiet     int // sessions inside the quiet-for window
 	Meta      int // insights/facet meta-work sessions, never analyzed
 }
 
@@ -168,7 +174,7 @@ func BackfillPlan(opts Options) (BackfillCounts, error) {
 	if err != nil {
 		return BackfillCounts{}, err
 	}
-	return planCounts(dedupNewest(refs), manifest, opts), nil
+	return planCounts(dedupNewest(refs), manifest, opts, time.Now()), nil
 }
 
 func recordErrored(sum *RunSummary, manifest *map[string]ManifestEntry, ref claude.TranscriptRef, err error) {
@@ -179,18 +185,18 @@ func recordErrored(sum *RunSummary, manifest *map[string]ManifestEntry, ref clau
 }
 
 // backfillSkip implements the pre-decode skip rule. analyzed-fresh (a current analysis
-// file) wins; then a gated entry at the same threshold. Errored sessions are NOT skipped:
-// they have no analysis file, so they are simply "not done" and get retried next run.
-func backfillSkip(ref claude.TranscriptRef, m map[string]ManifestEntry, threshold int) (string, bool) {
+// file) wins; then a gated entry at the same threshold; then the quiet window. Errored
+// sessions are NOT skipped: they have no analysis file, so they are simply "not done" and
+// get retried next run.
+func backfillSkip(ref claude.TranscriptRef, m map[string]ManifestEntry, opts Options, now time.Time) (string, bool) {
 	if analyzedFresh(ref.SessionID, ref.Mtime) {
 		return "incremental", true
 	}
-	e, ok := m[ref.SessionID]
-	if !ok || e.TranscriptMtime.Before(ref.Mtime) {
-		return "", false
-	}
-	if e.Outcome == "gated" && e.Threshold == threshold {
+	if e, ok := m[ref.SessionID]; ok && !e.TranscriptMtime.Before(ref.Mtime) && e.Outcome == "gated" && e.Threshold == opts.MinAssistantTurns {
 		return "gate", true
+	}
+	if opts.QuietFor > 0 && now.Sub(ref.Mtime) < opts.QuietFor {
+		return "quiet", true
 	}
 	return "", false
 }

@@ -38,7 +38,7 @@ func RunInsights(args []string) {
 	mode, target, opts, err := parseInsightsArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", err)
-		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights analyze <session-id|path> | --backfill [--force] [--dry-run] [--threshold N] [--timeout 10m] | synthesize [--repo <repo-key>] [--min-sessions N] [--dry-run] | eval <freeze|outcome|score|adjudicate|probes|statuses> ...")
+		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights analyze <session-id|path> | --backfill [--force] [--dry-run] [--threshold N] [--timeout 10m] [--quiet-for 24h] | synthesize [--repo <repo-key>] [--min-sessions N] [--dry-run] | eval <freeze|outcome|score|adjudicate|probes|statuses> ...")
 		os.Exit(2)
 	}
 
@@ -61,7 +61,7 @@ func RunInsights(args []string) {
 		if opts.DryRun {
 			label = "insights (dry-run):"
 		}
-		fmt.Fprintf(os.Stderr, "%s %d to process · %d already done · %d gated · %d meta-excluded\n", label, plan.ToProcess, plan.Done, plan.Gated, plan.Meta)
+		fmt.Fprintf(os.Stderr, "%s %d to process · %d already done · %d gated · %d meta-excluded · %d quiet\n", label, plan.ToProcess, plan.Done, plan.Gated, plan.Meta, plan.Quiet)
 		if opts.DryRun {
 			return
 		}
@@ -74,8 +74,8 @@ func RunInsights(args []string) {
 	case "backfill":
 		sum, err = insights.RunBackfill(context.Background(), repo, judge, opts)
 	}
-	fmt.Fprintf(os.Stderr, "insights: scanned=%d analyzed=%d skipped-incremental=%d skipped-gate=%d skipped-meta=%d errored=%d dropped-preferences=%d\n",
-		sum.Scanned, sum.Analyzed, sum.SkippedIncremental, sum.SkippedGate, sum.SkippedMeta, sum.Errored, sum.DroppedPreferences)
+	fmt.Fprintf(os.Stderr, "insights: scanned=%d analyzed=%d skipped-incremental=%d skipped-gate=%d skipped-quiet=%d skipped-meta=%d errored=%d dropped-preferences=%d\n",
+		sum.Scanned, sum.Analyzed, sum.SkippedIncremental, sum.SkippedGate, sum.SkippedQuiet, sum.SkippedMeta, sum.Errored, sum.DroppedPreferences)
 	if sum.Parked {
 		fmt.Fprintf(os.Stderr, "insights: parked — %d done · %d remaining · re-run the same command to continue\n", sum.Analyzed, sum.Remaining)
 	}
@@ -123,6 +123,16 @@ func parseInsightsArgs(args []string) (mode, target string, opts insights.Option
 				return "", "", opts, fmt.Errorf("--timeout: %w", perr)
 			}
 			opts.Timeout = d
+		case a == "--quiet-for":
+			if i+1 >= len(rest) {
+				return "", "", opts, fmt.Errorf("--quiet-for needs a value")
+			}
+			i++
+			d, perr := time.ParseDuration(rest[i])
+			if perr != nil {
+				return "", "", opts, fmt.Errorf("--quiet-for: %w", perr)
+			}
+			opts.QuietFor = d
 		default:
 			if len(a) > 0 && a[0] == '-' {
 				return "", "", opts, fmt.Errorf("unknown flag %q", a)

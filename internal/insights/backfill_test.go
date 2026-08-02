@@ -130,13 +130,71 @@ func TestRunBackfillRecordsErrored(t *testing.T) {
 func TestBackfillSkipStaleGateOnThresholdChange(t *testing.T) {
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
 	mt := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	now := mt.Add(time.Minute)
 	ref := claude.TranscriptRef{SessionID: "s", Mtime: mt}
 	m := map[string]ManifestEntry{"s": {SessionID: "s", TranscriptMtime: mt, Outcome: "gated", Threshold: 5}}
-	if _, skip := backfillSkip(ref, m, 5); !skip {
+	if _, skip := backfillSkip(ref, m, Options{MinAssistantTurns: 5}, now); !skip {
 		t.Error("same threshold should skip")
 	}
-	if _, skip := backfillSkip(ref, m, 3); skip {
+	if _, skip := backfillSkip(ref, m, Options{MinAssistantTurns: 3}, now); skip {
 		t.Error("lower threshold should re-evaluate (not skip)")
+	}
+}
+
+func TestBackfillSkipQuiet(t *testing.T) {
+	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
+	ref := claude.TranscriptRef{SessionID: "s1", Path: "/p/s1.jsonl", Mtime: now.Add(-1 * time.Hour)}
+	cases := []struct {
+		name     string
+		quietFor time.Duration
+		mtimeAgo time.Duration
+		reason   string
+		skip     bool
+	}{
+		{"disabled", 0, time.Hour, "", false},
+		{"inside window", 24 * time.Hour, time.Hour, "quiet", true},
+		{"at boundary", 24 * time.Hour, 24 * time.Hour, "", false},
+		{"outside window", 24 * time.Hour, 25 * time.Hour, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := ref
+			r.Mtime = now.Add(-tc.mtimeAgo)
+			reason, skip := backfillSkip(r, map[string]ManifestEntry{}, Options{QuietFor: tc.quietFor}, now)
+			if reason != tc.reason || skip != tc.skip {
+				t.Fatalf("got (%q,%v) want (%q,%v)", reason, skip, tc.reason, tc.skip)
+			}
+		})
+	}
+}
+
+// Incremental is checked before quiet, so a session that is both analyzed-fresh and
+// inside the quiet window still reports "incremental" — Done/Gated counts keep their
+// pre-existing meaning and quiet only ever picks up sessions incremental didn't.
+func TestBackfillSkipIncrementalBeatsQuiet(t *testing.T) {
+	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
+	mt := now.Add(-1 * time.Hour) // inside a 24h quiet window
+	if err := WriteAnalysis(AgentSessionAnalysis{Stats: AgentSessionStats{SessionID: "s1"}, TranscriptMtime: mt}); err != nil {
+		t.Fatal(err)
+	}
+	ref := claude.TranscriptRef{SessionID: "s1", Path: "/p/s1.jsonl", Mtime: mt}
+	reason, skip := backfillSkip(ref, map[string]ManifestEntry{}, Options{QuietFor: 24 * time.Hour}, now)
+	if reason != "incremental" || !skip {
+		t.Fatalf("got (%q,%v) want (\"incremental\",true)", reason, skip)
+	}
+}
+
+func TestPlanCountsQuiet(t *testing.T) {
+	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
+	refs := []claude.TranscriptRef{
+		{SessionID: "quiet1", Path: "/h/.claude/projects/-Users-r-Developer-tmux-ctrl/quiet1.jsonl", Mtime: now.Add(-1 * time.Hour)},
+	}
+	c := planCounts(refs, map[string]ManifestEntry{}, Options{QuietFor: 24 * time.Hour, MinAssistantTurns: 5}, now)
+	if c.Quiet != 1 || c.ToProcess != 0 {
+		t.Errorf("want Quiet=1 ToProcess=0, got %+v", c)
 	}
 }
 
@@ -172,7 +230,7 @@ func TestPlanCountsMetaEvenUnderForce(t *testing.T) {
 		{SessionID: "meta1", Path: "/h/.claude/projects/-Users-r-Developer-insights-eval-data/meta1.jsonl"},
 		{SessionID: "real1", Path: "/h/.claude/projects/-Users-r-Developer-tmux-ctrl/real1.jsonl"},
 	}
-	c := planCounts(refs, map[string]ManifestEntry{}, Options{Force: true, MinAssistantTurns: 5})
+	c := planCounts(refs, map[string]ManifestEntry{}, Options{Force: true, MinAssistantTurns: 5}, time.Now())
 	if c.Meta != 1 || c.ToProcess != 1 {
 		t.Errorf("want Meta=1 ToProcess=1 under --force, got %+v", c)
 	}

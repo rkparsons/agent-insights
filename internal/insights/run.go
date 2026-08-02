@@ -16,6 +16,9 @@ type Options struct {
 	Timeout           time.Duration
 	Force             bool
 	DryRun            bool // backfill only: count the plan and print it, spend nothing
+	// QuietFor skips transcripts modified within this window, so still-active
+	// sessions aren't analyzed mid-flight; 0 disables.
+	QuietFor time.Duration
 }
 
 // RunSummary is the end-of-run tally surfaced to the user.
@@ -24,6 +27,7 @@ type RunSummary struct {
 	Analyzed           int
 	SkippedIncremental int
 	SkippedGate        int
+	SkippedQuiet       int
 	SkippedMeta        int
 	Errored            int
 	DroppedPreferences int
