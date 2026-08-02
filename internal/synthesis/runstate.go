@@ -13,14 +13,14 @@ import (
 // RunState is the last-run record for `insights synthesize`, read by the TUI
 // to show due/running/error state.
 type RunState struct {
-	Status     string    `json:"status"` // "running" | "ok" | "failed"
-	PID        int       `json:"pid"`
-	StartedAt  time.Time `json:"started_at"`
-	FinishedAt time.Time `json:"finished_at,omitempty"`
-	Written    int       `json:"written"`
-	Skipped    int       `json:"skipped"`
-	Reason     string    `json:"reason,omitempty"`
-	LogPath    string    `json:"log_path,omitempty"`
+	Status     string     `json:"status"` // "running" | "ok" | "failed"
+	PID        int        `json:"pid"`
+	StartedAt  time.Time  `json:"started_at"`
+	FinishedAt *time.Time `json:"finished_at,omitempty"` // pointer: omitempty is a no-op on time.Time itself
+	Written    int        `json:"written"`
+	Skipped    int        `json:"skipped"`
+	Reason     string     `json:"reason,omitempty"`
+	LogPath    string     `json:"log_path,omitempty"`
 }
 
 func runStatePath() string { return filepath.Join(insights.InsightsDir(), "synthesis-run.json") }

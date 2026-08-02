@@ -2,10 +2,13 @@ package synthesis
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 type errSynthesizer struct{}
@@ -28,8 +31,22 @@ func TestRunStateLifecycle(t *testing.T) {
 	if !ok || rs.Status != "ok" || rs.Written != 0 || rs.LogPath != "/tmp/x.log" {
 		t.Fatalf("got %+v ok=%v", rs, ok)
 	}
-	if rs.PID != os.Getpid() || rs.StartedAt.IsZero() || rs.FinishedAt.IsZero() {
+	if rs.PID != os.Getpid() || rs.StartedAt.IsZero() || rs.FinishedAt == nil || rs.FinishedAt.IsZero() {
 		t.Fatalf("identity fields: %+v", rs)
+	}
+}
+
+// TestRunStateRunningOmitsFinishedAt guards the bug where a plain (non-pointer)
+// time.Time made `omitempty` a no-op: the "running" record written before a
+// run completes must not carry a zero-value finished_at.
+func TestRunStateRunningOmitsFinishedAt(t *testing.T) {
+	rs := RunState{Status: "running", PID: os.Getpid(), StartedAt: time.Now().UTC()}
+	data, err := json.Marshal(rs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "finished_at") {
+		t.Fatalf("running record must omit finished_at, got %s", data)
 	}
 }
 

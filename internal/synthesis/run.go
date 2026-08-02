@@ -85,7 +85,8 @@ func RunSynthesize(ctx context.Context, syn Synthesizer, opts Options) (sum Summ
 	writeRunState(rs)
 	var failures []string
 	defer func() {
-		rs.FinishedAt = time.Now().UTC()
+		finishedAt := time.Now().UTC()
+		rs.FinishedAt = &finishedAt
 		rs.Written, rs.Skipped = sum.Written, sum.Skipped
 		rs.Status = "ok"
 		if retErr != nil {
