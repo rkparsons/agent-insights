@@ -14,6 +14,8 @@ type Options struct {
 	Repo        string
 	MinSessions int
 	DryRun      bool
+	Due         bool          // only synthesize repos DueRepos reports
+	Cadence     time.Duration // due-ness age threshold; 0 = DefaultCadence
 }
 type Summary struct {
 	Repos   int
@@ -39,6 +41,27 @@ func RunSynthesize(ctx context.Context, syn Synthesizer, opts Options) (Summary,
 	}
 	sort.Strings(keys)
 
+	if opts.Due {
+		cadence := opts.Cadence
+		if cadence == 0 {
+			cadence = DefaultCadence
+		}
+		syntheses, err := LoadSyntheses()
+		if err != nil {
+			return Summary{}, err
+		}
+		dueSet := make(map[string]bool)
+		for _, k := range DueRepos(groups, syntheses, cadence, time.Now()) {
+			dueSet[k] = true
+		}
+		kept := keys[:0]
+		for _, k := range keys {
+			if dueSet[k] {
+				kept = append(kept, k)
+			}
+		}
+		keys = kept
+	}
 	sum := Summary{Repos: len(keys)}
 	if opts.DryRun {
 		for _, k := range keys {

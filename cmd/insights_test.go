@@ -67,3 +67,13 @@ func TestParseSynthesizeArgs(t *testing.T) {
 		t.Error("expected error on unknown flag")
 	}
 }
+
+func TestParseSynthesizeArgsDue(t *testing.T) {
+	o, err := parseSynthesizeArgs([]string{"--due"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !o.Due {
+		t.Errorf("parsed = %+v, want Due=true", o)
+	}
+}

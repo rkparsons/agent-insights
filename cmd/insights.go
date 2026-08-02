@@ -23,8 +23,16 @@ func RunInsights(args []string) {
 		sopts, serr := parseSynthesizeArgs(args[1:])
 		if serr != nil {
 			fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", serr)
-			fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights synthesize [--repo <repo-key>] [--min-sessions N] [--dry-run]")
+			fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run]")
 			os.Exit(2)
+		}
+		if sopts.Due {
+			cfg, cfgErr := userconfig.Load()
+			if cfgErr != nil {
+				fmt.Fprintf(os.Stderr, "tmux-ctrl insights: load config: %v\n", cfgErr)
+				os.Exit(1)
+			}
+			sopts.Cadence = time.Duration(cfg.InsightsCadenceDays()) * 24 * time.Hour
 		}
 		sum, err := synthesis.RunSynthesize(context.Background(), synthesis.NewClaudeSynthesizer(), sopts)
 		if err != nil {
@@ -38,7 +46,7 @@ func RunInsights(args []string) {
 	mode, target, opts, err := parseInsightsArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", err)
-		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights analyze <session-id|path> | --backfill [--force] [--dry-run] [--threshold N] [--timeout 10m] [--quiet-for 24h] | synthesize [--repo <repo-key>] [--min-sessions N] [--dry-run] | eval <freeze|outcome|score|adjudicate|probes|statuses> ...")
+		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights analyze <session-id|path> | --backfill [--force] [--dry-run] [--threshold N] [--timeout 10m] [--quiet-for 24h] | synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run] | eval <freeze|outcome|score|adjudicate|probes|statuses> ...")
 		os.Exit(2)
 	}
 
@@ -155,13 +163,15 @@ func parseInsightsArgs(args []string) (mode, target string, opts insights.Option
 	return "single", target, opts, nil
 }
 
-// parseSynthesizeArgs parses `synthesize [--repo <repo-key>] [--min-sessions N] [--dry-run]`.
+// parseSynthesizeArgs parses `synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run]`.
 func parseSynthesizeArgs(args []string) (synthesis.Options, error) {
 	var o synthesis.Options
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--dry-run":
 			o.DryRun = true
+		case "--due":
+			o.Due = true
 		case "--repo":
 			i++
 			if i >= len(args) {
