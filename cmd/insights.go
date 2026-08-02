@@ -23,7 +23,7 @@ func RunInsights(args []string) {
 		sopts, serr := parseSynthesizeArgs(args[1:])
 		if serr != nil {
 			fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", serr)
-			fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run]")
+			fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run] [--log <path>]")
 			os.Exit(2)
 		}
 		if sopts.Due {
@@ -46,7 +46,7 @@ func RunInsights(args []string) {
 	mode, target, opts, err := parseInsightsArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", err)
-		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights analyze <session-id|path> | --backfill [--force] [--dry-run] [--threshold N] [--timeout 10m] [--quiet-for 24h] | synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run] | eval <freeze|outcome|score|adjudicate|probes|statuses> ...")
+		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights analyze <session-id|path> | --backfill [--force] [--dry-run] [--threshold N] [--timeout 10m] [--quiet-for 24h] | synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run] [--log <path>] | eval <freeze|outcome|score|adjudicate|probes|statuses> ...")
 		os.Exit(2)
 	}
 
@@ -163,7 +163,7 @@ func parseInsightsArgs(args []string) (mode, target string, opts insights.Option
 	return "single", target, opts, nil
 }
 
-// parseSynthesizeArgs parses `synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run]`.
+// parseSynthesizeArgs parses `synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run] [--log <path>]`.
 func parseSynthesizeArgs(args []string) (synthesis.Options, error) {
 	var o synthesis.Options
 	for i := 0; i < len(args); i++ {
@@ -172,6 +172,12 @@ func parseSynthesizeArgs(args []string) (synthesis.Options, error) {
 			o.DryRun = true
 		case "--due":
 			o.Due = true
+		case "--log":
+			i++
+			if i >= len(args) {
+				return o, fmt.Errorf("--log needs a value")
+			}
+			o.LogPath = args[i]
 		case "--repo":
 			i++
 			if i >= len(args) {

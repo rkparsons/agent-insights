@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"tmux-ctrl/internal/insights"
@@ -16,6 +17,7 @@ type Options struct {
 	DryRun      bool
 	Due         bool          // only synthesize repos DueRepos reports
 	Cadence     time.Duration // due-ness age threshold; 0 = DefaultCadence
+	LogPath     string        // recorded in the run state; the spawner tees output here
 }
 type Summary struct {
 	Repos   int
@@ -23,12 +25,15 @@ type Summary struct {
 	Skipped int
 }
 
-func RunSynthesize(ctx context.Context, syn Synthesizer, opts Options) (Summary, error) {
+func RunSynthesize(ctx context.Context, syn Synthesizer, opts Options) (sum Summary, retErr error) {
 	if opts.MinSessions == 0 {
 		opts.MinSessions = DefaultMinSessions
 	}
+	// A store with no analyses yet (no repo has analyzed a session) is a valid
+	// empty state, not an error: RunSynthesize must still reach the run-state
+	// write below so due/running/error stays visible to the TUI.
 	analyses, err := LoadAnalyses()
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return Summary{}, err
 	}
 	groups := GroupByRepo(analyses, opts.MinSessions)
@@ -62,7 +67,7 @@ func RunSynthesize(ctx context.Context, syn Synthesizer, opts Options) (Summary,
 		}
 		keys = kept
 	}
-	sum := Summary{Repos: len(keys)}
+	sum = Summary{Repos: len(keys)}
 	if opts.DryRun {
 		for _, k := range keys {
 			fmt.Fprintf(os.Stderr, "synthesis (dry-run): %s · %d analyses\n", k, len(groups[k]))
@@ -76,6 +81,22 @@ func RunSynthesize(ctx context.Context, syn Synthesizer, opts Options) (Summary,
 	}
 	defer lock.Release()
 
+	rs := RunState{Status: "running", PID: os.Getpid(), StartedAt: time.Now().UTC(), LogPath: opts.LogPath}
+	writeRunState(rs)
+	var failures []string
+	defer func() {
+		rs.FinishedAt = time.Now().UTC()
+		rs.Written, rs.Skipped = sum.Written, sum.Skipped
+		rs.Status = "ok"
+		if retErr != nil {
+			failures = append(failures, retErr.Error())
+		}
+		if len(failures) > 0 {
+			rs.Status, rs.Reason = "failed", strings.Join(failures, "; ")
+		}
+		writeRunState(rs)
+	}()
+
 	date := time.Now().UTC().Format("2006-01-02")
 	for _, k := range keys {
 		adopt := NewAdoptChecker(repoPathFor(groups[k]))
@@ -83,23 +104,25 @@ func RunSynthesize(ctx context.Context, syn Synthesizer, opts Options) (Summary,
 		// eval pool slices ran 8–14 min. The old 10m/20m deadlines killed
 		// every call after burning spend.
 		rctx, cancel := context.WithTimeout(ctx, 90*time.Minute)
-		rs, report, err := Synthesize(rctx, k, groups[k], syn, adopt)
+		res, report, err := Synthesize(rctx, k, groups[k], syn, adopt)
 		cancel()
 		if err != nil {
 			sum.Skipped++
+			failures = append(failures, fmt.Sprintf("%s: %v", k, err))
 			fmt.Fprintf(os.Stderr, "synthesis: %s skipped: %v\n", k, err)
 			continue
 		}
-		md := Render(rs)
+		md := Render(res)
 		if leaks := scanReport(md); len(leaks) > 0 {
 			sum.Skipped++
+			failures = append(failures, fmt.Sprintf("%s: privacy scan blocked: %v", k, leaks))
 			fmt.Fprintf(os.Stderr, "synthesis: %s BLOCKED by privacy scan: %v\n", k, leaks)
 			continue
 		}
 		if len(report.HardErrors) > 0 {
 			fmt.Fprintf(os.Stderr, "synthesis: %s has %d validation warnings (written, surfaced in report)\n", k, len(report.HardErrors))
 		}
-		if err := Store(rs, md, date); err != nil {
+		if err := Store(res, md, date); err != nil {
 			return sum, err
 		}
 		sum.Written++

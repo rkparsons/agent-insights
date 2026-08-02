@@ -77,3 +77,13 @@ func TestParseSynthesizeArgsDue(t *testing.T) {
 		t.Errorf("parsed = %+v, want Due=true", o)
 	}
 }
+
+func TestParseSynthesizeArgsLog(t *testing.T) {
+	o, err := parseSynthesizeArgs([]string{"--log", "/tmp/s.log"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.LogPath != "/tmp/s.log" {
+		t.Errorf("parsed = %+v, want LogPath=/tmp/s.log", o)
+	}
+}
