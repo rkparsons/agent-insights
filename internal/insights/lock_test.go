@@ -20,3 +20,23 @@ func TestLockSecondAcquireRefused(t *testing.T) {
 	}
 	l2.Release()
 }
+
+func TestLockHeld(t *testing.T) {
+	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	if LockHeld() {
+		t.Fatal("no lock file yet: want false")
+	}
+	l, err := AcquireLock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !LockHeld() {
+		t.Fatal("lock acquired: want true")
+	}
+	if err := l.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if LockHeld() {
+		t.Fatal("lock released: want false")
+	}
+}

@@ -48,3 +48,20 @@ func (l *RunLock) Release() error {
 	}
 	return cerr
 }
+
+// LockHeld reports whether a run currently holds the insights lock, without
+// blocking or creating the lock file. flock is per open-file-description, so
+// a shared probe on a fresh fd conflicts with the run's exclusive lock even
+// in-process.
+func LockHeld() bool {
+	f, err := os.Open(lockPath())
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
+		return true
+	}
+	syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	return false
+}
