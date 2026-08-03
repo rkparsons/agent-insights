@@ -12,6 +12,7 @@ import (
 func TestScanCatchesEveryClass(t *testing.T) {
 	leaks := []string{
 		"cwd /Users/rparsons/Developer/x",
+		"cwd /Users/Richard2/Developer/x", // mixed-case + digit, a real username shape
 		"cwd /home/rparsons/x",
 		"session 4b1f6c58-3c9e-4a1d-9c2e-2b6f8e0a1234 did it",
 		"repo: client-project",
@@ -31,11 +32,14 @@ func TestScanCatchesEveryClass(t *testing.T) {
 func TestScanAllowsKnownSyntheticForms(t *testing.T) {
 	clean := []string{
 		"cwd /Users/dev/Developer/x",
+		"cwd /Users/DEV/Developer/x", // case-insensitive match on the allowed placeholder too
 		"cwd /home/user/x",
 		"session 00000000-0000-4000-8000-000000000001 did it",
 		"session 0abc1234-de56-4f78-9abc-def012345678 did it",
 		`{"target":"C-04","item_ref":"alpha/theme/3"}`,
 		"Shortcut ticket created", // not sc-NNNN
+		"a misc-1234 bugfix",      // "sc-" substring, not the sc-NNNN marker (word boundary)
+		"see desc-20260803.md",
 	}
 	for _, c := range clean {
 		if hits := Scan([]byte(c)); len(hits) != 0 {
@@ -43,6 +47,14 @@ func TestScanAllowsKnownSyntheticForms(t *testing.T) {
 		}
 	}
 }
+
+// selfPackagePrefix excludes this package's own source from the scan: scan.go
+// necessarily spells out every leak pattern as a literal (label strings like
+// "client-project"/"terminal-app"/"dev"), and scan_test.go's fixtures above
+// embed real examples of each leak class plus the synthetic-allowed forms —
+// both always trip Scan on themselves. This is the scanner's own definition
+// and unit tests, not a committed artifact that could leak anything.
+const selfPackagePrefix = "internal/privacy/"
 
 // TestScanRepoWide is the CI backstop: it walks every git-tracked file and
 // fails if any of them trip a privacy check. It is gated behind PRIVACY_SCAN=1
@@ -58,6 +70,9 @@ func TestScanRepoWide(t *testing.T) {
 	root := repoRoot(t)
 	var offenders []string
 	for _, f := range gitLsFiles(t, root) {
+		if strings.HasPrefix(f, selfPackagePrefix) {
+			continue
+		}
 		data, err := os.ReadFile(filepath.Join(root, f))
 		if err != nil {
 			t.Fatalf("read %s: %v", f, err)
@@ -82,17 +97,20 @@ func repoRoot(t *testing.T) string {
 	return strings.TrimSpace(string(out))
 }
 
+// gitLsFiles uses -z (NUL-separated, unquoted paths) so a tracked filename
+// with special/non-ASCII characters comes back verbatim instead of
+// core.quotePath-escaped (which would otherwise fail the os.ReadFile join).
 func gitLsFiles(t *testing.T, root string) []string {
 	t.Helper()
-	cmd := exec.Command("git", "ls-files")
+	cmd := exec.Command("git", "ls-files", "-z")
 	cmd.Dir = root
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("git ls-files: %v", err)
 	}
-	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
-	if len(lines) == 0 || lines[0] == "" {
+	entries := strings.Split(strings.TrimRight(string(out), "\x00"), "\x00")
+	if len(entries) == 0 || entries[0] == "" {
 		t.Fatal("git ls-files returned no files")
 	}
-	return lines
+	return entries
 }

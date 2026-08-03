@@ -27,8 +27,8 @@ func synthesisToJSON(s RepoSynthesis) insights.SynthesisJSON {
 			IncidentCount:   t.IncidentCount,
 			SessionCount:    t.SessionCount,
 			TypeBreakdown:   t.TypeBreakdown,
-			Quotes:          t.Quotes,
-			SessionIDs:      t.SessionIDs,
+			Quotes:          nonNil(t.Quotes),
+			SessionIDs:      nonNil(t.SessionIDs),
 			SignalRefs:      t.SignalRefs,
 			OverGeneralized: t.OverGeneralized,
 		})
@@ -38,9 +38,9 @@ func synthesisToJSON(s RepoSynthesis) insights.SynthesisJSON {
 		recs = append(recs, insights.RecommendationJSON{
 			Type:           r.Type,
 			Statement:      r.Statement,
-			ThemeRefs:      r.ThemeRefs,
+			ThemeRefs:      nonNil(r.ThemeRefs),
 			SessionCount:   r.SessionCount,
-			Quotes:         r.Quotes,
+			Quotes:         nonNil(r.Quotes),
 			AlreadyAdopted: r.AlreadyAdopted,
 			Audience:       r.Audience,
 			ActedKey:       ActedKey(r, s.Repo),
@@ -64,4 +64,17 @@ func synthesisToJSON(s RepoSynthesis) insights.SynthesisJSON {
 			PrefCountByRec:   s.Meta.PrefCountByRec,
 		},
 	}
+}
+
+// nonNil normalizes a nil slice to empty. The contract's array fields
+// (quotes, session_ids, theme_refs) are always-required arrays, never
+// null — Theme.Quotes/SessionIDs and Recommendation.Quotes/ThemeRefs can be
+// nil zero values (e.g. every cited quote got filtered, or an evidence-free
+// recommendation), so this is the JSON-boundary normalization point,
+// mirroring insights.BuildStatus's due_repos/acted_keys nil handling.
+func nonNil[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
 }

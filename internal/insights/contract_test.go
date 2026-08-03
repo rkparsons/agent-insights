@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,6 +88,43 @@ func TestShowJSONActedKey(t *testing.T) {
 	want := synthesis.ActedKey(rec, "repo-a")
 	if got == "" || got != want {
 		t.Errorf("acted_key = %q, want %q", got, want)
+	}
+}
+
+// TestShowJSONNeverEmitsNullArrays guards BuildShowJSON's nil-normalization:
+// Theme.Quotes/SessionIDs and Recommendation.Quotes/ThemeRefs are all
+// zero-valued (nil) here — the shape a real theme/recommendation with zero
+// cited quotes or zero evidence refs actually produces — and the contract's
+// schema (schemas/show.schema.json) declares quotes/session_ids/theme_refs
+// as required arrays, never null.
+func TestShowJSONNeverEmitsNullArrays(t *testing.T) {
+	fixture := synthesis.RepoSynthesis{
+		Repo:        "repo-a",
+		GeneratedAt: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+		Window:      synthesis.Window{From: "2026-07-25", To: "2026-08-01", SessionCount: 1, AnalyzedCount: 1},
+		Themes:      []synthesis.Theme{{Title: "t", Kind: "friction", Summary: "s", Rank: 1, SessionCount: 1}},
+		Recommendations: []synthesis.Recommendation{
+			{Type: "habit", Statement: "s", SessionCount: 1},
+		},
+		Meta: synthesis.Meta{Model: "test-model"},
+	}
+
+	show := synthesis.BuildShowJSON([]synthesis.RepoSynthesis{fixture})
+	data, err := json.Marshal(show)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "null") {
+		t.Errorf("expected no null arrays, got: %s", data)
+	}
+
+	theme := show.Syntheses[0].Themes[0]
+	if theme.Quotes == nil || theme.SessionIDs == nil {
+		t.Errorf("theme Quotes/SessionIDs should normalize nil -> [], got %+v", theme)
+	}
+	rec := show.Syntheses[0].Recommendations[0]
+	if rec.Quotes == nil || rec.ThemeRefs == nil {
+		t.Errorf("recommendation Quotes/ThemeRefs should normalize nil -> [], got %+v", rec)
 	}
 }
 

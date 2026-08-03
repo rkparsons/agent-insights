@@ -30,7 +30,9 @@ func TestGoldenStatusRoundTrips(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertCanonicallyEqual(t, golden, remarshaled)
-	assertSchemaMatchesStruct(t, loadSchema(t, "status.schema.json"), reflect.TypeOf(StatusJSON{}))
+	schema := loadSchema(t, "status.schema.json")
+	assertSchemaMatchesStruct(t, schema, reflect.TypeOf(StatusJSON{}))
+	assertSchemaVersion(t, schema, status.SchemaVersion)
 }
 
 // TestGoldenShowRoundTrips is TestGoldenStatusRoundTrips's ShowJSON sibling.
@@ -49,7 +51,9 @@ func TestGoldenShowRoundTrips(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertCanonicallyEqual(t, golden, remarshaled)
-	assertSchemaMatchesStruct(t, loadSchema(t, "show.schema.json"), reflect.TypeOf(ShowJSON{}))
+	schema := loadSchema(t, "show.schema.json")
+	assertSchemaMatchesStruct(t, schema, reflect.TypeOf(ShowJSON{}))
+	assertSchemaVersion(t, schema, show.SchemaVersion)
 }
 
 func readGolden(t *testing.T, name string) []byte {
@@ -100,6 +104,27 @@ func canonicalizeJSON(t *testing.T, data []byte) []byte {
 
 var timeType = reflect.TypeOf(time.Time{})
 
+// assertSchemaVersion guards against the schema/golden going stale on a
+// ContractVersion bump: the key-set walk below never inspects values, so
+// without this a schema_version drift (golden still says 1, contract now
+// says 2, or the schema's `const` wasn't updated to match) would pass
+// silently.
+func assertSchemaVersion(t *testing.T, schema map[string]any, got int) {
+	t.Helper()
+	if got != ContractVersion {
+		t.Errorf("golden schema_version = %d, want ContractVersion (%d)", got, ContractVersion)
+	}
+	props, _ := schema["properties"].(map[string]any)
+	versionNode, _ := props["schema_version"].(map[string]any)
+	constVal, ok := versionNode["const"].(float64)
+	if !ok {
+		t.Fatalf("schema's schema_version property has no numeric `const`")
+	}
+	if int(constVal) != ContractVersion {
+		t.Errorf("schema schema_version const = %v, want ContractVersion (%d)", constVal, ContractVersion)
+	}
+}
+
 // assertSchemaMatchesStruct is the "no dependency" stand-in for a JSON Schema
 // validator: it recursively checks that a schema object node's declared
 // `properties`/`required` key sets equal typ's json-tagged field set (fields
@@ -122,7 +147,11 @@ func assertSchemaNodeMatchesStruct(t *testing.T, root, node map[string]any, typ 
 	schemaRequired := map[string]bool{}
 	if reqList, ok := node["required"].([]any); ok {
 		for _, r := range reqList {
-			schemaRequired[r.(string)] = true
+			s, ok := r.(string)
+			if !ok {
+				t.Fatalf("%s: schema `required` entry %v is not a string", typ.Name(), r)
+			}
+			schemaRequired[s] = true
 		}
 	}
 
@@ -133,8 +162,8 @@ func assertSchemaNodeMatchesStruct(t *testing.T, root, node map[string]any, typ 
 		if f.PkgPath != "" { // unexported
 			continue
 		}
-		name, omitempty := jsonTagName(f)
-		if name == "-" {
+		name, omitempty, ignored := jsonTagName(f)
+		if ignored {
 			continue
 		}
 		structProps[name] = true
@@ -199,8 +228,14 @@ func resolveSchemaRef(t *testing.T, root, node map[string]any) map[string]any {
 	return def
 }
 
-func jsonTagName(f reflect.StructField) (name string, omitempty bool) {
+// jsonTagName mirrors encoding/json's tag semantics: a tag of exactly "-"
+// (no comma) means the field is ignored; "-,anything" names the field "-"
+// literally, so only the bare-"-" case is treated as ignored.
+func jsonTagName(f reflect.StructField) (name string, omitempty, ignored bool) {
 	tag := f.Tag.Get("json")
+	if tag == "-" {
+		return "", false, true
+	}
 	parts := strings.Split(tag, ",")
 	name = parts[0]
 	if name == "" {
@@ -211,7 +246,7 @@ func jsonTagName(f reflect.StructField) (name string, omitempty bool) {
 			omitempty = true
 		}
 	}
-	return name, omitempty
+	return name, omitempty, false
 }
 
 func keySet(m map[string]any) map[string]bool {
