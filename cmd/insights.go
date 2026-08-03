@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"time"
@@ -198,14 +197,7 @@ func buildStatusJSON(icfg insights.Config) (insights.StatusJSON, error) {
 		lastRun = &lr
 	}
 
-	return insights.BuildStatus(insights.InsightsDir(), synthesizeLogPath(), insights.LockHeld(), due, acted, lastRun), nil
-}
-
-// synthesizeLogPath mirrors the default log path internal/app/actions.go's
-// synthesizeWindowCommand derives, so status --json reports it and the TUI
-// never computes store-relative paths itself.
-func synthesizeLogPath() string {
-	return filepath.Join(insights.InsightsDir(), "logs", "synthesize-"+time.Now().UTC().Format("2006-01-02")+".log")
+	return insights.BuildStatus(insights.InsightsDir(), insights.SynthesizeLogPath(), insights.LockHeld(), due, acted, lastRun), nil
 }
 
 // runShow handles `insights show --json`.
@@ -232,7 +224,7 @@ func runActed(args []string, mark bool) {
 	if !mark {
 		verb = "unacted"
 	}
-	if len(args) != 1 || args[0] == "" {
+	if len(args) != 1 || args[0] == "" || args[0][0] == '-' {
 		fmt.Fprintf(os.Stderr, "usage: tmux-ctrl insights %s <key>\n", verb)
 		os.Exit(2)
 	}

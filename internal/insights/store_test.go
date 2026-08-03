@@ -7,6 +7,18 @@ import (
 	"time"
 )
 
+// TestSynthesizeLogPath guards the shared path shape: <InsightsDir>/logs/synthesize-<UTC date>.log.
+// cmd/insights.go's `status --json` and internal/app/actions.go's synthesis-
+// window spawn both call this instead of deriving the path themselves.
+func TestSynthesizeLogPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", dir)
+	want := filepath.Join(dir, "logs", "synthesize-"+time.Now().UTC().Format("2006-01-02")+".log")
+	if got := SynthesizeLogPath(); got != want {
+		t.Errorf("SynthesizeLogPath() = %q, want %q", got, want)
+	}
+}
+
 func TestWriteAndReadAnalysisMtime(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", dir)

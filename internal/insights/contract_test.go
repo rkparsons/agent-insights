@@ -98,6 +98,7 @@ func TestShowJSONMirrorsSynthesis(t *testing.T) {
 	assertMirrors(t, reflect.TypeOf(synthesis.Theme{}), reflect.TypeOf(insights.ThemeJSON{}))
 	assertMirrors(t, reflect.TypeOf(synthesis.Window{}), reflect.TypeOf(insights.WindowJSON{}))
 	assertMirrors(t, reflect.TypeOf(synthesis.Meta{}), reflect.TypeOf(insights.MetaJSON{}))
+	assertMirrors(t, reflect.TypeOf(synthesis.RepoSynthesis{}), reflect.TypeOf(insights.SynthesisJSON{}))
 }
 
 // assertMirrors checks every exported field of src has a same-named,

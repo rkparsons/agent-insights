@@ -20,6 +20,15 @@ func InsightsDir() string {
 // AnalysesDir is the flat global pool of per-session analyses, keyed by session-id.
 func AnalysesDir() string { return filepath.Join(InsightsDir(), "analyses") }
 
+// SynthesizeLogPath is the default log path for a `synthesize --due` run
+// started right now: <InsightsDir>/logs/synthesize-<UTC date>.log. Shared by
+// the TUI's detached-window spawn (internal/app/actions.go) and the CLI's
+// `status --json` (which reports it so callers never derive store-relative
+// paths themselves) — one definition, so the two can't drift.
+func SynthesizeLogPath() string {
+	return filepath.Join(InsightsDir(), "logs", "synthesize-"+time.Now().UTC().Format("2006-01-02")+".log")
+}
+
 func analysisPath(sessionID string) string {
 	return filepath.Join(AnalysesDir(), sessionID+".json")
 }

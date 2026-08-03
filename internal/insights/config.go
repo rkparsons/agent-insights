@@ -11,8 +11,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// defaultCadenceDays is the pipeline's synthesis due-cadence fallback when unset.
-const defaultCadenceDays = 7
+// defaultCadenceDays is the pipeline's synthesis due-cadence fallback when
+// unset — 14, matching the TUI's historical default (internal/userconfig)
+// so extracting the pipeline's own config doesn't silently double synthesis
+// spend by halving the cadence.
+const defaultCadenceDays = 14
 
 // defaultConfigMinSessions mirrors synthesis.DefaultMinSessions (10); insights
 // cannot import synthesis (which imports insights), so the value is duplicated.
@@ -24,7 +27,7 @@ const defaultConfigMinSessions = 10
 type Config struct {
 	Repos       []string          `yaml:"repos"`        // absolute paths
 	Aliases     map[string]string `yaml:"aliases"`      // old-name -> canonical
-	CadenceDays int               `yaml:"cadence_days"` // default 7
+	CadenceDays int               `yaml:"cadence_days"` // default 14
 	MinSessions int               `yaml:"min_sessions"` // default synthesis.DefaultMinSessions
 }
 

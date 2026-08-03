@@ -13,8 +13,8 @@ func TestLoadConfigMissingFileDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if cfg.CadenceDays != 7 {
-		t.Errorf("CadenceDays = %d, want 7", cfg.CadenceDays)
+	if cfg.CadenceDays != 14 {
+		t.Errorf("CadenceDays = %d, want 14", cfg.CadenceDays)
 	}
 }
 
