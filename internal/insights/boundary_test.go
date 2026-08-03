@@ -16,7 +16,7 @@ func TestPipelineImportBoundary(t *testing.T) {
 	}
 	moduleRoot := filepath.Dir(strings.TrimSpace(string(modPath)))
 
-	cmd := exec.Command("go", "list", "-deps",
+	cmd := exec.Command("go", "list", "-deps", "-test",
 		"./internal/insights/...", "./internal/synthesis/...",
 		"./internal/insightseval/...", "./internal/transcript/...", "./skills/...")
 	cmd.Dir = moduleRoot
