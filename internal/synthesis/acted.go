@@ -39,7 +39,16 @@ func LoadActedKeys() (map[string]bool, error) {
 	return m, nil
 }
 
+// MarkActed adds key to the acted-keys store. The read-modify-write is
+// guarded by insights.AcquireActedLock so concurrent callers (two TUI
+// instances, or the CLI racing itself) never lose one write to the other.
 func MarkActed(key string) error {
+	lock, err := insights.AcquireActedLock()
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+
 	m, err := LoadActedKeys()
 	if err != nil {
 		return err
@@ -48,26 +57,21 @@ func MarkActed(key string) error {
 		return nil
 	}
 	m[key] = true
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	data, err := json.Marshal(keys)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(insights.InsightsDir(), 0o755); err != nil {
-		return err
-	}
-	return atomicWrite(actedPath(), data)
+	return writeActedKeys(m)
 }
 
 // UnmarkActed removes key from the acted-keys store, resurfacing the
 // recommendation in future curations. Used to roll back an acted mark when the
 // launch it recorded fails before anything lands (see the insight launch
 // failure handler in internal/app). A no-op when the key isn't recorded.
+// Guarded by the same acted-file lock as MarkActed.
 func UnmarkActed(key string) error {
+	lock, err := insights.AcquireActedLock()
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+
 	m, err := LoadActedKeys()
 	if err != nil {
 		return err
@@ -76,6 +80,10 @@ func UnmarkActed(key string) error {
 		return nil
 	}
 	delete(m, key)
+	return writeActedKeys(m)
+}
+
+func writeActedKeys(m map[string]bool) error {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)

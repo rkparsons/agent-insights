@@ -1,6 +1,9 @@
 package synthesis
 
-import "testing"
+import (
+	"sync"
+	"testing"
+)
 
 func TestActedKey_StableAndRepoScoped(t *testing.T) {
 	a := Recommendation{Statement: "Verify claims  before  asserting"}
@@ -65,5 +68,37 @@ func TestUnmarkActed_AbsentKeyIsNoop(t *testing.T) {
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
 	if err := UnmarkActed(ActedKey(Recommendation{Statement: "never marked"}, "client-project")); err != nil {
 		t.Errorf("UnmarkActed on absent key = %v, want nil (no-op)", err)
+	}
+}
+
+// TestMarkActed_ConcurrentWritesBothLand guards the read-modify-write race:
+// without the acted-file lock, two concurrent MarkActed calls can both read
+// the same pre-write state and the second writer's atomicWrite silently
+// drops the first writer's key. The flock in MarkActed must serialize them
+// so both land.
+func TestMarkActed_ConcurrentWritesBothLand(t *testing.T) {
+	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	k1 := ActedKey(Recommendation{Statement: "concurrent one"}, "client-project")
+	k2 := ActedKey(Recommendation{Statement: "concurrent two"}, "client-project")
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	wg.Add(2)
+	go func() { defer wg.Done(); errs <- MarkActed(k1) }()
+	go func() { defer wg.Done(); errs <- MarkActed(k2) }()
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("MarkActed: %v", err)
+		}
+	}
+
+	m, err := LoadActedKeys()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !m[k1] || !m[k2] {
+		t.Fatalf("both concurrent keys should land: %v", m)
 	}
 }
