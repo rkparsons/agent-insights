@@ -3,7 +3,7 @@ package insights
 import (
 	"testing"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 func stat(id string, turns, toolErrors, interrupts, rejections, edits, writes int, repo, cwd string, bytes int64) sessionStat {

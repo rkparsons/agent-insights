@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"tmux-ctrl/skills"
+	"github.com/rkparsons/agent-insights/skills"
 )
 
 // synthesisSchema is the JSON schema passed to `claude -p --json-schema`,

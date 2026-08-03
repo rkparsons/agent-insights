@@ -105,7 +105,7 @@ func TestTreeHashStable(t *testing.T) {
 		t.Fatal("TreeHash is empty")
 	}
 
-	// Equivalence with insightseval's hashTree (sorted rel path + size + bytes):
+	// Equivalence with eval's hashTree (sorted rel path + size + bytes):
 	// a hash taken from the embedded tree must equal one taken from a
 	// materialized copy, or the eval's skill-hash cache keys shift.
 	dir := t.TempDir()
@@ -117,7 +117,7 @@ func TestTreeHashStable(t *testing.T) {
 	}
 }
 
-// hashDirLikeEval reimplements insightseval.hashTree's byte stream so the test
+// hashDirLikeEval reimplements eval.hashTree's byte stream so the test
 // pins the algorithm rather than the implementation.
 func hashDirLikeEval(t *testing.T, root string) string {
 	t.Helper()

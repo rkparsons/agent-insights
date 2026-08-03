@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 
-	"tmux-ctrl/skills"
+	"github.com/rkparsons/agent-insights/skills"
 )
 
 // analysisSchema is the JSON schema passed to `claude -p --json-schema`,

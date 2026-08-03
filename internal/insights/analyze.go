@@ -3,7 +3,7 @@ package insights
 import (
 	"context"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 // Analyze produces one complete AgentSessionAnalysis for a session: it extracts the

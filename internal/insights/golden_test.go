@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files")

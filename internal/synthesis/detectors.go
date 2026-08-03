@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"tmux-ctrl/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 const detailCap = 8

@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"tmux-ctrl/internal/insights"
-	"tmux-ctrl/skills"
+	"github.com/rkparsons/agent-insights/internal/insights"
+	"github.com/rkparsons/agent-insights/skills"
 )
 
 func TestOpportunityRecallMiss(t *testing.T) {

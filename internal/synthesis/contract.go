@@ -1,6 +1,6 @@
 package synthesis
 
-import "tmux-ctrl/internal/insights"
+import "github.com/rkparsons/agent-insights/internal/insights"
 
 // BuildShowJSON converts RepoSynthesis records into insights.ShowJSON, the
 // `insights show --json` payload. This lives in synthesis (not

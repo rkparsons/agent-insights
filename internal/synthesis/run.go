@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"tmux-ctrl/internal/insights"
-	"tmux-ctrl/skills"
+	"github.com/rkparsons/agent-insights/internal/insights"
+	"github.com/rkparsons/agent-insights/skills"
 )
 
 type Options struct {

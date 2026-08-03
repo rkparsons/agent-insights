@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 // TestAnalyzeReal runs the full producer (real claude -p) over curated sessions when

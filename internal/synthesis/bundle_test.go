@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"tmux-ctrl/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 func frictionAnalysis(id, quote, file string) insights.AgentSessionAnalysis {

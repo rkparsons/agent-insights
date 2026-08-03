@@ -7,7 +7,7 @@ import (
 	"sort"
 	"testing"
 
-	"tmux-ctrl/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 func mechSession(id string, modes map[string]int, exemplars map[string]string, sigs map[string]int) insights.AgentSessionAnalysis {

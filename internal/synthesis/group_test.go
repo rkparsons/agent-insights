@@ -3,7 +3,7 @@ package synthesis
 import (
 	"testing"
 
-	"tmux-ctrl/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 func analysisWith(repo, cwd string) insights.AgentSessionAnalysis {

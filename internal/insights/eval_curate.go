@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 // sessionStat pairs a transcript ref with its deterministic stats for curation.

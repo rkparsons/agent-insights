@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 // TestLightEvalReal runs the step-7 light gate end-to-end (real claude -p, N repeats)

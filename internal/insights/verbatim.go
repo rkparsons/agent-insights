@@ -3,7 +3,7 @@ package insights
 import (
 	"strings"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 // VerbatimIndex backs the anti-fabrication quote check. It holds two corpora:

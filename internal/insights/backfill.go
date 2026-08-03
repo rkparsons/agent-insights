@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 // RunBackfill scans every top-level transcript, applies incremental + gate skips, and

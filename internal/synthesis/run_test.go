@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"tmux-ctrl/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 // fixedSynth adapts a fake to the SynthesizerFactory seam: the run still

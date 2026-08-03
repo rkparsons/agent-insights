@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	"tmux-ctrl/internal/insights"
-	"tmux-ctrl/internal/synthesis"
+	"github.com/rkparsons/agent-insights/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/synthesis"
 )
 
 const insightsUsage = "usage: tmux-ctrl insights backfill [--quiet-for 24h] [--timeout 10m] [--threshold N] [--force] [--dry-run] | analyze <session-id|path> [--force] | synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run] [--log <path>] | status --json | show --json | acted <key> | unacted <key> | eval <freeze|outcome|score|adjudicate|probes|statuses> ..."

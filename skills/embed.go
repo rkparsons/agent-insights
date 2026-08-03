@@ -75,7 +75,7 @@ func TempWorkdir() (string, func(), error) {
 	return dir, cleanup, nil
 }
 
-// TreeHash content-hashes the embedded tree exactly as insightseval's hashTree
+// TreeHash content-hashes the embedded tree exactly as eval's hashTree
 // hashes a directory — sorted relative path + size + bytes — so a hash taken
 // here and one taken from a materialized copy are the same value.
 func TreeHash() string {

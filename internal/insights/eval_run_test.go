@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 // scriptedJudge returns a different JudgedFields per call (cycling), so multi-repeat

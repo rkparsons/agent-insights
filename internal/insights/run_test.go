@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"tmux-ctrl/skills"
+	"github.com/rkparsons/agent-insights/skills"
 )
 
 func substantialJudged() JudgedFields {

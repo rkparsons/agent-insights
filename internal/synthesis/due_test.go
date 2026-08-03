@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"tmux-ctrl/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 func TestDueRepos(t *testing.T) {

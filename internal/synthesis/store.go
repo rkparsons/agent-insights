@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"tmux-ctrl/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 func synthesisDir() string { return filepath.Join(insights.InsightsDir(), "synthesis") }

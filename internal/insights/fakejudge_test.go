@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"tmux-ctrl/skills"
+	"github.com/rkparsons/agent-insights/skills"
 )
 
 type fakeJudge struct {

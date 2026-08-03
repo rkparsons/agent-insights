@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"tmux-ctrl/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 // RunState is the last-run record for `insights synthesize`, read by the TUI

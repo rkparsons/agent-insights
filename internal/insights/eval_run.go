@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 // quoteCheck records, per raw (pre-validation) evidence quote, whether it is a

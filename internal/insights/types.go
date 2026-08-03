@@ -8,7 +8,7 @@ package insights
 import (
 	"time"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 // TokenUsage aggregates assistant usage. Input/Output/CacheCreation are summed

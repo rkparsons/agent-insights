@@ -1,6 +1,6 @@
 package insights
 
-import "tmux-ctrl/internal/transcript"
+import "github.com/rkparsons/agent-insights/internal/transcript"
 
 // Extract runs one pass over the decoded events, producing the reduced input and
 // the deterministic stats. canary is the decoder's drift record, embedded in the

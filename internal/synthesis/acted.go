@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"tmux-ctrl/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 func actedPath() string { return filepath.Join(insights.InsightsDir(), "insights-acted.json") }

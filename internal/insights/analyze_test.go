@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 func TestAnalyzeMergesValidatesDropsAndFlags(t *testing.T) {

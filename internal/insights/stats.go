@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 func sortedKeys(m map[string]bool) []string {

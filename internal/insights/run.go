@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"tmux-ctrl/internal/transcript"
-	"tmux-ctrl/skills"
+	"github.com/rkparsons/agent-insights/internal/transcript"
+	"github.com/rkparsons/agent-insights/skills"
 )
 
 // Options configures an analyze run.

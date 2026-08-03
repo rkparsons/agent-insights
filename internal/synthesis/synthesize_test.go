@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"tmux-ctrl/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 type fakeSynth struct {

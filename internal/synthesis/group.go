@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"tmux-ctrl/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 const DefaultMinSessions = 10

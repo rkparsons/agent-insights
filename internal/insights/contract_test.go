@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"tmux-ctrl/internal/insights"
-	"tmux-ctrl/internal/synthesis"
+	"github.com/rkparsons/agent-insights/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/synthesis"
 )
 
 func TestStatusJSONShape(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"tmux-ctrl/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 type ValidationReport struct {

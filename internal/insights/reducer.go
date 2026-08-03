@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 const defaultBudget = 160_000 // ~40K tokens; spine is exempt

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 // TestRealSmoke runs the production pipeline over real transcripts when

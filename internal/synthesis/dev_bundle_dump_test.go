@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"tmux-ctrl/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 func TestDevBundleDump(t *testing.T) {

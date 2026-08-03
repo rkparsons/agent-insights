@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"tmux-ctrl/internal/transcript"
+	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
 func runExtract(t *testing.T, in string, repo RepoResolver) SessionExtraction {

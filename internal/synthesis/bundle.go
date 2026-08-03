@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"tmux-ctrl/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 const signalFloor = 3

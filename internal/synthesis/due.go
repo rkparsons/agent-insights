@@ -4,7 +4,7 @@ import (
 	"sort"
 	"time"
 
-	"tmux-ctrl/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 const DefaultCadence = 14 * 24 * time.Hour
