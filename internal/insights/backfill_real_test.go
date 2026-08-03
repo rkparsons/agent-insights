@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"tmux-ctrl/internal/userconfig"
 )
 
 // TestRunBackfillReal exercises the full backfill (real claude -p, subscription auth) over
@@ -49,11 +47,11 @@ func TestRunBackfillReal(t *testing.T) {
 	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
 
-	cfg, err := userconfig.Load()
+	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	repo := NewRepoResolver(&cfg)
+	repo := cfg.Resolver()
 	judge := NewClaudeJudge()
 	opts := Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: 10 * time.Minute}
 

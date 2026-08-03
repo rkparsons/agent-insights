@@ -36,7 +36,11 @@ func RunSynthesize(ctx context.Context, syn Synthesizer, opts Options) (sum Summ
 	if err != nil && !os.IsNotExist(err) {
 		return Summary{}, err
 	}
-	groups := GroupByRepo(analyses, opts.MinSessions)
+	cfg, err := insights.LoadConfig()
+	if err != nil {
+		return Summary{}, err
+	}
+	groups := GroupByRepo(analyses, opts.MinSessions, cfg.Aliases)
 
 	keys := make([]string, 0, len(groups))
 	for k := range groups {

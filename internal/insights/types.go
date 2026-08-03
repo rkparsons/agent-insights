@@ -25,7 +25,7 @@ type TokenUsage struct {
 // it with the skill's judged fields.
 type AgentSessionStats struct {
 	SessionID string `json:"session_id"`
-	Repo      string `json:"repo"` // userconfig.LookupRepo(cwd) path; "" if unmatched
+	Repo      string `json:"repo"` // Config.Resolver()(cwd) path; "" if unmatched
 	Cwd       string `json:"cwd"`
 	GitBranch string `json:"git_branch"`
 	Version   string `json:"version"` // last observed transcript version
@@ -76,8 +76,8 @@ type ReducedInput struct {
 	DroppedEvents int
 }
 
-// RepoResolver maps a cwd to a repo identity (injected so insights stays
-// decoupled from userconfig; the caller wires LookupRepo).
+// RepoResolver maps a cwd to a repo identity (injected so callers can wire it
+// however they resolve repos; see Config.Resolver).
 type RepoResolver func(cwd string) string
 
 // SessionExtraction is the output of Extract.

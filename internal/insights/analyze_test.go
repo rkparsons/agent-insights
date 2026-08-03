@@ -6,28 +6,7 @@ import (
 	"testing"
 
 	"tmux-ctrl/internal/transcript"
-	"tmux-ctrl/internal/userconfig"
 )
-
-func resolveRepo(cfg *userconfig.Config) RepoResolver {
-	return func(cwd string) string {
-		if r := cfg.LookupRepo(cwd); r != nil {
-			return r.Path
-		}
-		return ""
-	}
-}
-
-func TestResolveRepo(t *testing.T) {
-	cfg := &userconfig.Config{Repos: []userconfig.Repo{{Path: "/home/u/acme"}}}
-	r := resolveRepo(cfg)
-	if got := r("/home/u/acme/sub"); got != "/home/u/acme" {
-		t.Errorf("match: got %q", got)
-	}
-	if got := r("/home/u/other"); got != "" {
-		t.Errorf("unmatched: got %q, want \"\"", got)
-	}
-}
 
 func TestAnalyzeMergesValidatesDropsAndFlags(t *testing.T) {
 	raw := `{"type":"user","sessionId":"sess1","cwd":"/repo","message":{"role":"user","content":[{"type":"text","text":"the approach was wrong; please follow the existing conventions and keep the diff small"}]}}`

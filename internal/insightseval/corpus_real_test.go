@@ -23,13 +23,16 @@ func TestGroupingMatchesFrozenBenchmark(t *testing.T) {
 		t.Fatalf("benchmark: ok=%v err=%v", ok, err)
 	}
 	pool := filepath.Join(dataDir, "baseline-pool", "v1")
+	// The frozen benchmark predates pipeline-owned config; terminal-app->tmux-ctrl was
+	// the one hardcoded fold in place when it was captured.
+	aliases := map[string]string{"terminal-app": "tmux-ctrl"}
 	for bucket, bp := range b.Buckets {
 		for _, id := range bp.AsConsumed {
 			a, err := loadPoolAnalysis(filepath.Join(pool, id+".json"))
 			if err != nil {
 				t.Fatalf("%s/%s: %v", bucket, id, err)
 			}
-			if got := synthesis.RepoKey(a); got != bucket {
+			if got := synthesis.RepoKey(a, aliases); got != bucket {
 				t.Errorf("%s: RepoKey = %q, want %q", id, got, bucket)
 			}
 		}

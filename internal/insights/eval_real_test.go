@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"tmux-ctrl/internal/transcript"
-	"tmux-ctrl/internal/userconfig"
 )
 
 // TestLightEvalReal runs the step-7 light gate end-to-end (real claude -p, N repeats)
@@ -22,11 +21,11 @@ func TestLightEvalReal(t *testing.T) {
 	if os.Getenv("INSIGHTS_LIGHT_EVAL") == "" {
 		t.Skip("set INSIGHTS_LIGHT_EVAL=1 to run the light gate (real subscription calls)")
 	}
-	cfg, err := userconfig.Load()
+	cfg, err := LoadConfig()
 	if err != nil {
-		t.Fatalf("load userconfig: %v", err)
+		t.Fatalf("load config: %v", err)
 	}
-	repo := resolveRepo(&cfg)
+	repo := cfg.Resolver()
 
 	// 1. Curate deterministically from the live corpus (decode-only, no LLM).
 	refs, err := transcript.WalkTranscripts()

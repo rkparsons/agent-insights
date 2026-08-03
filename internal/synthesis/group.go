@@ -11,16 +11,14 @@ import (
 
 const DefaultMinSessions = 10
 
-// renameAliases folds a pre-rename project path segment onto its current repo key.
-var renameAliases = map[string]string{"terminal-app": "tmux-ctrl"}
-
 // RepoKey returns the synthesis grouping key for an analysis, or "" to drop it.
 // Configured analyses use basename(stats.repo) with any trailing /.worktrees/<wt>
 // segment stripped first, so a worktree-specific configured repo still folds to its
 // project root; unmatched ("") analyses derive the project root from cwd (the segment
 // under ~/Developer/<project>), never basename(cwd) (which would misfile worktree
-// leaves like ".../terminal-app/.worktrees/x/src" as "src").
-func RepoKey(a insights.AgentSessionAnalysis) string {
+// leaves like ".../terminal-app/.worktrees/x/src" as "src"). aliases (old-name -> canonical,
+// from insights.Config) folds a pre-rename project path segment onto its current key.
+func RepoKey(a insights.AgentSessionAnalysis, aliases map[string]string) string {
 	if r := a.Stats.Repo; r != "" {
 		return filepath.Base(stripWorktree(r))
 	}
@@ -28,7 +26,7 @@ func RepoKey(a insights.AgentSessionAnalysis) string {
 	if proj == "" {
 		return ""
 	}
-	if alias, ok := renameAliases[proj]; ok {
+	if alias, ok := aliases[proj]; ok {
 		return alias
 	}
 	return proj
@@ -83,11 +81,12 @@ func LoadAnalyses() ([]insights.AgentSessionAnalysis, error) {
 }
 
 // GroupByRepo buckets analyses by RepoKey, dropping the "" key and any bucket
-// with fewer than minSessions analyses.
-func GroupByRepo(analyses []insights.AgentSessionAnalysis, minSessions int) map[string][]insights.AgentSessionAnalysis {
+// with fewer than minSessions analyses. aliases is threaded through to RepoKey
+// (see insights.Config.Aliases).
+func GroupByRepo(analyses []insights.AgentSessionAnalysis, minSessions int, aliases map[string]string) map[string][]insights.AgentSessionAnalysis {
 	byKey := map[string][]insights.AgentSessionAnalysis{}
 	for _, a := range analyses {
-		k := RepoKey(a)
+		k := RepoKey(a, aliases)
 		if k == "" {
 			continue
 		}

@@ -21,7 +21,7 @@ func TestDevBundleDump(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	groups := GroupByRepo(analyses, DefaultMinSessions)
+	groups := GroupByRepo(analyses, DefaultMinSessions, nil)
 	for k, g := range groups {
 		b := BuildBundle(k, g)
 		raw, err := json.MarshalIndent(b, "", " ")

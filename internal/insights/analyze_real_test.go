@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"tmux-ctrl/internal/transcript"
-	"tmux-ctrl/internal/userconfig"
 )
 
 // TestAnalyzeReal runs the full producer (real claude -p) over curated sessions when
@@ -27,11 +26,11 @@ func TestAnalyzeReal(t *testing.T) {
 	if err != nil || len(files) == 0 {
 		t.Fatalf("glob %q matched nothing: %v", glob, err)
 	}
-	cfg, err := userconfig.Load()
+	cfg, err := LoadConfig()
 	if err != nil {
-		t.Fatalf("load userconfig: %v", err)
+		t.Fatalf("load config: %v", err)
 	}
-	repo := resolveRepo(&cfg)
+	repo := cfg.Resolver()
 	judge := NewClaudeJudge()
 
 	var repoPopulated bool

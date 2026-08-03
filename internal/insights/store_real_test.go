@@ -5,8 +5,6 @@ import (
 	"os"
 	"testing"
 	"time"
-
-	"tmux-ctrl/internal/userconfig"
 )
 
 // TestRunSingleReal exercises the full wiring (real claude -p) on one session when
@@ -20,11 +18,11 @@ func TestRunSingleReal(t *testing.T) {
 		t.Skip("set INSIGHTS_REAL_SESSION=<id|path> to run")
 	}
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
-	cfg, err := userconfig.Load()
+	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum, err := RunSingle(context.Background(), target, NewRepoResolver(&cfg), NewClaudeJudge(), Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: 10 * time.Minute})
+	sum, err := RunSingle(context.Background(), target, cfg.Resolver(), NewClaudeJudge(), Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: 10 * time.Minute})
 	if err != nil {
 		t.Fatalf("RunSingle: %v", err)
 	}

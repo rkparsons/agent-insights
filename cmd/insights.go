@@ -50,12 +50,12 @@ func RunInsights(args []string) {
 		os.Exit(2)
 	}
 
-	cfg, err := userconfig.Load()
+	icfg, err := insights.LoadConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: load config: %v\n", err)
 		os.Exit(1)
 	}
-	repo := insights.NewRepoResolver(&cfg)
+	repo := icfg.Resolver()
 	judge := insights.NewClaudeJudge()
 
 	// Backfill prints the pre-run split before spending; --dry-run stops there.

@@ -231,7 +231,7 @@ func TestGateRealclient-project(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	groups := GroupByRepo(analyses, DefaultMinSessions)
+	groups := GroupByRepo(analyses, DefaultMinSessions, nil)
 	group := groups["client-project"]
 	if len(group) == 0 {
 		t.Skip("no client-project analyses present")

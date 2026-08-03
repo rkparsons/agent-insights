@@ -1,0 +1,86 @@
+package insights
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+// defaultCadenceDays is the pipeline's synthesis due-cadence fallback when unset.
+const defaultCadenceDays = 7
+
+// defaultConfigMinSessions mirrors synthesis.DefaultMinSessions (10); insights
+// cannot import synthesis (which imports insights), so the value is duplicated.
+const defaultConfigMinSessions = 10
+
+// Config is agent-insights' own pipeline config: the repos it knows about, their
+// aliases, and synthesis cadence/floor. The pipeline owns this file so it no
+// longer depends on the TUI's config package.
+type Config struct {
+	Repos       []string          `yaml:"repos"`        // absolute paths
+	Aliases     map[string]string `yaml:"aliases"`      // old-name -> canonical
+	CadenceDays int               `yaml:"cadence_days"` // default 7
+	MinSessions int               `yaml:"min_sessions"` // default synthesis.DefaultMinSessions
+}
+
+// LoadConfig reads ~/.config/agent-insights/config.yaml. AGENT_INSIGHTS_CONFIG,
+// when set, overrides the full path (tests use this to avoid touching $HOME). A
+// missing file returns zero-value defaults, not an error.
+func LoadConfig() (Config, error) {
+	path := os.Getenv("AGENT_INSIGHTS_CONFIG")
+	if path == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return Config{}, err
+		}
+		path = filepath.Join(home, ".config", "agent-insights", "config.yaml")
+	}
+	return loadConfigFromPath(path)
+}
+
+func loadConfigFromPath(path string) (Config, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return Config{CadenceDays: defaultCadenceDays, MinSessions: defaultConfigMinSessions}, nil
+	}
+	if err != nil {
+		return Config{}, err
+	}
+	var c Config
+	if err := yaml.Unmarshal(data, &c); err != nil {
+		return Config{}, err
+	}
+	if c.CadenceDays <= 0 {
+		c.CadenceDays = defaultCadenceDays
+	}
+	if c.MinSessions <= 0 {
+		c.MinSessions = defaultConfigMinSessions
+	}
+	return c, nil
+}
+
+// Resolver returns a RepoResolver that path-prefix matches a cwd against Repos:
+// component-boundary matching, so "/a/b" does not match "/a/bc/...". "" when no
+// configured repo matches.
+func (c Config) Resolver() RepoResolver {
+	return func(cwd string) string {
+		for _, r := range c.Repos {
+			if cwd == r || strings.HasPrefix(cwd, r+string(filepath.Separator)) {
+				return r
+			}
+		}
+		return ""
+	}
+}
+
+// Canonical looks up name in Aliases, returning its canonical repo key; an
+// unaliased name passes through unchanged.
+func (c Config) Canonical(name string) string {
+	if alias, ok := c.Aliases[name]; ok {
+		return alias
+	}
+	return name
+}
