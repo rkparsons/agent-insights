@@ -146,7 +146,7 @@ func RenderCardsMarkdown(cards []Card) string {
 			fmt.Fprintf(&b, "\n_%s_\n", c.Note)
 		}
 		if c.Adjudicable {
-			fmt.Fprintf(&b, "\n`tmux-ctrl insights eval adjudicate %s accept|reject [--note \"...\"]`\n", short(c.KeyHash))
+			fmt.Fprintf(&b, "\n`agent-insights eval adjudicate %s accept|reject [--note \"...\"]`\n", short(c.KeyHash))
 		} else {
 			b.WriteString("\n_informational — no adjudication (resolves via status edit, rubric edit, or the next comparable run)_\n")
 		}

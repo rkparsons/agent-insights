@@ -13,8 +13,8 @@ import (
 
 func TestRunBackfillGatesAndRecords(t *testing.T) {
 	projects := t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	writeSession(t, projects, "proj", "big", 6)   // substantial -> analyzed
 	writeSession(t, projects, "proj", "small", 2) // trivial -> gated
 	// a subagent transcript must be ignored entirely
@@ -43,8 +43,8 @@ func TestRunBackfillGatesAndRecords(t *testing.T) {
 
 func TestRunBackfillResumeSkips(t *testing.T) {
 	projects := t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	writeSession(t, projects, "proj", "big", 6)
 	writeSession(t, projects, "proj", "small", 2)
 	judge := fakeJudge{fields: substantialJudged()}
@@ -64,8 +64,8 @@ func TestRunBackfillResumeSkips(t *testing.T) {
 
 func TestRunBackfillCanceledNotRecorded(t *testing.T) {
 	projects := t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	writeSession(t, projects, "proj", "abrt", 6)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // user abort before processing
@@ -85,8 +85,8 @@ func TestRunBackfillCanceledNotRecorded(t *testing.T) {
 
 func TestRunBackfillReprocessesOnNewerMtime(t *testing.T) {
 	projects := t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	writeSession(t, projects, "proj", "grow", 6)
 	judge := fakeJudge{fields: substantialJudged()}
 	opts := Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute}
@@ -110,8 +110,8 @@ func TestRunBackfillReprocessesOnNewerMtime(t *testing.T) {
 
 func TestRunBackfillRecordsErrored(t *testing.T) {
 	projects := t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	writeSession(t, projects, "proj", "boom", 6)
 	judge := fakeJudge{err: errors.New("judge failed")}
 	sum, err := RunBackfill(context.Background(), noRepo, fixedJudge(judge), Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute})
@@ -128,7 +128,7 @@ func TestRunBackfillRecordsErrored(t *testing.T) {
 }
 
 func TestBackfillSkipStaleGateOnThresholdChange(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	mt := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	now := mt.Add(time.Minute)
 	ref := transcript.TranscriptRef{SessionID: "s", Mtime: mt}
@@ -142,7 +142,7 @@ func TestBackfillSkipStaleGateOnThresholdChange(t *testing.T) {
 }
 
 func TestBackfillSkipQuiet(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
 	ref := transcript.TranscriptRef{SessionID: "s1", Path: "/p/s1.jsonl", Mtime: now.Add(-1 * time.Hour)}
 	cases := []struct {
@@ -173,7 +173,7 @@ func TestBackfillSkipQuiet(t *testing.T) {
 // inside the quiet window still reports "incremental" — Done/Gated counts keep their
 // pre-existing meaning and quiet only ever picks up sessions incremental didn't.
 func TestBackfillSkipIncrementalBeatsQuiet(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
 	mt := now.Add(-1 * time.Hour) // inside a 24h quiet window
 	if err := WriteAnalysis(AgentSessionAnalysis{Stats: AgentSessionStats{SessionID: "s1"}, TranscriptMtime: mt}); err != nil {
@@ -187,7 +187,7 @@ func TestBackfillSkipIncrementalBeatsQuiet(t *testing.T) {
 }
 
 func TestPlanCountsQuiet(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
 	refs := []transcript.TranscriptRef{
 		{SessionID: "quiet1", Path: "/h/.claude/projects/-Users-r-Developer-tmux-ctrl/quiet1.jsonl", Mtime: now.Add(-1 * time.Hour)},
@@ -225,7 +225,7 @@ func TestMetaTranscriptExclusion(t *testing.T) {
 }
 
 func TestPlanCountsMetaEvenUnderForce(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	refs := []transcript.TranscriptRef{
 		{SessionID: "meta1", Path: "/h/.claude/projects/-Users-r-Developer-insights-eval-data/meta1.jsonl"},
 		{SessionID: "real1", Path: "/h/.claude/projects/-Users-r-Developer-tmux-ctrl/real1.jsonl"},

@@ -17,8 +17,8 @@ import (
 func buildFixtureWorld(t *testing.T) string {
 	t.Helper()
 	projects, insightsDir, data := t.TempDir(), t.TempDir(), t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", insightsDir)
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_DIR", insightsDir)
 	t.Setenv("HOME", t.TempDir())
 
 	proj := filepath.Join(projects, "-Users-x-Developer-myrepo")
@@ -97,7 +97,7 @@ func TestRunFreezeEndToEnd(t *testing.T) {
 func TestRunFreezeSkewSkipsPool(t *testing.T) {
 	data := buildFixtureWorld(t)
 	// grow the transcript after analysis: mtime now differs from the stamp
-	proj := filepath.Join(os.Getenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR"), "-Users-x-Developer-myrepo")
+	proj := filepath.Join(os.Getenv("AGENT_INSIGHTS_PROJECTS_DIR"), "-Users-x-Developer-myrepo")
 	f, err := os.OpenFile(filepath.Join(proj, "s1.jsonl"), os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		t.Fatal(err)
@@ -139,7 +139,7 @@ func TestRunFreezeGapRecordedNotBlocking(t *testing.T) {
 	if err := insights.WriteAnalysis(aPruned); err != nil {
 		t.Fatal(err)
 	}
-	insightsDir := os.Getenv("TMUX_CTRL_INSIGHTS_DIR")
+	insightsDir := os.Getenv("AGENT_INSIGHTS_DIR")
 	truth := synthesis.RepoSynthesis{
 		Repo:        "myrepo",
 		GeneratedAt: time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC),
@@ -203,7 +203,7 @@ func TestRunFreezePreservesEntryAfterLiveTranscriptPrunedNotAGap(t *testing.T) {
 		t.Fatalf("first freeze must be clean: %+v", rep1.Issues)
 	}
 
-	proj := filepath.Join(os.Getenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR"), "-Users-x-Developer-myrepo")
+	proj := filepath.Join(os.Getenv("AGENT_INSIGHTS_PROJECTS_DIR"), "-Users-x-Developer-myrepo")
 	if err := os.Remove(filepath.Join(proj, "s1.jsonl")); err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +347,7 @@ func TestRunFreezeIgnoresLivePoolDriftOnceV1Canonical(t *testing.T) {
 // written.
 func TestRunFreezeSkewResolvedByRejudgeThenPoolWritten(t *testing.T) {
 	data := buildFixtureWorld(t)
-	proj := filepath.Join(os.Getenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR"), "-Users-x-Developer-myrepo")
+	proj := filepath.Join(os.Getenv("AGENT_INSIGHTS_PROJECTS_DIR"), "-Users-x-Developer-myrepo")
 	f, err := os.OpenFile(filepath.Join(proj, "s1.jsonl"), os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		t.Fatal(err)
@@ -376,7 +376,7 @@ func TestRunFreezeSkewResolvedByRejudgeThenPoolWritten(t *testing.T) {
 		t.Fatal("s1 missing from manifest after first freeze")
 	}
 
-	// re-judge: `tmux-ctrl insights analyze s1` against the now-frozen
+	// re-judge: `agent-insights analyze s1` against the now-frozen
 	// (grown) transcript stamps its current mtime.
 	rejudged := insights.AgentSessionAnalysis{
 		Stats: insights.AgentSessionStats{
@@ -457,7 +457,7 @@ func TestRunFreezeGroundTruthCanonicalOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	// a NEW live synthesis lands after the freeze — it must not join ground-truth/
-	insightsDir := os.Getenv("TMUX_CTRL_INSIGHTS_DIR")
+	insightsDir := os.Getenv("AGENT_INSIGHTS_DIR")
 	newer := filepath.Join(insightsDir, "synthesis", "myrepo", "2026-07-09.json")
 	if err := os.WriteFile(newer, []byte(`{"repo":"myrepo"}`), 0o644); err != nil {
 		t.Fatal(err)

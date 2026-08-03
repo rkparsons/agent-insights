@@ -10,9 +10,9 @@ import (
 )
 
 // ProjectsDir is the root of Claude Code's per-project transcript store. Honors
-// TMUX_CTRL_CLAUDE_PROJECTS_DIR so tests can point at a temp tree.
+// AGENT_INSIGHTS_PROJECTS_DIR so tests can point at a temp tree.
 func ProjectsDir() string {
-	if d := os.Getenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR"); d != "" {
+	if d := os.Getenv("AGENT_INSIGHTS_PROJECTS_DIR"); d != "" {
 		return d
 	}
 	home, _ := os.UserHomeDir()

@@ -57,7 +57,7 @@ func writeRaw(t *testing.T, path string, data []byte) {
 
 func TestLoadSyntheses_NewestPerRepo(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", root)
+	t.Setenv("AGENT_INSIGHTS_DIR", root)
 	writeSynthesisJSON(t, root, "alpha", "2026-06-30", RepoSynthesis{Repo: "alpha", Meta: Meta{Model: "old"}})
 	writeSynthesisJSON(t, root, "alpha", "2026-07-02", RepoSynthesis{Repo: "alpha", Meta: Meta{Model: "new"}})
 	writeSynthesisJSON(t, root, "tmux-ctrl", "2026-07-01", RepoSynthesis{Repo: "tmux-ctrl", Meta: Meta{Model: "t"}})
@@ -79,7 +79,7 @@ func TestLoadSyntheses_NewestPerRepo(t *testing.T) {
 
 func TestLoadSyntheses_SkipsMalformed(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", root)
+	t.Setenv("AGENT_INSIGHTS_DIR", root)
 	writeSynthesisJSON(t, root, "alpha", "2026-07-02", RepoSynthesis{Repo: "alpha"})
 	// a broken newest file must not blank the section — it's skipped, older wins.
 	// Overwrite the 2026-07-02 slot (the newest date) with malformed JSON so it's
@@ -96,7 +96,7 @@ func TestLoadSyntheses_SkipsMalformed(t *testing.T) {
 }
 
 func TestLoadSyntheses_MissingDir(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	got, err := LoadSyntheses()
 	if err != nil || got != nil {
 		t.Fatalf("got (%v,%v), want (nil,nil) for missing synthesis dir", got, err)

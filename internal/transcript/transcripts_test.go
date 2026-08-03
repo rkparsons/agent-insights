@@ -24,7 +24,7 @@ const oneLine = `{"type":"user","cwd":"/x","message":{"content":"hi there friend
 
 func TestWalkTranscriptsSkipsSubagentsAndNonSessions(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", root)
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", root)
 	writeProject(t, root, "proj-a", "11111111-1111-1111-1111-111111111111.jsonl", oneLine)
 	writeProject(t, root, "proj-a/subagents", "agent-22222222.jsonl", oneLine)
 	writeProject(t, root, "proj-a", "notes.txt", "ignore me")
@@ -43,7 +43,7 @@ func TestWalkTranscriptsSkipsSubagentsAndNonSessions(t *testing.T) {
 
 func TestFindTranscriptZeroAndPicksNewest(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", root)
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", root)
 	if _, err := FindTranscript("missing"); err == nil {
 		t.Error("want error for 0 matches")
 	}
@@ -75,7 +75,7 @@ func mustStat(t *testing.T, p string) os.FileInfo {
 
 func TestLoadTranscriptReturnsMtime(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", root)
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", root)
 	p := writeProject(t, root, "proj-a", "44444444.jsonl", oneLine)
 	ev, _, mtime, err := LoadTranscript(p)
 	if err != nil {

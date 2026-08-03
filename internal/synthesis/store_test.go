@@ -8,7 +8,7 @@ import (
 
 func TestStore(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", dir)
+	t.Setenv("AGENT_INSIGHTS_DIR", dir)
 	s := sampleSynthesis()
 	if err := Store(s, "# md", "2026-07-02"); err != nil {
 		t.Fatal(err)

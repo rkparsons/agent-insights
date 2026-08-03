@@ -3,7 +3,7 @@ package insights
 import "testing"
 
 func TestLockSecondAcquireRefused(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	l1, err := AcquireLock()
 	if err != nil {
 		t.Fatalf("first acquire failed: %v", err)
@@ -22,7 +22,7 @@ func TestLockSecondAcquireRefused(t *testing.T) {
 }
 
 func TestLockHeld(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	if LockHeld() {
 		t.Fatal("no lock file yet: want false")
 	}

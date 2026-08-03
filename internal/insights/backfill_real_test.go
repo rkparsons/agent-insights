@@ -44,8 +44,8 @@ func TestRunBackfillReal(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 
 	cfg, err := LoadConfig()
 	if err != nil {

@@ -18,7 +18,7 @@ func (errSynthesizer) Synthesize(ctx context.Context, b EvidenceBundle) (RawSynt
 }
 
 func TestRunStateLifecycle(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	if _, ok := ReadRunState(); ok {
 		t.Fatal("no file: want ok=false")
 	}
@@ -52,7 +52,7 @@ func TestRunStateRunningOmitsFinishedAt(t *testing.T) {
 
 func TestRunStateFailed(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", dir)
+	t.Setenv("AGENT_INSIGHTS_DIR", dir)
 	adir := filepath.Join(dir, "analyses")
 	if err := os.MkdirAll(adir, 0o755); err != nil {
 		t.Fatal(err)
@@ -69,7 +69,7 @@ func TestRunStateFailed(t *testing.T) {
 }
 
 func TestRunStateDryRunWritesNothing(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	if _, err := RunSynthesize(context.Background(), fixedSynth(nil), Options{DryRun: true}); err != nil {
 		t.Fatal(err)
 	}

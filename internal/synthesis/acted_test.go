@@ -25,7 +25,7 @@ func TestActedKey_TypeScoped(t *testing.T) {
 }
 
 func TestActedRoundTrip(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	m, err := LoadActedKeys()
 	if err != nil || len(m) != 0 {
 		t.Fatalf("empty load = (%v,%v), want ({},nil)", m, err)
@@ -41,7 +41,7 @@ func TestActedRoundTrip(t *testing.T) {
 }
 
 func TestUnmarkActed_RemovesKeyPreservingOthers(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	keep := ActedKey(Recommendation{Statement: "keep me"}, "alpha")
 	drop := ActedKey(Recommendation{Statement: "roll me back"}, "alpha")
 	if err := MarkActed(keep); err != nil {
@@ -65,7 +65,7 @@ func TestUnmarkActed_RemovesKeyPreservingOthers(t *testing.T) {
 }
 
 func TestUnmarkActed_AbsentKeyIsNoop(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	if err := UnmarkActed(ActedKey(Recommendation{Statement: "never marked"}, "alpha")); err != nil {
 		t.Errorf("UnmarkActed on absent key = %v, want nil (no-op)", err)
 	}
@@ -77,7 +77,7 @@ func TestUnmarkActed_AbsentKeyIsNoop(t *testing.T) {
 // drops the first writer's key. The flock in MarkActed must serialize them
 // so both land.
 func TestMarkActed_ConcurrentWritesBothLand(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	k1 := ActedKey(Recommendation{Statement: "concurrent one"}, "alpha")
 	k2 := ActedKey(Recommendation{Statement: "concurrent two"}, "alpha")
 

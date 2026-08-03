@@ -215,11 +215,11 @@ func SnapshotConfig(dataDir string, buckets map[string]BucketPopulations) (int, 
 
 const scaffoldReadme = `# insights-eval-data
 
-PRIVATE fixture data for the tmux-ctrl insights outcome-eval suite. Contains
+PRIVATE fixture data for the agent-insights outcome-eval suite. Contains
 raw Claude Code session transcripts (including work content) — never make this
 repo public and never copy its contents into a shareable artifact.
 
-Produced and verified by ` + "`tmux-ctrl insights eval freeze`" + `; layout and
+Produced and verified by ` + "`agent-insights eval freeze`" + `; layout and
 invariants: docs/superpowers/specs/2026-07-03-insights-outcome-eval-design.md
 in the tmux-ctrl repo. All fixtures are append-only.
 `

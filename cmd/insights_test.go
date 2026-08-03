@@ -128,7 +128,7 @@ func TestParseSynthesizeArgsLog(t *testing.T) {
 // so this also exercises the "empty store" path (LoadAnalyses on a missing
 // dir, no run state file).
 func TestRunStatusJSON(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	t.Setenv("AGENT_INSIGHTS_CONFIG", filepath.Join(t.TempDir(), "nonexistent.yaml"))
 
 	out := captureStdout(t, func() {

@@ -51,7 +51,7 @@ func writeSynthesisFixture(t *testing.T, dir, repoKey string, generatedAt time.T
 
 func TestRunSynthesizeDueFilter(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", dir)
+	t.Setenv("AGENT_INSIGHTS_DIR", dir)
 	adir := filepath.Join(dir, "analyses")
 	if err := os.MkdirAll(adir, 0o755); err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestRunSynthesizeDueFilter(t *testing.T) {
 
 func TestRunSynthesizeDueFilterNoneDue(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", dir)
+	t.Setenv("AGENT_INSIGHTS_DIR", dir)
 	adir := filepath.Join(dir, "analyses")
 	if err := os.MkdirAll(adir, 0o755); err != nil {
 		t.Fatal(err)
@@ -92,7 +92,7 @@ func TestRunSynthesizeDueFilterNoneDue(t *testing.T) {
 
 func TestRunSynthesizeDryRun(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", dir)
+	t.Setenv("AGENT_INSIGHTS_DIR", dir)
 	// seed 12 alpha analyses so it clears the floor
 	adir := filepath.Join(dir, "analyses")
 	os.MkdirAll(adir, 0o755)
@@ -116,7 +116,7 @@ func TestRunSynthesizeDryRun(t *testing.T) {
 // privacy scan and block Store, not just get logged.
 func TestRunSynthesizeBlocksOnPrivacyLeak(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", dir)
+	t.Setenv("AGENT_INSIGHTS_DIR", dir)
 	adir := filepath.Join(dir, "analyses")
 	os.MkdirAll(adir, 0o755)
 	for i := 0; i < 10; i++ {

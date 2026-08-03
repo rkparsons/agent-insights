@@ -33,8 +33,8 @@ func writeSession(t *testing.T, projects, project, id string, assistantMsgs int)
 
 func TestRunSingleWritesAnalysisAndForcesGate(t *testing.T) {
 	projects := t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	// Only 2 assistant turns => below the gate; RunSingle must analyze it anyway.
 	writeSession(t, projects, "proj", "sess-x", 2)
 
@@ -56,8 +56,8 @@ func TestRunSingleWritesAnalysisAndForcesGate(t *testing.T) {
 // the directory does not outlive the run.
 func TestRunCreatesSkillWorkdir(t *testing.T) {
 	projects := t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	writeSession(t, projects, "proj", "sess-w", 6)
 
 	var cmdDir string
@@ -89,8 +89,8 @@ func TestRunCreatesSkillWorkdir(t *testing.T) {
 
 func TestRunSingleIncrementalSkip(t *testing.T) {
 	projects := t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	writeSession(t, projects, "proj", "sess-y", 6)
 	judge := fakeJudge{fields: substantialJudged()}
 	opts := Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute}

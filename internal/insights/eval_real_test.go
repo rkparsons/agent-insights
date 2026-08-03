@@ -96,7 +96,7 @@ func TestLightEvalReal(t *testing.T) {
 	if dir == "" {
 		dir = "../../../docs/superpowers/specs/eval"
 	}
-	local := filepath.Join(os.TempDir(), "tmux-ctrl-light-eval-manifest.json")
+	local := filepath.Join(os.TempDir(), "agent-insights-light-eval-manifest.json")
 	if err := writeEvalArtifacts(dir, local, rep, runs); err != nil {
 		t.Fatalf("write artifacts: %v", err)
 	}

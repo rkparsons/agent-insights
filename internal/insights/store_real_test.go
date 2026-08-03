@@ -17,7 +17,7 @@ func TestRunSingleReal(t *testing.T) {
 	if target == "" {
 		t.Skip("set INSIGHTS_REAL_SESSION=<id|path> to run")
 	}
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatal(err)

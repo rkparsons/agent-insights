@@ -28,8 +28,8 @@ func (j *sequenceJudge) Judge(ctx context.Context, in ReducedInput) (JudgedField
 // re-run of the identical command must reprocess it — no flag, no --retry-errored.
 func TestRunBackfillRetriesErroredOnReRun(t *testing.T) {
 	projects := t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	ids := []string{"a", "b", "c", "d", "e"}
 	for _, id := range ids {
 		writeSession(t, projects, "proj", id, 6)
@@ -68,8 +68,8 @@ func TestRunBackfillRetriesErroredOnReRun(t *testing.T) {
 // The parked run is clean (nil error), leaves the rest unprocessed, and a re-run finishes.
 func TestRunBackfillParksAfterConsecutiveFailures(t *testing.T) {
 	projects := t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	ids := []string{"a", "b", "c", "d", "e", "f"}
 	for _, id := range ids {
 		writeSession(t, projects, "proj", id, 6)
@@ -109,8 +109,8 @@ func TestRunBackfillParksAfterConsecutiveFailures(t *testing.T) {
 // it is recorded as errored and retried on the next run.
 func TestRunBackfillIsolatedFailureDoesNotPark(t *testing.T) {
 	projects := t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	ids := []string{"a", "b", "c", "d", "e"}
 	for _, id := range ids {
 		writeSession(t, projects, "proj", id, 6)
@@ -144,8 +144,8 @@ func TestRunBackfillIsolatedFailureDoesNotPark(t *testing.T) {
 // sessions are done, gated, and still to process. Checked between usage windows.
 func TestBackfillPlanCounts(t *testing.T) {
 	projects := t.TempDir()
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	writeSession(t, projects, "proj", "done1", 6)  // substantial -> analyzed (done)
 	writeSession(t, projects, "proj", "gated1", 2) // trivial -> gated
 	opts := Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute}

@@ -7,14 +7,14 @@ import (
 	"time"
 )
 
-// InsightsDir is the durable insights state root. Honors TMUX_CTRL_INSIGHTS_DIR for
+// InsightsDir is the durable insights state root. Honors AGENT_INSIGHTS_DIR for
 // tests, mirroring worktreestate.RootDir.
 func InsightsDir() string {
-	if d := os.Getenv("TMUX_CTRL_INSIGHTS_DIR"); d != "" {
+	if d := os.Getenv("AGENT_INSIGHTS_DIR"); d != "" {
 		return d
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "tmux-ctrl", "insights")
+	return filepath.Join(home, ".config", "agent-insights")
 }
 
 // AnalysesDir is the flat global pool of per-session analyses, keyed by session-id.

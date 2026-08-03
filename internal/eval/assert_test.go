@@ -27,7 +27,7 @@ func writeAnalysisStub(t *testing.T, dir, id string, mtime time.Time) {
 
 func TestAssertFrozenFindsGapsAndSkews(t *testing.T) {
 	insightsDir := t.TempDir()
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", insightsDir)
+	t.Setenv("AGENT_INSIGHTS_DIR", insightsDir)
 	mt := time.Date(2026, 6, 25, 10, 0, 0, 0, time.UTC)
 	writeAnalysisStub(t, insightsDir, "ok", mt)
 	writeAnalysisStub(t, insightsDir, "skewed", mt)

@@ -30,7 +30,7 @@ func (i FreezeIssues) Blocking() bool {
 // poolMtime looks up the stamped transcript_mtime for an id — the caller
 // passes a lookup over baseline-pool/v1 once it's canonical, or over the live
 // analyses pool before v1 exists (see RunFreeze). Resolution for a skew:
-// `tmux-ctrl insights analyze <id>`, then re-freeze.
+// `agent-insights analyze <id>`, then re-freeze.
 //
 // Known-unresolvable case: once a session is frozen, FreezeCorpus never
 // re-reads its live transcript (the frozen file and its manifest Mtime are

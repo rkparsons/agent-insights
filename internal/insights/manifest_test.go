@@ -6,7 +6,7 @@ import (
 )
 
 func TestManifestLastEntryWins(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	t0 := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	t1 := time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC)
 	if err := appendManifest(ManifestEntry{SessionID: "s", TranscriptMtime: t0, Outcome: "gated", Threshold: 5, At: t0}); err != nil {
@@ -26,7 +26,7 @@ func TestManifestLastEntryWins(t *testing.T) {
 }
 
 func TestLoadManifestMissingIsEmpty(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	m, err := loadManifest()
 	if err != nil {
 		t.Fatal(err)

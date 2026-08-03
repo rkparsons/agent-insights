@@ -30,7 +30,7 @@ func TestFreezeCorpusWritesManifestAndFiles(t *testing.T) {
 	mustWrite(filepath.Join(proj, "sess-1.jsonl"), `{"a":1}`)
 	mustWrite(filepath.Join(proj, "sess-2.jsonl"), `{"a":2}`)
 	mustWrite(filepath.Join(proj, "sess-1", "subagents", "agent-abc.jsonl"), `{"sub":1}`)
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
 
 	start := time.Date(2026, 6, 25, 10, 0, 0, 0, time.UTC)
 	byID := map[string]insights.AgentSessionAnalysis{
@@ -87,7 +87,7 @@ func TestFreezeCorpusWritesManifestAndFiles(t *testing.T) {
 }
 
 // freezeCorpusFixture builds a projects tree with sess-1/sess-2 transcripts
-// and one sidechain, wired through TMUX_CTRL_CLAUDE_PROJECTS_DIR, and returns
+// and one sidechain, wired through AGENT_INSIGHTS_PROJECTS_DIR, and returns
 // the projects dir plus a fresh data dir.
 func freezeCorpusFixture(t *testing.T) (projects, data string) {
 	t.Helper()
@@ -105,7 +105,7 @@ func freezeCorpusFixture(t *testing.T) (projects, data string) {
 	mustWrite(filepath.Join(proj, "sess-1.jsonl"), `{"a":1}`)
 	mustWrite(filepath.Join(proj, "sess-2.jsonl"), `{"a":2}`)
 	mustWrite(filepath.Join(proj, "sess-1", "subagents", "agent-abc.jsonl"), `{"sub":1}`)
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
 	return projects, data
 }
 
@@ -287,7 +287,7 @@ func TestFreezeCorpusDedupesSameSessionAcrossProjectDirs(t *testing.T) {
 	if err := os.MkdirAll(projB, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
 
 	older := time.Date(2026, 6, 20, 10, 0, 0, 0, time.UTC)
 	newer := time.Date(2026, 6, 25, 10, 0, 0, 0, time.UTC)
@@ -395,7 +395,7 @@ func TestFreezeCorpusFreezesAgentMetaSidechains(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(subagents, "agent-x.meta.json"), []byte(`{"meta":1}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
 
 	m, _, err := FreezeCorpus(data, nil, time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC), insights.Config{})
 	if err != nil {
@@ -433,7 +433,7 @@ func TestFreezeCorpusDedupesSameSidechainAcrossProjectDirs(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(projB, "sess-1", "subagents"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
+	t.Setenv("AGENT_INSIGHTS_PROJECTS_DIR", projects)
 
 	mustWrite := func(p, s string) {
 		t.Helper()

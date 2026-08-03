@@ -13,9 +13,9 @@ import (
 	"github.com/rkparsons/agent-insights/internal/synthesis"
 )
 
-const insightsUsage = "usage: tmux-ctrl insights backfill [--quiet-for 24h] [--timeout 10m] [--threshold N] [--force] [--dry-run] | analyze <session-id|path> [--force] | synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run] [--log <path>] | status --json | show --json | acted <key> | unacted <key> | eval <freeze|outcome|score|adjudicate|probes|statuses> ..."
+const insightsUsage = "usage: agent-insights backfill [--quiet-for 24h] [--timeout 10m] [--threshold N] [--force] [--dry-run] | analyze <session-id|path> [--force] | synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run] [--log <path>] | status --json | show --json | acted <key> | unacted <key> | eval <freeze|outcome|score|adjudicate|probes|statuses> ..."
 
-// RunInsights dispatches `tmux-ctrl insights ...`. Mirrors RunHookHandler /
+// RunInsights dispatches `agent-insights ...`. Mirrors RunHookHandler /
 // RunStatusExplain: a thin os.Args branch over the insights/synthesis packages.
 func RunInsights(args []string) {
 	if len(args) == 0 {
@@ -34,7 +34,7 @@ func RunInsights(args []string) {
 	// one other entry point in this file and loads its own config already.
 	icfg, err := insights.LoadConfig()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: load config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights: load config: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -54,7 +54,7 @@ func RunInsights(args []string) {
 	case "analyze":
 		runAnalyze(icfg, args[1:])
 	default:
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: unknown subcommand %q\n", args[0])
+		fmt.Fprintf(os.Stderr, "agent-insights: unknown subcommand %q\n", args[0])
 		fmt.Fprintln(os.Stderr, insightsUsage)
 		os.Exit(2)
 	}
@@ -63,8 +63,8 @@ func RunInsights(args []string) {
 func runSynthesize(icfg insights.Config, args []string) {
 	sopts, serr := parseSynthesizeArgs(args)
 	if serr != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", serr)
-		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run] [--log <path>]")
+		fmt.Fprintf(os.Stderr, "agent-insights: %v\n", serr)
+		fmt.Fprintln(os.Stderr, "usage: agent-insights synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run] [--log <path>]")
 		os.Exit(2)
 	}
 	if sopts.Due {
@@ -82,15 +82,15 @@ func runSynthesize(icfg insights.Config, args []string) {
 func runAnalyze(icfg insights.Config, args []string) {
 	target, opts, err := parseAnalyzeArgs(args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", err)
-		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights analyze <session-id|path> [--force]")
+		fmt.Fprintf(os.Stderr, "agent-insights: %v\n", err)
+		fmt.Fprintln(os.Stderr, "usage: agent-insights analyze <session-id|path> [--force]")
 		os.Exit(2)
 	}
 	repo := icfg.Resolver()
 	sum, err := insights.RunSingle(context.Background(), target, repo, insights.NewClaudeJudge, opts)
 	printRunSummary(sum)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -100,13 +100,13 @@ func runAnalyze(icfg insights.Config, args []string) {
 func runBackfill(icfg insights.Config, args []string) {
 	opts, err := parseBackfillArgs(args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", err)
-		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights backfill [--quiet-for 24h] [--timeout 10m] [--threshold N] [--force] [--dry-run]")
+		fmt.Fprintf(os.Stderr, "agent-insights: %v\n", err)
+		fmt.Fprintln(os.Stderr, "usage: agent-insights backfill [--quiet-for 24h] [--timeout 10m] [--threshold N] [--force] [--dry-run]")
 		os.Exit(2)
 	}
 	plan, planErr := insights.BackfillPlan(opts)
 	if planErr != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", planErr)
+		fmt.Fprintf(os.Stderr, "agent-insights: %v\n", planErr)
 		os.Exit(1)
 	}
 	label := "insights:"
@@ -122,7 +122,7 @@ func runBackfill(icfg insights.Config, args []string) {
 	sum, err := insights.RunBackfill(context.Background(), repo, insights.NewClaudeJudge, opts)
 	printRunSummary(sum)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -138,16 +138,16 @@ func printRunSummary(sum insights.RunSummary) {
 // runStatus handles `insights status --json`.
 func runStatus(icfg insights.Config, args []string) {
 	if !isJSONFlag(args) {
-		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights status --json")
+		fmt.Fprintln(os.Stderr, "usage: agent-insights status --json")
 		os.Exit(2)
 	}
 	status, err := buildStatusJSON(icfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: status: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights: status: %v\n", err)
 		os.Exit(1)
 	}
 	if err := json.NewEncoder(os.Stdout).Encode(status); err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: status: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights: status: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -201,17 +201,17 @@ func buildStatusJSON(icfg insights.Config) (insights.StatusJSON, error) {
 // runShow handles `insights show --json`.
 func runShow(args []string) {
 	if !isJSONFlag(args) {
-		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights show --json")
+		fmt.Fprintln(os.Stderr, "usage: agent-insights show --json")
 		os.Exit(2)
 	}
 	syntheses, err := synthesis.LoadSyntheses()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: show: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights: show: %v\n", err)
 		os.Exit(1)
 	}
 	show := synthesis.BuildShowJSON(syntheses)
 	if err := json.NewEncoder(os.Stdout).Encode(show); err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: show: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights: show: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -223,7 +223,7 @@ func runActed(args []string, mark bool) {
 		verb = "unacted"
 	}
 	if len(args) != 1 || args[0] == "" || args[0][0] == '-' {
-		fmt.Fprintf(os.Stderr, "usage: tmux-ctrl insights %s <key>\n", verb)
+		fmt.Fprintf(os.Stderr, "usage: agent-insights %s <key>\n", verb)
 		os.Exit(2)
 	}
 	key := args[0]
@@ -234,7 +234,7 @@ func runActed(args []string, mark bool) {
 		err = synthesis.UnmarkActed(key)
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %s: %v\n", verb, err)
+		fmt.Fprintf(os.Stderr, "agent-insights: %s: %v\n", verb, err)
 		os.Exit(1)
 	}
 }

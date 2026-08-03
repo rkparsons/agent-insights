@@ -14,9 +14,9 @@ import (
 	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
-// RunInsightsEval dispatches `tmux-ctrl insights eval <freeze|outcome|score|adjudicate|probes|statuses>`.
+// RunInsightsEval dispatches `agent-insights eval <freeze|outcome|score|adjudicate|probes|statuses>`.
 func RunInsightsEval(args []string) {
-	usage := "usage: tmux-ctrl insights eval freeze [--data <dir>] | outcome [--data <dir>] [--cache <dir>] [--scope l2|full] [--population scoring|as_consumed] [--samples N] [--l1-sample] | score [--data <dir>] [--cache <dir>] [--record <path>] [--repeats N] [--targets <ids> [--samples N]] | adjudicate <key-prefix> <accept|reject> [--note <s>] [--data <dir>] [--cache <dir>] | probes [--repeats N] [--data <dir>] [--cache <dir>] | statuses [seed] [--data <dir>]"
+	usage := "usage: agent-insights eval freeze [--data <dir>] | outcome [--data <dir>] [--cache <dir>] [--scope l2|full] [--population scoring|as_consumed] [--samples N] [--l1-sample] | score [--data <dir>] [--cache <dir>] [--record <path>] [--repeats N] [--targets <ids> [--samples N]] | adjudicate <key-prefix> <accept|reject> [--note <s>] [--data <dir>] [--cache <dir>] | probes [--repeats N] [--data <dir>] [--cache <dir>] | statuses [seed] [--data <dir>]"
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
@@ -51,7 +51,7 @@ func defaultCacheDir() string {
 		home, _ := os.UserHomeDir()
 		base = filepath.Join(home, ".cache")
 	}
-	return filepath.Join(base, "tmux-ctrl", "insights-eval")
+	return filepath.Join(base, "agent-insights", "eval")
 }
 
 // runEvalFreeze is the existing freeze body, verbatim, with the final summary
@@ -63,24 +63,24 @@ func runEvalFreeze(args []string) {
 		case "--data":
 			i++
 			if i >= len(args) {
-				fmt.Fprintln(os.Stderr, "tmux-ctrl insights eval: --data needs a value")
+				fmt.Fprintln(os.Stderr, "agent-insights eval: --data needs a value")
 				os.Exit(2)
 			}
 			dataDir = args[i]
 		default:
-			fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval freeze: unknown flag %q\n", args[i])
+			fmt.Fprintf(os.Stderr, "agent-insights eval freeze: unknown flag %q\n", args[i])
 			os.Exit(2)
 		}
 	}
 	icfg, err := insights.LoadConfig()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval freeze: load config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights eval freeze: load config: %v\n", err)
 		os.Exit(1)
 	}
 	icfg.WarnIfNoRepos()
 	rep, err := eval.RunFreeze(dataDir, icfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval freeze: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights eval freeze: %v\n", err)
 		os.Exit(1)
 	}
 	gt := fmt.Sprintf("%d ground-truth files", rep.GroundTruth)
@@ -99,7 +99,7 @@ func runEvalFreeze(args []string) {
 	}
 	if rep.Issues.Blocking() {
 		for _, s := range rep.Issues.Skews {
-			fmt.Fprintf(os.Stderr, "freeze: SKEW %s (re-judge: tmux-ctrl insights analyze <id>, then re-run freeze)\n", s)
+			fmt.Fprintf(os.Stderr, "freeze: SKEW %s (re-judge: agent-insights analyze <id>, then re-run freeze)\n", s)
 		}
 		for _, c := range rep.Issues.CountMismatches {
 			fmt.Fprintf(os.Stderr, "freeze: COUNT MISMATCH %s\n", c)
@@ -164,12 +164,12 @@ func parseOutcomeArgs(args []string) (eval.OutcomeOptions, error) {
 func runEvalOutcome(args []string) {
 	opts, err := parseOutcomeArgs(args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval outcome: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights eval outcome: %v\n", err)
 		os.Exit(2)
 	}
 	opts.ClaudeVersion, err = eval.ClaudeVersionString()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval outcome: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights eval outcome: %v\n", err)
 		os.Exit(1)
 	}
 	rec, err := eval.RunOutcome(context.Background(), opts)
@@ -177,7 +177,7 @@ func runEvalOutcome(args []string) {
 		fmt.Fprintf(os.Stderr, "outcome: WARN %s\n", w)
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval outcome: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights eval outcome: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Fprintf(os.Stderr, "outcome: scope=%s population=%s pool=%s samples=%d · cache %d hits / %d misses\n",
@@ -208,26 +208,26 @@ func runEvalStatuses(args []string) {
 		case "--data":
 			i++
 			if i >= len(args) {
-				fmt.Fprintln(os.Stderr, "tmux-ctrl insights eval statuses: --data needs a value")
+				fmt.Fprintln(os.Stderr, "agent-insights eval statuses: --data needs a value")
 				os.Exit(2)
 			}
 			dataDir = args[i]
 		default:
-			fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval statuses: unknown arg %q\n", args[i])
+			fmt.Fprintf(os.Stderr, "agent-insights eval statuses: unknown arg %q\n", args[i])
 			os.Exit(2)
 		}
 	}
 	if seed {
 		added, err := eval.SeedStatuses(dataDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval statuses seed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "agent-insights eval statuses seed: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Fprintf(os.Stderr, "statuses: seeded %d (existing entries untouched)\n", added)
 	}
 	statuses, err := eval.Statuses(dataDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval statuses: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights eval statuses: %v\n", err)
 		os.Exit(1)
 	}
 	ids := make([]string, 0, len(statuses))
@@ -323,12 +323,12 @@ func parseScoreArgs(args []string) (eval.ScoreOptions, error) {
 func runEvalScore(args []string) {
 	opts, err := parseScoreArgs(args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval score: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights eval score: %v\n", err)
 		os.Exit(2)
 	}
 	opts.ClaudeVersion, err = eval.ClaudeVersionString()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval score: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights eval score: %v\n", err)
 		os.Exit(1)
 	}
 	if len(opts.Targets) > 0 {
@@ -340,7 +340,7 @@ func runEvalScore(args []string) {
 		fmt.Fprintf(os.Stderr, "score: WARN %s\n", w)
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval score: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights eval score: %v\n", err)
 		os.Exit(1)
 	}
 	printVerdict(v, arts)
@@ -354,7 +354,7 @@ func runEvalScoreTargets(opts eval.ScoreOptions) {
 		fmt.Fprintf(os.Stderr, "score: WARN %s\n", w)
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval score: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights eval score: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Fprintln(os.Stderr, "score: DEV LOOP — no verdict composed, nothing written to runs/ or cards/")
@@ -451,7 +451,7 @@ func runEvalAdjudicate(args []string) {
 			flag := args[i]
 			i++
 			if i >= len(args) {
-				fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval adjudicate: %s needs a value\n", flag)
+				fmt.Fprintf(os.Stderr, "agent-insights eval adjudicate: %s needs a value\n", flag)
 				os.Exit(2)
 			}
 			switch flag {
@@ -467,17 +467,17 @@ func runEvalAdjudicate(args []string) {
 		}
 	}
 	if len(positional) != 2 || (positional[1] != "accept" && positional[1] != "reject") {
-		fmt.Fprintln(os.Stderr, "usage: tmux-ctrl insights eval adjudicate <key-prefix> <accept|reject> [--note <s>] [--data <dir>] [--cache <dir>]")
+		fmt.Fprintln(os.Stderr, "usage: agent-insights eval adjudicate <key-prefix> <accept|reject> [--note <s>] [--data <dir>] [--cache <dir>]")
 		os.Exit(2)
 	}
 	card, err := eval.FindCardByPrefix(cacheDir, positional[0])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval adjudicate: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights eval adjudicate: %v\n", err)
 		os.Exit(1)
 	}
 	a := eval.Adjudication{Key: card.Key, Decision: positional[1], Note: note, DecidedAt: time.Now().UTC()}
 	if err := eval.SaveAdjudication(dataDir, a); err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval adjudicate: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights eval adjudicate: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Fprintf(os.Stderr, "adjudicate: %s %s/%s = %s (applies from the next score run)\n",
@@ -487,17 +487,17 @@ func runEvalAdjudicate(args []string) {
 func runEvalProbes(args []string) {
 	opts, err := parseScoreArgs(args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval probes: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights eval probes: %v\n", err)
 		os.Exit(2)
 	}
 	opts.ClaudeVersion, err = eval.ClaudeVersionString()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval probes: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights eval probes: %v\n", err)
 		os.Exit(1)
 	}
 	probes, err := eval.ProbeRun(context.Background(), opts)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval probes: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agent-insights eval probes: %v\n", err)
 		os.Exit(1)
 	}
 	failed := false

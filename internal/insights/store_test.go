@@ -12,7 +12,7 @@ import (
 // window spawn both call this instead of deriving the path themselves.
 func TestSynthesizeLogPath(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", dir)
+	t.Setenv("AGENT_INSIGHTS_DIR", dir)
 	want := filepath.Join(dir, "logs", "synthesize-"+time.Now().UTC().Format("2006-01-02")+".log")
 	if got := SynthesizeLogPath(); got != want {
 		t.Errorf("SynthesizeLogPath() = %q, want %q", got, want)
@@ -21,7 +21,7 @@ func TestSynthesizeLogPath(t *testing.T) {
 
 func TestWriteAndReadAnalysisMtime(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", dir)
+	t.Setenv("AGENT_INSIGHTS_DIR", dir)
 	mt := time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC)
 	a := AgentSessionAnalysis{
 		Stats:           AgentSessionStats{SessionID: "sess-1"},
@@ -41,7 +41,7 @@ func TestWriteAndReadAnalysisMtime(t *testing.T) {
 }
 
 func TestReadAnalysisMtimeMissing(t *testing.T) {
-	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	if _, ok := ReadAnalysisMtime("nope"); ok {
 		t.Error("want ok=false for missing analysis")
 	}
