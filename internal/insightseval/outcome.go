@@ -99,6 +99,12 @@ type VerifiedOutput struct {
 // The scratch dir is deliberately outside the env-pin's own tree: the nested
 // claude's cwd is pin.WorkDir and its skills come from pin.ConfigDir, and a
 // second copy anywhere above that cwd would make skill resolution ambiguous.
+//
+// Cache key constraint: eval delivers skills via the pinned config-dir snapshot
+// while production delivers via workdir materialization. Since the delivery
+// mechanism is not an input to any cache key (SkillHashes hash only the dirs),
+// switching eval delivery from config-dir to workdir would require manual l1/l2
+// cache invalidation—a silent hit across that switch would be semantically wrong.
 func defaultSkillDirs() (map[string]string, func(), error) {
 	root, cleanup, err := skills.TempWorkdir()
 	if err != nil {
