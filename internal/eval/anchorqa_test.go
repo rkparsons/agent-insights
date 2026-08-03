@@ -77,11 +77,11 @@ func TestValidateQAVerdictsCoverageAndValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := map[string]qaResult{
-		"missing session": {Verdicts: ok.Verdicts[:1]},
-		"unknown session": {Verdicts: append(append([]qaVerdict(nil), ok.Verdicts...), qaVerdict{SessionID: "s9", Verdict: "keep", Rationale: "r"})},
+		"missing session":   {Verdicts: ok.Verdicts[:1]},
+		"unknown session":   {Verdicts: append(append([]qaVerdict(nil), ok.Verdicts...), qaVerdict{SessionID: "s9", Verdict: "keep", Rationale: "r"})},
 		"duplicate session": {Verdicts: []qaVerdict{ok.Verdicts[0], {SessionID: "s1", Verdict: "remove", Rationale: "r"}}},
-		"bad verdict": {Verdicts: []qaVerdict{ok.Verdicts[0], {SessionID: "s2", Verdict: "maybe", Rationale: "r"}}},
-		"empty rationale": {Verdicts: []qaVerdict{ok.Verdicts[0], {SessionID: "s2", Verdict: "remove", Rationale: ""}}},
+		"bad verdict":       {Verdicts: []qaVerdict{ok.Verdicts[0], {SessionID: "s2", Verdict: "maybe", Rationale: "r"}}},
+		"empty rationale":   {Verdicts: []qaVerdict{ok.Verdicts[0], {SessionID: "s2", Verdict: "remove", Rationale: ""}}},
 	}
 	for name, res := range cases {
 		if err := validateQAVerdicts(in, res); err == nil {

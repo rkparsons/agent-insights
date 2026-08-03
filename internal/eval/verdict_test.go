@@ -82,7 +82,7 @@ func composeInputs(t *testing.T, results []TargetResult, prior []namedVerdict) (
 	t.Helper()
 	rec, cache := tier1Fixture(t, 0, false)
 	return VerdictInputs{Record: rec, RecordName: "rec.json",
-		ScoredAt: time.Date(2026, 7, 5, 10, 0, 0, 0, time.UTC),
+		ScoredAt:      time.Date(2026, 7, 5, 10, 0, 0, 0, time.UTC),
 		RubricSetHash: "r1", MatcherEnvHash: "e1",
 		Results: results, Adj: nil, Prior: prior}, cache
 }
@@ -142,7 +142,7 @@ func TestComposeVerdictFlipProvisionalFail(t *testing.T) {
 			{ID: "C-02", Pass: true, Granularity: "full", PassAt: "full"},
 		}}}}
 	results := []TargetResult{
-		targetResult("C-01", "must_pass", true, "full"),  // fail → pass flip
+		targetResult("C-01", "must_pass", true, "full"),    // fail → pass flip
 		targetResult("C-02", "must_pass", false, "absent"), // pass → fail flip
 	}
 	in, cache := composeInputs(t, results, prior)

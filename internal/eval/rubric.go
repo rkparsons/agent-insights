@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"gopkg.in/yaml.v3"
 	"github.com/rkparsons/agent-insights/internal/synthesis"
+	"gopkg.in/yaml.v3"
 )
 
 // Rubric encodes one eval target from docs/insights-eval/insights-eval-spec.md. Rubrics

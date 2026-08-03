@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rkparsons/agent-insights/internal/insights"
 	"github.com/rkparsons/agent-insights/internal/eval"
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 // RunInsightsEval dispatches `tmux-ctrl insights eval <freeze|outcome|score|adjudicate|probes|statuses>`.
