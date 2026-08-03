@@ -8,10 +8,10 @@ import (
 func TestActedKey_StableAndRepoScoped(t *testing.T) {
 	a := Recommendation{Statement: "Verify claims  before  asserting"}
 	b := Recommendation{Statement: "verify claims before asserting"} // case/space-normalized same
-	if ActedKey(a, "client-project") != ActedKey(b, "client-project") {
+	if ActedKey(a, "alpha") != ActedKey(b, "alpha") {
 		t.Error("normalization: differently-spaced/cased identical statements must share a key")
 	}
-	if ActedKey(a, "client-project") == ActedKey(a, "tmux-ctrl") {
+	if ActedKey(a, "alpha") == ActedKey(a, "tmux-ctrl") {
 		t.Error("source repo must scope the key")
 	}
 }
@@ -19,7 +19,7 @@ func TestActedKey_StableAndRepoScoped(t *testing.T) {
 func TestActedKey_TypeScoped(t *testing.T) {
 	skill := Recommendation{Type: "new_skill", Statement: "address the foo friction"}
 	hook := Recommendation{Type: "hook", Statement: "address the foo friction"}
-	if ActedKey(skill, "client-project") == ActedKey(hook, "client-project") {
+	if ActedKey(skill, "alpha") == ActedKey(hook, "alpha") {
 		t.Error("recommendation type must scope the key: same normalized statement, different type must not collide")
 	}
 }
@@ -30,7 +30,7 @@ func TestActedRoundTrip(t *testing.T) {
 	if err != nil || len(m) != 0 {
 		t.Fatalf("empty load = (%v,%v), want ({},nil)", m, err)
 	}
-	k := ActedKey(Recommendation{Statement: "do the thing"}, "client-project")
+	k := ActedKey(Recommendation{Statement: "do the thing"}, "alpha")
 	if err := MarkActed(k); err != nil {
 		t.Fatalf("MarkActed: %v", err)
 	}
@@ -42,8 +42,8 @@ func TestActedRoundTrip(t *testing.T) {
 
 func TestUnmarkActed_RemovesKeyPreservingOthers(t *testing.T) {
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
-	keep := ActedKey(Recommendation{Statement: "keep me"}, "client-project")
-	drop := ActedKey(Recommendation{Statement: "roll me back"}, "client-project")
+	keep := ActedKey(Recommendation{Statement: "keep me"}, "alpha")
+	drop := ActedKey(Recommendation{Statement: "roll me back"}, "alpha")
 	if err := MarkActed(keep); err != nil {
 		t.Fatalf("MarkActed keep: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestUnmarkActed_RemovesKeyPreservingOthers(t *testing.T) {
 
 func TestUnmarkActed_AbsentKeyIsNoop(t *testing.T) {
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
-	if err := UnmarkActed(ActedKey(Recommendation{Statement: "never marked"}, "client-project")); err != nil {
+	if err := UnmarkActed(ActedKey(Recommendation{Statement: "never marked"}, "alpha")); err != nil {
 		t.Errorf("UnmarkActed on absent key = %v, want nil (no-op)", err)
 	}
 }
@@ -78,8 +78,8 @@ func TestUnmarkActed_AbsentKeyIsNoop(t *testing.T) {
 // so both land.
 func TestMarkActed_ConcurrentWritesBothLand(t *testing.T) {
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
-	k1 := ActedKey(Recommendation{Statement: "concurrent one"}, "client-project")
-	k2 := ActedKey(Recommendation{Statement: "concurrent two"}, "client-project")
+	k1 := ActedKey(Recommendation{Statement: "concurrent one"}, "alpha")
+	k2 := ActedKey(Recommendation{Statement: "concurrent two"}, "alpha")
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)

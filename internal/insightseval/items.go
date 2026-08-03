@@ -146,7 +146,7 @@ func allTrue(bs []bool) bool {
 	return true
 }
 
-// bucketOf extracts the bucket prefix of an item ref ("client-project/theme/3" → "client-project").
+// bucketOf extracts the bucket prefix of an item ref ("alpha/theme/3" → "alpha").
 func bucketOf(ref string) string {
 	if i := strings.Index(ref, "/"); i > 0 {
 		return ref[:i]

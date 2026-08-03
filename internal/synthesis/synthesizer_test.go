@@ -16,7 +16,7 @@ func TestClaudeSynthesizerParsesEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := claudeSynthesizer{run: func(ctx context.Context, stdin []byte) ([]byte, error) { return data, nil }}
-	raw, err := s.Synthesize(context.Background(), EvidenceBundle{Repo: "client-project"})
+	raw, err := s.Synthesize(context.Background(), EvidenceBundle{Repo: "alpha"})
 	if err != nil {
 		t.Fatalf("Synthesize: %v", err)
 	}

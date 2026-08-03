@@ -11,7 +11,7 @@ import (
 )
 
 // Tier-1 thresholds mirror the existing real gate (synthesis/eval_test.go
-// TestGateRealclient-project); churn has no established gate, so it warns.
+// TestGateRealRepo); churn has no established gate, so it warns.
 const (
 	fabricationHardFailRate = 0.15
 	churnWarnThreshold      = 0.5

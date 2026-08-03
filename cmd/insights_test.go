@@ -90,11 +90,11 @@ func TestParseBackfillArgs(t *testing.T) {
 }
 
 func TestParseSynthesizeArgs(t *testing.T) {
-	o, err := parseSynthesizeArgs([]string{"--repo", "client-project", "--min-sessions", "5", "--dry-run"})
+	o, err := parseSynthesizeArgs([]string{"--repo", "alpha", "--min-sessions", "5", "--dry-run"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.Repo != "client-project" || o.MinSessions != 5 || !o.DryRun {
+	if o.Repo != "alpha" || o.MinSessions != 5 || !o.DryRun {
 		t.Errorf("parsed = %+v", o)
 	}
 	if _, err := parseSynthesizeArgs([]string{"--bogus"}); err == nil {

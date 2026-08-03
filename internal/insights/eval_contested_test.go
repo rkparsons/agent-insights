@@ -93,7 +93,7 @@ func TestCardsNoIdentifierLeak(t *testing.T) {
 	const secretID = "9f8e7d6c-dead-beef-0000-111122223333"
 	inc := FrictionIncident{Type: "wrong_approach", OneLine: "did the wrong thing", EvidenceQuote: "this is the evidence"}
 	sr := sessionRun{
-		Stats:         AgentSessionStats{SessionID: secretID, Cwd: "/secret/path/client-project", AiTitle: "Fixing the parser"},
+		Stats:         AgentSessionStats{SessionID: secretID, Cwd: "/secret/path/alpha", AiTitle: "Fixing the parser"},
 		FirstUserTurn: "please fix the parser bug",
 		ZeroFriction:  true,
 		Repeats:       []RepeatResult{repeat(jf("fully_achieved", inc))},

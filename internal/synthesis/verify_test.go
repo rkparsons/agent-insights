@@ -22,7 +22,7 @@ func TestQuoteGuard(t *testing.T) {
 
 func bundleFixture() EvidenceBundle {
 	return EvidenceBundle{
-		Repo: "client-project", AnalyzedCount: 3,
+		Repo: "alpha", AnalyzedCount: 3,
 		Friction: []FrictionItem{
 			{ID: "F1", Type: "wrong_approach", SessionID: "s1", Quote: "investigate the existing pattern first"},
 			{ID: "F2", Type: "wrong_approach", SessionID: "s2"},

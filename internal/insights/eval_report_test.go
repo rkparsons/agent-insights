@@ -15,7 +15,7 @@ func runWith(stats AgentSessionStats, cell string, js ...JudgedFields) sessionRu
 
 func TestAssembleReportHardFailNonMeta(t *testing.T) {
 	// A non-meta session with a 2-class outcome jump → hard fail.
-	bad := runWith(AgentSessionStats{Cwd: "/work/client-project"}, "friction-long", jf("fully_achieved"), jf("not_achieved"))
+	bad := runWith(AgentSessionStats{Cwd: "/work/alpha"}, "friction-long", jf("fully_achieved"), jf("not_achieved"))
 	rep := assembleReport([]sessionRun{bad})
 	if !rep.HardFail {
 		t.Fatal("2-class jump on a non-meta session should hard-fail")
@@ -38,7 +38,7 @@ func TestAssembleReportMetaExempt(t *testing.T) {
 }
 
 func TestAssembleReportAggregatesAndSpend(t *testing.T) {
-	clean := runWith(AgentSessionStats{Cwd: "/work/client-project"}, "zero-extra", jf("fully_achieved"), jf("fully_achieved"))
+	clean := runWith(AgentSessionStats{Cwd: "/work/alpha"}, "zero-extra", jf("fully_achieved"), jf("fully_achieved"))
 	rep := assembleReport([]sessionRun{clean})
 	if rep.HardFail {
 		t.Error("a clean session should not hard-fail")
@@ -58,7 +58,7 @@ func TestVerdictSurfacesSoftFloorBreach(t *testing.T) {
 	// A run with high raw fabrication: schema-valid (no hard fail) but trips the
 	// raw_fabrication soft floor. The verdict headline must surface the concern.
 	sr := sessionRun{
-		Stats: AgentSessionStats{Cwd: "/work/client-project"}, Cell: "zero-extra", ZeroFriction: true,
+		Stats: AgentSessionStats{Cwd: "/work/alpha"}, Cell: "zero-extra", ZeroFriction: true,
 		Repeats: []RepeatResult{{
 			Raw: jf("fully_achieved"), Validated: jf("fully_achieved"),
 			RawQuotes: []quoteCheck{{Kind: "friction", Quote: "x", Verbatim: false}},

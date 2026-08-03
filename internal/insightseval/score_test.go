@@ -30,7 +30,7 @@ func (q *queueMatcher) Match(_ context.Context, p MatchPayload) (MatchResult, er
 
 func scoreRubric() Rubric {
 	return Rubric{ID: "C-77", Part: "regression", Tier: "HIGH", Surface: "either",
-		Repos: []string{"client-project"}, PassAt: "full", Hash: "rh1",
+		Repos: []string{"alpha"}, PassAt: "full", Hash: "rh1",
 		Statement:                "verify before asserting",
 		RequiredNuances:          []string{"seek contradicting evidence"},
 		ForbiddenGeneralizations: []string{"never assert anything"}}
@@ -38,7 +38,7 @@ func scoreRubric() Rubric {
 
 func scoreItems() []ScoredItem {
 	return []ScoredItem{
-		{ID: "client-project/theme/0", Bucket: "client-project", Surface: "theme", Text: "Verify claims",
+		{ID: "alpha/theme/0", Bucket: "alpha", Surface: "theme", Text: "Verify claims",
 			SessionIDs: []string{"a1", "a2", "x1"}, Quotes: []string{"q"}},
 		{ID: "tmux-ctrl/theme/0", Bucket: "tmux-ctrl", Surface: "theme", Text: "Verify claims elsewhere",
 			SessionIDs: []string{"z1"}},
@@ -73,7 +73,7 @@ func TestMedianGranularity(t *testing.T) {
 func TestMatchOnceCachesValidatesAndRetries(t *testing.T) {
 	cache := NewCache(t.TempDir())
 	p := BuildMatchPayload(scoreRubric(), scoreItems())
-	good := MatchResult{Matches: []ItemMatch{match("client-project/theme/0", "full", []bool{true})}}
+	good := MatchResult{Matches: []ItemMatch{match("alpha/theme/0", "full", []bool{true})}}
 
 	// transient error then success within one call's attempts
 	q := &queueMatcher{results: []MatchResult{{}, good}, errs: []error{errors.New("boom"), nil}}
@@ -112,7 +112,7 @@ func TestScoreTargetSampleMajorityAndDetail(t *testing.T) {
 	cache := NewCache(t.TempDir())
 	r := scoreRubric()
 	items := scoreItems()
-	full := MatchResult{Matches: []ItemMatch{match("client-project/theme/0", "full", []bool{true})}}
+	full := MatchResult{Matches: []ItemMatch{match("alpha/theme/0", "full", []bool{true})}}
 	absent := MatchResult{}
 	q := &queueMatcher{results: []MatchResult{full, absent, full}}
 	s, err := scoreTargetSample(context.Background(), cache, q, "env1", r, items, []string{"a1", "a2"}, nil, nil, 0, 3)
@@ -125,7 +125,7 @@ func TestScoreTargetSampleMajorityAndDetail(t *testing.T) {
 	if s.Granularity != "full" || s.RepeatAgreement < 0.66 || s.RepeatAgreement > 0.67 || s.RepeatsTaken != 3 {
 		t.Fatalf("sample: %+v", s)
 	}
-	if s.ItemRef != "client-project/theme/0" || s.Corroboration != CorroborationOK || len(s.ItemQuotes) != 1 {
+	if s.ItemRef != "alpha/theme/0" || s.Corroboration != CorroborationOK || len(s.ItemQuotes) != 1 {
 		t.Fatalf("deciding detail: %+v", s)
 	}
 }
@@ -134,7 +134,7 @@ func TestScoreTargetSampleEarlyExitAfterDecidedMedian(t *testing.T) {
 	cache := NewCache(t.TempDir())
 	r := scoreRubric()
 	items := scoreItems()
-	full := MatchResult{Matches: []ItemMatch{match("client-project/theme/0", "full", []bool{true})}}
+	full := MatchResult{Matches: []ItemMatch{match("alpha/theme/0", "full", []bool{true})}}
 	q := &queueMatcher{results: []MatchResult{full, full}}
 	s, err := scoreTargetSample(context.Background(), cache, q, "env1", r, items, []string{"a1", "a2"}, nil, nil, 0, 3)
 	if err != nil {
@@ -153,7 +153,7 @@ func TestScoreTargetSampleEarlyExitConsumesCachedThirdRepeat(t *testing.T) {
 	r := scoreRubric()
 	items := scoreItems()
 	payload := BuildMatchPayload(r, items)
-	full := MatchResult{Matches: []ItemMatch{match("client-project/theme/0", "full", []bool{true})}}
+	full := MatchResult{Matches: []ItemMatch{match("alpha/theme/0", "full", []bool{true})}}
 	// a fully-scored record: all three repeats cached, repeat 2 disagreeing
 	seed := &queueMatcher{results: []MatchResult{full, full, {}}}
 	for k := 0; k < 3; k++ {
@@ -184,7 +184,7 @@ func TestAggregateRepeatRules(t *testing.T) {
 
 	// full match with all nuances but a forbidden hit elsewhere caps the target
 	res := MatchResult{Matches: []ItemMatch{
-		match("client-project/theme/0", "full", []bool{true}),
+		match("alpha/theme/0", "full", []bool{true}),
 		match("tmux-ctrl/theme/0", "partial", []bool{false}, 0),
 	}}
 	rep := aggregateRepeat(r, items, res, anchors, nil, nil)
@@ -193,13 +193,13 @@ func TestAggregateRepeatRules(t *testing.T) {
 	}
 
 	// full granularity without all nuances downgrades to partial
-	res = MatchResult{Matches: []ItemMatch{match("client-project/theme/0", "full", []bool{false})}}
+	res = MatchResult{Matches: []ItemMatch{match("alpha/theme/0", "full", []bool{false})}}
 	if rep = aggregateRepeat(r, items, res, anchors, nil, nil); rep.Granularity != "partial" {
 		t.Fatalf("nuance downgrade: %+v", rep)
 	}
 
 	// anchor mismatch is never counted → absent, but kept as a side match
-	res = MatchResult{Matches: []ItemMatch{match("client-project/theme/0", "full", []bool{true})}}
+	res = MatchResult{Matches: []ItemMatch{match("alpha/theme/0", "full", []bool{true})}}
 	rep = aggregateRepeat(r, items, res, []string{"b1", "b2", "b3", "b4"}, nil, nil)
 	if rep.Granularity != "absent" || len(rep.SideMatches) != 1 || rep.SideMatches[0].Corroboration != CorroborationMismatch {
 		t.Fatalf("uncounted mismatch: %+v", rep)
@@ -222,7 +222,7 @@ func TestAggregateRepeatRules(t *testing.T) {
 	}
 
 	// no-anchor rubric: match counts (first-pass carding is Task 8's job)
-	res = MatchResult{Matches: []ItemMatch{match("client-project/theme/0", "partial", []bool{false})}}
+	res = MatchResult{Matches: []ItemMatch{match("alpha/theme/0", "partial", []bool{false})}}
 	rep = aggregateRepeat(r, items, res, nil, nil, nil)
 	if rep.Granularity != "partial" || rep.Corroboration != CorroborationNoAnchors {
 		t.Fatalf("no-anchor count: %+v", rep)
@@ -236,28 +236,28 @@ func TestAggregateRepeatTieBreakPrefersNuanceCarriage(t *testing.T) {
 		items[it.ID] = it
 	}
 	// grounded rec (1 hit / 1 session) whose ID sorts before the theme's
-	items["client-project/rec/0"] = ScoredItem{ID: "client-project/rec/0", Bucket: "client-project",
+	items["alpha/rec/0"] = ScoredItem{ID: "alpha/rec/0", Bucket: "alpha",
 		Surface: "recommendation", Text: "Verify claims rec", SessionIDs: []string{"a1"}}
 	anchors := []string{"a1", "a2"}
 
 	// equal granularity: the match carrying more required nuances wins,
 	// regardless of item-ID order
 	res := MatchResult{Matches: []ItemMatch{
-		match("client-project/rec/0", "partial", []bool{false, false}),
-		match("client-project/theme/0", "partial", []bool{true, false}),
+		match("alpha/rec/0", "partial", []bool{false, false}),
+		match("alpha/theme/0", "partial", []bool{true, false}),
 	}}
 	rep := aggregateRepeat(r, items, res, anchors, nil, nil)
-	if rep.ItemRef != "client-project/theme/0" {
+	if rep.ItemRef != "alpha/theme/0" {
 		t.Fatalf("nuance-richer match must win the granularity tie: %+v", rep)
 	}
 
 	// equal granularity AND equal nuance count: smaller ID stays the tie-break
 	res = MatchResult{Matches: []ItemMatch{
-		match("client-project/rec/0", "partial", []bool{false, true}),
-		match("client-project/theme/0", "partial", []bool{true, false}),
+		match("alpha/rec/0", "partial", []bool{false, true}),
+		match("alpha/theme/0", "partial", []bool{true, false}),
 	}}
 	rep = aggregateRepeat(r, items, res, anchors, nil, nil)
-	if rep.ItemRef != "client-project/rec/0" {
+	if rep.ItemRef != "alpha/rec/0" {
 		t.Fatalf("equal nuances must fall back to ID order: %+v", rep)
 	}
 
@@ -265,24 +265,24 @@ func TestAggregateRepeatTieBreakPrefersNuanceCarriage(t *testing.T) {
 	// recall-corroborated item outranks the grounded one, so grounding-only
 	// oversight never fires when an equally-good fully-corroborated item counts
 	anchors4 := []string{"a1", "a2", "x1", "a4"} // theme/0 hits 3/4 (recall), rec/9 hits 1, precision 0.5 (grounded)
-	items["client-project/rec/9"] = ScoredItem{ID: "client-project/rec/9", Bucket: "client-project",
+	items["alpha/rec/9"] = ScoredItem{ID: "alpha/rec/9", Bucket: "alpha",
 		Surface: "recommendation", Text: "Verify claims rec narrow", SessionIDs: []string{"a1", "x9"}}
 	res = MatchResult{Matches: []ItemMatch{
-		match("client-project/rec/9", "partial", []bool{true, false}),
-		match("client-project/theme/0", "partial", []bool{true, false}),
+		match("alpha/rec/9", "partial", []bool{true, false}),
+		match("alpha/theme/0", "partial", []bool{true, false}),
 	}}
 	rep = aggregateRepeat(r, items, res, anchors4, nil, nil)
-	if rep.ItemRef != "client-project/theme/0" || rep.Corroboration != CorroborationOK {
+	if rep.ItemRef != "alpha/theme/0" || rep.Corroboration != CorroborationOK {
 		t.Fatalf("recall corroboration must outrank grounding at equal quality: %+v", rep)
 	}
 
 	// higher granularity still beats more nuances
 	res = MatchResult{Matches: []ItemMatch{
-		match("client-project/rec/0", "full", []bool{true, true}),
-		match("client-project/theme/0", "partial", []bool{true, false}),
+		match("alpha/rec/0", "full", []bool{true, true}),
+		match("alpha/theme/0", "partial", []bool{true, false}),
 	}}
 	rep = aggregateRepeat(r, items, res, anchors, nil, nil)
-	if rep.ItemRef != "client-project/rec/0" || rep.Granularity != "full" {
+	if rep.ItemRef != "alpha/rec/0" || rep.Granularity != "full" {
 		t.Fatalf("granularity outranks nuance count: %+v", rep)
 	}
 }
@@ -301,10 +301,10 @@ func TestScoreNegativeSample(t *testing.T) {
 	cache := NewCache(t.TempDir())
 	neg := Rubric{ID: "N-77", Part: "negative", Statement: "a gofmt hook", Hash: "nh1",
 		ForbiddenGeneralizations: []string{"add a hook that runs gofmt after every edit"}}
-	hit := MatchResult{Matches: []ItemMatch{match("client-project/theme/0", "full", []bool{})}}
+	hit := MatchResult{Matches: []ItemMatch{match("alpha/theme/0", "full", []bool{})}}
 	q := &queueMatcher{results: []MatchResult{hit, hit, {}}}
 	violated, refs, err := scoreNegativeSample(context.Background(), cache, q, "env1", neg, scoreItems(), 3)
-	if err != nil || !violated || !reflect.DeepEqual(refs, []string{"client-project/theme/0"}) {
+	if err != nil || !violated || !reflect.DeepEqual(refs, []string{"alpha/theme/0"}) {
 		t.Fatalf("negative: %v %v %v", violated, refs, err)
 	}
 	q2 := &queueMatcher{results: []MatchResult{hit, {}, {}}}

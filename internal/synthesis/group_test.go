@@ -19,8 +19,8 @@ func TestRepoKey(t *testing.T) {
 	cases := []struct {
 		name, repo, cwd, want string
 	}{
-		{"configured client-project", home + "/Developer/client-project", home + "/Developer/client-project", "client-project"},
-		{"configured worktree", home + "/Developer/client-project/.worktrees/sc-1", home + "/Developer/client-project/.worktrees/sc-1", "client-project"},
+		{"configured repo", home + "/Developer/alpha", home + "/Developer/alpha", "alpha"},
+		{"configured worktree", home + "/Developer/alpha/.worktrees/feat-1", home + "/Developer/alpha/.worktrees/feat-1", "alpha"},
 		{"terminal-app worktree folds to tmux-ctrl", "", home + "/Developer/terminal-app/.worktrees/preview/src", "tmux-ctrl"},
 		{"terminal-app plain folds to tmux-ctrl", "", home + "/Developer/terminal-app", "tmux-ctrl"},
 		{"unconfigured developer repo", "", home + "/Developer/somelib/src", "somelib"},
@@ -42,7 +42,7 @@ func TestGroupByRepoFloor(t *testing.T) {
 	home := "/Users/dev"
 	var as []insights.AgentSessionAnalysis
 	for i := 0; i < 12; i++ {
-		as = append(as, analysisWith(home+"/Developer/client-project", home+"/Developer/client-project"))
+		as = append(as, analysisWith(home+"/Developer/alpha", home+"/Developer/alpha"))
 	}
 	for i := 0; i < 3; i++ { // terminal-app folds to tmux-ctrl but is below floor on its own...
 		as = append(as, analysisWith("", home+"/Developer/terminal-app/.worktrees/w/src"))
@@ -53,8 +53,8 @@ func TestGroupByRepoFloor(t *testing.T) {
 	as = append(as, analysisWith("", home+"/.dotfiles")) // dropped by RepoKey
 
 	groups := GroupByRepo(as, 10, insights.Config{Aliases: map[string]string{"terminal-app": "tmux-ctrl"}})
-	if len(groups["client-project"]) != 12 {
-		t.Errorf("client-project = %d, want 12", len(groups["client-project"]))
+	if len(groups["alpha"]) != 12 {
+		t.Errorf("alpha = %d, want 12", len(groups["alpha"]))
 	}
 	if len(groups["tmux-ctrl"]) != 11 {
 		t.Errorf("tmux-ctrl = %d, want 11 (8 configured + 3 terminal-app fold)", len(groups["tmux-ctrl"]))

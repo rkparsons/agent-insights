@@ -160,7 +160,7 @@ func TestRubricValidationRejectsBadFiles(t *testing.T) {
 }
 
 func TestRubricAnchorThemeValidation(t *testing.T) {
-	base := "id: C-77\npart: regression\ntier: HIGH\nsurface: theme\nrepos: [client-project]\nstatement: s\n"
+	base := "id: C-77\npart: regression\ntier: HIGH\nsurface: theme\nrepos: [alpha]\nstatement: s\n"
 	anchored := base + "anchor_session_ids: [abc]\n"
 	if _, err := parseRubric("C-77.yaml", []byte(anchored)); err == nil || !strings.Contains(err.Error(), "anchor_theme") {
 		t.Fatalf("anchored rubric without anchor_theme must fail: %v", err)
@@ -169,15 +169,15 @@ func TestRubricAnchorThemeValidation(t *testing.T) {
 	if _, err := parseRubric("C-77.yaml", []byte(wrongBucket)); err == nil || !strings.Contains(err.Error(), "repos[0]") {
 		t.Fatalf("anchor_theme bucket must be repos[0]: %v", err)
 	}
-	ok := anchored + "anchor_theme: client-project/3\nsource_theme_session_ids: [abc]\n"
+	ok := anchored + "anchor_theme: alpha/3\nsource_theme_session_ids: [abc]\n"
 	r, err := parseRubric("C-77.yaml", []byte(ok))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.AnchorTheme != "client-project/3" || r.Hash == "" || len(r.Hash) != 64 {
+	if r.AnchorTheme != "alpha/3" || r.Hash == "" || len(r.Hash) != 64 {
 		t.Fatalf("rubric: %+v", r)
 	}
-	orphan := base + "anchor_theme: client-project/3\n"
+	orphan := base + "anchor_theme: alpha/3\n"
 	if _, err := parseRubric("C-77.yaml", []byte(orphan)); err == nil {
 		t.Fatal("anchor_theme without anchors must fail")
 	}
@@ -190,7 +190,7 @@ func TestRubricAnchorThemeValidation(t *testing.T) {
 }
 
 func TestRubricSourceThemeValidation(t *testing.T) {
-	base := "id: C-77\npart: regression\ntier: HIGH\nsurface: theme\nrepos: [client-project]\nstatement: s\nanchor_theme: client-project/3\n"
+	base := "id: C-77\npart: regression\ntier: HIGH\nsurface: theme\nrepos: [alpha]\nstatement: s\nanchor_theme: alpha/3\n"
 	missing := base + "anchor_session_ids: [abc]\n"
 	if _, err := parseRubric("C-77.yaml", []byte(missing)); err == nil || !strings.Contains(err.Error(), "source_theme_session_ids") {
 		t.Fatalf("anchored rubric without source_theme_session_ids must fail: %v", err)
@@ -199,7 +199,7 @@ func TestRubricSourceThemeValidation(t *testing.T) {
 	if _, err := parseRubric("C-77.yaml", []byte(notSubset)); err == nil || !strings.Contains(err.Error(), "def") {
 		t.Fatalf("kept anchors must be a subset of the source theme: %v", err)
 	}
-	orphan := "id: C-77\npart: regression\ntier: HIGH\nsurface: theme\nrepos: [client-project]\nstatement: s\nsource_theme_session_ids: [abc]\n"
+	orphan := "id: C-77\npart: regression\ntier: HIGH\nsurface: theme\nrepos: [alpha]\nstatement: s\nsource_theme_session_ids: [abc]\n"
 	if _, err := parseRubric("C-77.yaml", []byte(orphan)); err == nil {
 		t.Fatal("source_theme_session_ids without anchors must fail")
 	}
@@ -219,11 +219,11 @@ func TestRubricSourceThemeValidation(t *testing.T) {
 
 func TestPreStripAnchorsFromGroundTruth(t *testing.T) {
 	truths := map[string]synthesis.RepoSynthesis{
-		"client-project": {Themes: []synthesis.Theme{
+		"alpha": {Themes: []synthesis.Theme{
 			{}, {SessionIDs: []string{"m1", "a1", "a2", "a1"}},
 		}},
 	}
-	r := Rubric{ID: "C-77", Repos: []string{"client-project"}, AnchorTheme: "client-project/1",
+	r := Rubric{ID: "C-77", Repos: []string{"alpha"}, AnchorTheme: "alpha/1",
 		AnchorSessionIDs: []string{"a1", "a2"}} // m1 was meta-stripped
 	pre, err := PreStripAnchors(truths, r)
 	if err != nil {
@@ -243,7 +243,7 @@ func TestPreStripAnchorsFromGroundTruth(t *testing.T) {
 		t.Fatal("source-theme ids outside the named theme must fail")
 	}
 	outOfRange := r
-	outOfRange.AnchorTheme = "client-project/9"
+	outOfRange.AnchorTheme = "alpha/9"
 	if _, err := PreStripAnchors(truths, outOfRange); err == nil {
 		t.Fatal("out-of-range theme index must fail")
 	}

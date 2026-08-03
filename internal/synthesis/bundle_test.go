@@ -9,7 +9,7 @@ import (
 )
 
 func frictionAnalysis(id, quote, file string) insights.AgentSessionAnalysis {
-	a := analysisWith("/Users/dev/Developer/client-project", "/Users/dev/Developer/client-project")
+	a := analysisWith("/Users/dev/Developer/alpha", "/Users/dev/Developer/alpha")
 	a.Stats.SessionID = id
 	a.Stats.Start = time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	a.Outcome = "fully_achieved"
@@ -19,10 +19,10 @@ func frictionAnalysis(id, quote, file string) insights.AgentSessionAnalysis {
 
 func TestBuildBundleIdsAndRelativize(t *testing.T) {
 	g := []insights.AgentSessionAnalysis{
-		frictionAnalysis("bbb", "second quote here", "/Users/dev/Developer/client-project/.worktrees/w/apps/api/x.ts"),
+		frictionAnalysis("bbb", "second quote here", "/Users/dev/Developer/alpha/.worktrees/w/apps/api/x.ts"),
 		frictionAnalysis("aaa", "first quote here", "apps/ui/y.ts"),
 	}
-	b := BuildBundle("client-project", g)
+	b := BuildBundle("alpha", g)
 
 	if len(b.Friction) != 2 {
 		t.Fatalf("friction items = %d, want 2", len(b.Friction))
@@ -48,7 +48,7 @@ func TestBuildBundleWindowIsChronological(t *testing.T) {
 	late := frictionAnalysis("aaa", "q", "apps/y.ts")
 	late.Stats.Start = time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)
 
-	b := BuildBundle("client-project", []insights.AgentSessionAnalysis{early, late})
+	b := BuildBundle("alpha", []insights.AgentSessionAnalysis{early, late})
 
 	if b.From != "2026-06-24" || b.To != "2026-06-30" {
 		t.Errorf("window = %s–%s, want 2026-06-24–2026-06-30 (chronological, From<=To)", b.From, b.To)
@@ -57,14 +57,14 @@ func TestBuildBundleWindowIsChronological(t *testing.T) {
 
 func TestBuildBundleRedactsHomePath(t *testing.T) {
 	g := []insights.AgentSessionAnalysis{frictionAnalysis("aaa", "q", "/Users/dev/secret/notes.txt")}
-	b := BuildBundle("client-project", g)
+	b := BuildBundle("alpha", g)
 	if b.Friction[0].File != "[redacted]" {
 		t.Errorf("home path outside repo = %q, want [redacted]", b.Friction[0].File)
 	}
 }
 
 func readAnalysis(id string, reads int) insights.AgentSessionAnalysis {
-	a := analysisWith("/Users/dev/Developer/client-project", "/Users/dev/Developer/client-project")
+	a := analysisWith("/Users/dev/Developer/alpha", "/Users/dev/Developer/alpha")
 	a.Stats.SessionID = id
 	a.Stats.ToolCounts = map[string]int{"Read": reads}
 	a.SessionType = "single_task"
@@ -112,13 +112,13 @@ func TestComputeSignalsBelowFloorOmitted(t *testing.T) {
 func TestComputeSignalsZeroHeavyFrictionDensity(t *testing.T) {
 	var g []insights.AgentSessionAnalysis
 	for i := 0; i < 27; i++ { // clean: zero friction, some assistant turns
-		a := analysisWith("/Users/dev/Developer/client-project", "/Users/dev/Developer/client-project")
+		a := analysisWith("/Users/dev/Developer/alpha", "/Users/dev/Developer/alpha")
 		a.Stats.SessionID = "clean" + string(rune('a'+i%26)) + string(rune('a'+i/26))
 		a.Stats.AssistantTurns = 10
 		g = append(g, a)
 	}
 	for i := 0; i < 3; i++ { // frictional outliers: density 0.5 each
-		a := analysisWith("/Users/dev/Developer/client-project", "/Users/dev/Developer/client-project")
+		a := analysisWith("/Users/dev/Developer/alpha", "/Users/dev/Developer/alpha")
 		a.Stats.SessionID = "fric" + string(rune('a'+i))
 		a.Stats.AssistantTurns = 10
 		a.Stats.Rejections = 5

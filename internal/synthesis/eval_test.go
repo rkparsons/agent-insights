@@ -198,7 +198,7 @@ func TestCardsDetectPlantedLeak(t *testing.T) {
 // one. Matching must use the theme's own slice index.
 func TestCardsMatchByThemeIndexNotTitle(t *testing.T) {
 	s := RepoSynthesis{
-		Repo: "client-project",
+		Repo: "alpha",
 		Themes: []Theme{
 			{Title: "Duplicate name", Kind: "friction", SessionCount: 3},
 			{Title: "Duplicate name", Kind: "friction", SessionCount: 5},
@@ -220,36 +220,40 @@ func TestCardsMatchByThemeIndexNotTitle(t *testing.T) {
 }
 
 func TestCardsSkipZeroSessionThemes(t *testing.T) {
-	s := RepoSynthesis{Repo: "client-project", Themes: []Theme{{Title: "empty", SessionCount: 0}}}
+	s := RepoSynthesis{Repo: "alpha", Themes: []Theme{{Title: "empty", SessionCount: 0}}}
 	if cards := Cards(s, EvidenceBundle{}); len(cards) != 0 {
 		t.Errorf("cards = %v, want none for a zero-session-count theme", cards)
 	}
 }
 
-func TestGateRealclient-project(t *testing.T) {
+// TestGateRealRepo runs the trust-property gate over one real repo's live
+// analyses. Which repo, and where it is checked out, comes from the private
+// data repo's expectations.json — this tree names no real repo.
+func TestGateRealRepo(t *testing.T) {
 	if os.Getenv("SYNTHESIS_REAL") == "" {
 		t.Skip("set SYNTHESIS_REAL=1 to run the real gate (spends subscription)")
 	}
+	exp := loadRealGateExpectation(t)
 	analyses, err := LoadAnalyses()
 	if err != nil {
 		t.Fatal(err)
 	}
 	groups := GroupByRepo(analyses, DefaultMinSessions, insights.Config{})
-	group := groups["client-project"]
+	group := groups[exp.Bucket]
 	if len(group) == 0 {
-		t.Skip("no client-project analyses present")
+		t.Skipf("no %s analyses present", exp.Bucket)
 	}
 	workDir := t.TempDir()
 	if err := skills.Materialize(workDir); err != nil {
 		t.Fatal(err)
 	}
 	syn := NewClaudeSynthesizer(workDir)
-	adopt := NewAdoptChecker("/Users/dev/Developer/client-project")
-	a, ra, err := Synthesize(context.Background(), "client-project", group, syn, adopt)
+	adopt := NewAdoptChecker(exp.RepoPath)
+	a, ra, err := Synthesize(context.Background(), exp.Bucket, group, syn, adopt)
 	if err != nil {
 		t.Fatal(err)
 	}
-	res := EvaluateRun(a, a, ra, BuildBundle("client-project", group))
+	res := EvaluateRun(a, a, ra, BuildBundle(exp.Bucket, group))
 	t.Logf("fabrication=%.3f hardErrors=%d oppMisses=%v leaks=%v",
 		res.RawFabricationRate, len(res.HardErrors), res.OpportunityRecallMisses, res.PrivacyLeaks)
 	if res.RawFabricationRate > 0.15 {

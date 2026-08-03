@@ -37,7 +37,7 @@ func (p *probeMatcher) Match(_ context.Context, payload MatchPayload) (MatchResu
 
 func probeRubrics() []Rubric {
 	return []Rubric{
-		{ID: "C-01", Part: "regression", Surface: "either", Repos: []string{"client-project"}, Hash: "h1",
+		{ID: "C-01", Part: "regression", Surface: "either", Repos: []string{"alpha"}, Hash: "h1",
 			Statement:       "verify diagnoses against real evidence before asserting",
 			RequiredNuances: []string{"search logs first"}},
 		{ID: "C-04", Part: "regression", Surface: "either", Repos: []string{"tmux-ctrl"}, Hash: "h2",

@@ -6,7 +6,7 @@ import (
 
 func sample(idx int, gran string) SampleScore {
 	return SampleScore{SampleIndex: idx, Granularity: gran, RepeatAgreement: 1, RepeatsTaken: 2,
-		Corroboration: CorroborationOK, ItemRef: "client-project/theme/0", ItemText: "Verify claims",
+		Corroboration: CorroborationOK, ItemRef: "alpha/theme/0", ItemText: "Verify claims",
 		ItemSessionIDs: []string{"a1", "a2"}, ItemQuotes: []string{"q"}}
 }
 
@@ -65,7 +65,7 @@ func TestAggregateTargetGroundedPassOversight(t *testing.T) {
 	grounded := func(idx int, gran string) SampleScore {
 		s := sample(idx, gran)
 		s.Corroboration = CorroborationGrounded
-		s.ItemRef = "client-project/rec/0"
+		s.ItemRef = "alpha/rec/0"
 		return s
 	}
 
@@ -197,7 +197,7 @@ func TestAggregateTargetSideMatchTriggers(t *testing.T) {
 	r := scoreRubric()
 	s := sample(0, "absent")
 	s.ItemRef, s.ItemText, s.ItemSessionIDs, s.ItemQuotes, s.Corroboration = "", "", nil, nil, ""
-	s.SideMatches = []SideMatch{{Ref: "client-project/theme/1", Text: "Mega theme", Granularity: "full",
+	s.SideMatches = []SideMatch{{Ref: "alpha/theme/1", Text: "Mega theme", Granularity: "full",
 		Corroboration: CorroborationMismatch, SessionIDs: []string{"x1", "x2"}}}
 	samples := []SampleScore{s, s, s}
 	for i := range samples {

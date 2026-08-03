@@ -23,19 +23,19 @@ func samplePayload() MatchPayload {
 		Rubric: MatchRubric{ID: "C-99", Part: "regression", Statement: "verify before asserting",
 			RequiredNuances:          []string{"seek contradicting evidence"},
 			ForbiddenGeneralizations: []string{"never assert anything"}},
-		Items: []MatchItem{{ID: "client-project/theme/0", Bucket: "client-project", Surface: "theme", Text: "Confident conclusions before verifying"}},
+		Items: []MatchItem{{ID: "alpha/theme/0", Bucket: "alpha", Surface: "theme", Text: "Confident conclusions before verifying"}},
 	}
 }
 
 func TestClaudeMatcherParsesEnvelope(t *testing.T) {
 	fr := &fakeRunner{out: `{"is_error":false,"result":"","structured_output":` +
-		`{"matches":[{"item_id":"client-project/theme/0","granularity":"partial","nuance_results":[false],"forbidden_forms_matched":[]}]}}`}
+		`{"matches":[{"item_id":"alpha/theme/0","granularity":"partial","nuance_results":[false],"forbidden_forms_matched":[]}]}}`}
 	m := claudeMatcher{run: fr.run}
 	res, err := m.Match(context.Background(), samplePayload())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Matches) != 1 || res.Matches[0].Granularity != "partial" || res.Matches[0].ItemID != "client-project/theme/0" {
+	if len(res.Matches) != 1 || res.Matches[0].Granularity != "partial" || res.Matches[0].ItemID != "alpha/theme/0" {
 		t.Fatalf("res: %+v", res)
 	}
 	if !strings.Contains(string(fr.stdin), `"verify before asserting"`) {
@@ -61,9 +61,9 @@ func TestClaudeMatcherRejectsInconsistentOutput(t *testing.T) {
 	// schema-valid JSON that contradicts the payload must fail the read loudly
 	cases := []struct{ name, out string }{
 		{"unknown item", `{"structured_output":{"matches":[{"item_id":"nope/theme/9","granularity":"full","nuance_results":[true],"forbidden_forms_matched":[]}]}}`},
-		{"nuance count", `{"structured_output":{"matches":[{"item_id":"client-project/theme/0","granularity":"full","nuance_results":[],"forbidden_forms_matched":[]}]}}`},
-		{"forbidden index", `{"structured_output":{"matches":[{"item_id":"client-project/theme/0","granularity":"full","nuance_results":[true],"forbidden_forms_matched":[3]}]}}`},
-		{"bad granularity", `{"structured_output":{"matches":[{"item_id":"client-project/theme/0","granularity":"absent","nuance_results":[true],"forbidden_forms_matched":[]}]}}`},
+		{"nuance count", `{"structured_output":{"matches":[{"item_id":"alpha/theme/0","granularity":"full","nuance_results":[],"forbidden_forms_matched":[]}]}}`},
+		{"forbidden index", `{"structured_output":{"matches":[{"item_id":"alpha/theme/0","granularity":"full","nuance_results":[true],"forbidden_forms_matched":[3]}]}}`},
+		{"bad granularity", `{"structured_output":{"matches":[{"item_id":"alpha/theme/0","granularity":"absent","nuance_results":[true],"forbidden_forms_matched":[]}]}}`},
 	}
 	for _, tc := range cases {
 		m := claudeMatcher{run: (&fakeRunner{out: tc.out}).run}

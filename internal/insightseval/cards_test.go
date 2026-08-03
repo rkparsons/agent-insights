@@ -10,14 +10,14 @@ import (
 )
 
 func cardResults() []TargetResult {
-	r := scoreRubric() // Task 6 fixture: ID C-77, expected bucket client-project
+	r := scoreRubric() // Task 6 fixture: ID C-77, expected bucket alpha
 	return []TargetResult{{
 		Rubric:  r,
 		Verdict: TargetVerdict{ID: r.ID},
 		Pending: []PendingCard{
 			{TargetID: r.ID, Trigger: CorroborationMismatch, Adjudicable: true,
 				Key: AdjKey{TargetID: r.ID, Statement: "mega theme", IDSetHash: idSetHash([]string{"sA", "sX"}), RubricHash: r.Hash, Trigger: CorroborationMismatch},
-				Ref: "client-project/theme/1", ItemText: "Mega theme", Granularity: "full",
+				Ref: "alpha/theme/1", ItemText: "Mega theme", Granularity: "full",
 				SessionIDs: []string{"sA", "sX"}},
 			{TargetID: r.ID, Trigger: "sample_split", Adjudicable: false,
 				ItemText: "Verify claims", Quotes: []string{"vq"}, Note: "samples [2] disagree"},
@@ -27,7 +27,7 @@ func cardResults() []TargetResult {
 
 func TestBuildCardsMembershipOneLines(t *testing.T) {
 	anchors := map[string][]string{"C-77": {"sA", "sB"}}
-	oneLines := map[string]map[string]string{"client-project": {
+	oneLines := map[string]map[string]string{"alpha": {
 		"sA": "took a detour", "sB": "diffed stale base", "sX": "unrelated session",
 	}}
 	cards, err := BuildCards(cardResults(), anchors, oneLines)
@@ -60,7 +60,7 @@ func TestBuildCardsMembershipOneLines(t *testing.T) {
 func TestBuildCardsRejectsSessionIDLeak(t *testing.T) {
 	results := cardResults()
 	// a one_line that itself contains a session uuid must be caught
-	oneLines := map[string]map[string]string{"client-project": {
+	oneLines := map[string]map[string]string{"alpha": {
 		"sX": "mentions 0abc1234-de56-4f78-9abc-def012345678 verbatim",
 	}}
 	if _, err := BuildCards(results, map[string][]string{"C-77": {"sA", "sB"}}, oneLines); err == nil {
@@ -83,7 +83,7 @@ func TestSessionOneLinesPreference(t *testing.T) {
 func TestWriteCardsAndMarkdown(t *testing.T) {
 	cards, err := BuildCards(cardResults(),
 		map[string][]string{"C-77": {"sA", "sB"}},
-		map[string]map[string]string{"client-project": {"sB": "diffed stale base", "sX": "unrelated"}})
+		map[string]map[string]string{"alpha": {"sB": "diffed stale base", "sX": "unrelated"}})
 	if err != nil {
 		t.Fatal(err)
 	}

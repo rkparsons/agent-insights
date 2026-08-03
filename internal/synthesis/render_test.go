@@ -8,7 +8,7 @@ import (
 
 func sampleSynthesis() RepoSynthesis {
 	return RepoSynthesis{
-		Repo: "client-project", GeneratedAt: time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC),
+		Repo: "alpha", GeneratedAt: time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC),
 		Window: Window{From: "2026-06-01", To: "2026-06-30", AnalyzedCount: 159},
 		Themes: []Theme{{Title: "Investigate first", Kind: "friction", Rank: 1, IncidentCount: 18, SessionCount: 15,
 			TypeBreakdown: map[string]int{"wrong_approach": 12}, Quotes: []string{"investigate the existing pattern first"}}},
@@ -20,7 +20,7 @@ func sampleSynthesis() RepoSynthesis {
 
 func TestRenderAndScan(t *testing.T) {
 	md := Render(sampleSynthesis())
-	if !strings.Contains(md, "# client-project") {
+	if !strings.Contains(md, "# alpha") {
 		t.Error("missing repo header")
 	}
 	if !strings.Contains(md, "Investigate first") || !strings.Contains(md, "18") {

@@ -10,7 +10,7 @@ import (
 
 func scoredFixture() (VerifiedOutput, synthesis.EvidenceBundle) {
 	bundle := synthesis.EvidenceBundle{
-		Repo: "client-project",
+		Repo: "alpha",
 		Friction: []synthesis.FrictionItem{
 			{ID: "F1", OneLine: "took a detour", SessionID: "sA"},
 			{ID: "F2", OneLine: "diffed stale base", SessionID: "sB"},
@@ -21,7 +21,7 @@ func scoredFixture() (VerifiedOutput, synthesis.EvidenceBundle) {
 	}
 	vo := VerifiedOutput{
 		Synthesis: synthesis.RepoSynthesis{
-			Repo: "client-project",
+			Repo: "alpha",
 			Themes: []synthesis.Theme{
 				{Title: "Detours", Summary: "detours happen", Kind: "friction",
 					SessionIDs: []string{"sA", "sB", "sA"}, Quotes: []string{"q1", "q2", "q3"}},
@@ -40,12 +40,12 @@ func scoredFixture() (VerifiedOutput, synthesis.EvidenceBundle) {
 
 func TestBuildScoredItemsThemesAndRecs(t *testing.T) {
 	vo, bundle := scoredFixture()
-	items := BuildScoredItems("client-project", vo, bundle)
+	items := BuildScoredItems("alpha", vo, bundle)
 	if len(items) != 2 {
 		t.Fatalf("items = %d", len(items))
 	}
 	th := items[0]
-	if th.ID != "client-project/theme/0" || th.Surface != "theme" || th.Text != "Detours. detours happen" {
+	if th.ID != "alpha/theme/0" || th.Surface != "theme" || th.Text != "Detours. detours happen" {
 		t.Fatalf("theme item: %+v", th)
 	}
 	if !reflect.DeepEqual(th.SessionIDs, []string{"sA", "sB"}) { // deduped, sorted
@@ -55,7 +55,7 @@ func TestBuildScoredItemsThemesAndRecs(t *testing.T) {
 		t.Fatalf("theme quotes: %v", th.Quotes)
 	}
 	rec := items[1]
-	if rec.ID != "client-project/rec/0" || rec.Surface != "recommendation" || rec.Text != "verify first" {
+	if rec.ID != "alpha/rec/0" || rec.Surface != "recommendation" || rec.Text != "verify first" {
 		t.Fatalf("rec item: %+v", rec)
 	}
 	// F1→sA, P1→sC, G1→{sA,sD,sE}; F9 unknown dropped; dedup+sort
@@ -66,8 +66,8 @@ func TestBuildScoredItemsThemesAndRecs(t *testing.T) {
 
 func TestBuildMatchPayloadFiltersSurfaceAndIsDeterministic(t *testing.T) {
 	vo, bundle := scoredFixture()
-	items := BuildScoredItems("client-project", vo, bundle)
-	themeOnly := Rubric{ID: "X", Part: "regression", Surface: "theme", Repos: []string{"client-project"},
+	items := BuildScoredItems("alpha", vo, bundle)
+	themeOnly := Rubric{ID: "X", Part: "regression", Surface: "theme", Repos: []string{"alpha"},
 		Statement: "s", RequiredNuances: []string{"n1"}}
 	p := BuildMatchPayload(themeOnly, items)
 	if len(p.Items) != 1 || p.Items[0].Surface != "theme" {
@@ -76,7 +76,7 @@ func TestBuildMatchPayloadFiltersSurfaceAndIsDeterministic(t *testing.T) {
 	if p.Rubric.ForbiddenGeneralizations == nil || p.Rubric.RequiredNuances == nil {
 		t.Fatal("nil slices must be normalized for stable payload hashes")
 	}
-	either := Rubric{ID: "Y", Part: "regression", Surface: "either", Repos: []string{"client-project"}, Statement: "s"}
+	either := Rubric{ID: "Y", Part: "regression", Surface: "either", Repos: []string{"alpha"}, Statement: "s"}
 	if p2 := BuildMatchPayload(either, items); len(p2.Items) != 2 {
 		t.Fatalf("either surface: %+v", p2.Items)
 	}
@@ -95,7 +95,7 @@ func TestSmallSetHelpers(t *testing.T) {
 	if got := sortedSet([]string{"b", "a", "b"}); !reflect.DeepEqual(got, []string{"a", "b"}) {
 		t.Fatalf("sortedSet: %v", got)
 	}
-	if bucketOf("client-project/theme/3") != "client-project" || bucketOf("probe") != "probe" {
+	if bucketOf("alpha/theme/3") != "alpha" || bucketOf("probe") != "probe" {
 		t.Fatal("bucketOf")
 	}
 	if allTrue([]bool{true, false}) || !allTrue(nil) {

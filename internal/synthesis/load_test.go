@@ -58,8 +58,8 @@ func writeRaw(t *testing.T, path string, data []byte) {
 func TestLoadSyntheses_NewestPerRepo(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", root)
-	writeSynthesisJSON(t, root, "client-project", "2026-06-30", RepoSynthesis{Repo: "client-project", Meta: Meta{Model: "old"}})
-	writeSynthesisJSON(t, root, "client-project", "2026-07-02", RepoSynthesis{Repo: "client-project", Meta: Meta{Model: "new"}})
+	writeSynthesisJSON(t, root, "alpha", "2026-06-30", RepoSynthesis{Repo: "alpha", Meta: Meta{Model: "old"}})
+	writeSynthesisJSON(t, root, "alpha", "2026-07-02", RepoSynthesis{Repo: "alpha", Meta: Meta{Model: "new"}})
 	writeSynthesisJSON(t, root, "tmux-ctrl", "2026-07-01", RepoSynthesis{Repo: "tmux-ctrl", Meta: Meta{Model: "t"}})
 
 	got, err := LoadSyntheses()
@@ -69,23 +69,23 @@ func TestLoadSyntheses_NewestPerRepo(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("len = %d, want 2 (one per repo)", len(got))
 	}
-	if got[0].Repo != "client-project" || got[1].Repo != "tmux-ctrl" {
-		t.Fatalf("repos = %q,%q, want client-project,tmux-ctrl (sorted)", got[0].Repo, got[1].Repo)
+	if got[0].Repo != "alpha" || got[1].Repo != "tmux-ctrl" {
+		t.Fatalf("repos = %q,%q, want alpha,tmux-ctrl (sorted)", got[0].Repo, got[1].Repo)
 	}
 	if got[0].Meta.Model != "new" {
-		t.Errorf("client-project model = %q, want newest (2026-07-02)", got[0].Meta.Model)
+		t.Errorf("alpha model = %q, want newest (2026-07-02)", got[0].Meta.Model)
 	}
 }
 
 func TestLoadSyntheses_SkipsMalformed(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", root)
-	writeSynthesisJSON(t, root, "client-project", "2026-07-02", RepoSynthesis{Repo: "client-project"})
+	writeSynthesisJSON(t, root, "alpha", "2026-07-02", RepoSynthesis{Repo: "alpha"})
 	// a broken newest file must not blank the section — it's skipped, older wins.
 	// Overwrite the 2026-07-02 slot (the newest date) with malformed JSON so it's
 	// the only entry at that date; 2026-07-01 is then the newest PARSEABLE file.
-	writeSynthesisJSON(t, root, "client-project", "2026-07-01", RepoSynthesis{Repo: "client-project", Meta: Meta{Model: "fallback"}})
-	writeRaw(t, filepath.Join(root, "synthesis", "client-project", "2026-07-02.json"), []byte("{not json"))
+	writeSynthesisJSON(t, root, "alpha", "2026-07-01", RepoSynthesis{Repo: "alpha", Meta: Meta{Model: "fallback"}})
+	writeRaw(t, filepath.Join(root, "synthesis", "alpha", "2026-07-02.json"), []byte("{not json"))
 	got, err := LoadSyntheses()
 	if err != nil {
 		t.Fatalf("LoadSyntheses: %v", err)

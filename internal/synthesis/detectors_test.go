@@ -187,7 +187,7 @@ func TestRetypingDetailDedupeAndCap(t *testing.T) {
 // every committed-artifact privacy class.
 func TestDetailPassesCommittedArtifactPrivacyClasses(t *testing.T) {
 	cwdErr := insights.SanitizeEvidenceText("File does not exist. Note: your current working directory is /Users/dev/Developer/terminal-app/.worktrees/preview-issues.")
-	clause := insights.SanitizeEvidenceText("resume session 8f3d2a1b-4c5d-6e7f-8a9b-0c1d2e3f4a5b in the /Users/dev/Developer/tmux-ctrl/.worktrees/insights-generation worktree for TICKET-0000")
+	clause := insights.SanitizeEvidenceText("resume session 8f3d2a1b-4c5d-6e7f-8a9b-0c1d2e3f4a5b in the /Users/dev/Developer/tmux-ctrl/.worktrees/insights-generation worktree for sc-42")
 	group := []insights.AgentSessionAnalysis{
 		mechSession("s1", map[string]int{"wrong_cwd": 1}, map[string]string{"wrong_cwd": cwdErr}, nil),
 		mechSession("s2", map[string]int{"wrong_cwd": 2}, map[string]string{"wrong_cwd": cwdErr}, nil),

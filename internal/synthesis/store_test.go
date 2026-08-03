@@ -13,7 +13,7 @@ func TestStore(t *testing.T) {
 	if err := Store(s, "# md", "2026-07-02"); err != nil {
 		t.Fatal(err)
 	}
-	base := filepath.Join(dir, "synthesis", "client-project", "2026-07-02")
+	base := filepath.Join(dir, "synthesis", "alpha", "2026-07-02")
 	if _, err := os.Stat(base + ".json"); err != nil {
 		t.Errorf("json not written: %v", err)
 	}

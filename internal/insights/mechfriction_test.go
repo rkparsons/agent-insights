@@ -59,7 +59,7 @@ func TestSanitizeEvidenceText(t *testing.T) {
 		{"<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>",
 			"File has not been read yet. Read it first before writing to it."},
 		{"resume session 8f3d2a1b-4c5d-6e7f-8a9b-0c1d2e3f4a5b please", "resume session [id] please"},
-		{"fix TICKET-0000 first", "fix [ticket] first"},
+		{"fix sc-42 first", "fix [ticket] first"},
 		{"tail -f /dev/null stays intact", "tail -f /dev/null stays intact"},
 		{"echo hi > /tmp/terminal-app_perm_test.txt — and nothing else", "echo hi > [path] — and nothing else"},
 		{"set $HOME/.config first", "set [path] first"},

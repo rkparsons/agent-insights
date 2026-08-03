@@ -93,11 +93,11 @@ func TestRunSynthesizeDueFilterNoneDue(t *testing.T) {
 func TestRunSynthesizeDryRun(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", dir)
-	// seed 12 client-project analyses so it clears the floor
+	// seed 12 alpha analyses so it clears the floor
 	adir := filepath.Join(dir, "analyses")
 	os.MkdirAll(adir, 0o755)
 	for i := 0; i < 12; i++ {
-		writeAnalysisFixture(t, adir, "s"+string(rune('a'+i)), "/Users/dev/Developer/client-project")
+		writeAnalysisFixture(t, adir, "s"+string(rune('a'+i)), "/Users/dev/Developer/alpha")
 	}
 	sum, err := RunSynthesize(context.Background(), fixedSynth(fakeSynth{}), Options{DryRun: true, MinSessions: 10})
 	if err != nil {
@@ -120,7 +120,7 @@ func TestRunSynthesizeBlocksOnPrivacyLeak(t *testing.T) {
 	adir := filepath.Join(dir, "analyses")
 	os.MkdirAll(adir, 0o755)
 	for i := 0; i < 10; i++ {
-		writeAnalysisFixture(t, adir, "s"+string(rune('a'+i)), "/Users/dev/Developer/client-project")
+		writeAnalysisFixture(t, adir, "s"+string(rune('a'+i)), "/Users/dev/Developer/alpha")
 	}
 	fake := fakeSynth{raw: RawSynthesis{
 		Themes: []RawTheme{{Title: "Leaked path /Users/dev/secret/notes", Kind: "friction",
@@ -133,7 +133,7 @@ func TestRunSynthesizeBlocksOnPrivacyLeak(t *testing.T) {
 	if sum.Skipped != 1 || sum.Written != 0 {
 		t.Errorf("summary = %+v, want Skipped=1 / Written=0 (privacy-blocked)", sum)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "synthesis", "client-project")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "synthesis", "alpha")); !os.IsNotExist(err) {
 		t.Error("privacy-blocked repo must not produce a synthesis/<repo> output dir")
 	}
 }

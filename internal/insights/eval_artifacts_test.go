@@ -33,8 +33,8 @@ func TestWriteEvalArtifactsRedacts(t *testing.T) {
 	inc := FrictionIncident{Type: "wrong_approach", OneLine: "did wrong", EvidenceQuote: "a verbatim secret quote here"}
 	sr := sessionRun{
 		Stats: AgentSessionStats{
-			SessionID: secretID, Cwd: "/secret/client-project", GitBranch: "secret-branch",
-			AiTitle: "A Title", Repo: "client-project", AssistantTurns: 12,
+			SessionID: secretID, Cwd: "/secret/alpha", GitBranch: "secret-branch",
+			AiTitle: "A Title", Repo: "alpha", AssistantTurns: 12,
 			FilesTouched: []string{"/secret/file.go"}, UserTurnFingerprints: []string{"fp-secret"},
 		},
 		Cell: "zero-extra", ZeroFriction: true, FirstUserTurn: "do the thing",
@@ -60,7 +60,7 @@ func TestWriteEvalArtifactsRedacts(t *testing.T) {
 		t.Fatalf("report missing: %v", err)
 	}
 
-	for _, forbidden := range []string{secretID, "/secret/client-project", "secret-branch", "/secret/file.go", "fp-secret", "a verbatim secret quote here"} {
+	for _, forbidden := range []string{secretID, "/secret/alpha", "secret-branch", "/secret/file.go", "fp-secret", "a verbatim secret quote here"} {
 		if strings.Contains(string(analyses), forbidden) {
 			t.Errorf("committed analyses leak %q", forbidden)
 		}

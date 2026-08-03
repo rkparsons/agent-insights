@@ -8,10 +8,10 @@ func TestPrivacyScanCatchesEveryClass(t *testing.T) {
 		"path /Users/dev/x",                        // cwd/home
 		"path /home/rick/x",
 		"under $HOME/.claude",
-		"branch TICKET-0000",                                     // ticket-branch marker
+		"branch sc-42",                                        // ticket-branch marker
 		"repo/.worktrees/insights",                            // worktree path
 		"session 0ABC1234-DE56-4F78-9ABC-DEF012345678 did it", // uppercase-hex session id
-		"branch TICKET-0000",
+		"branch SC-42",
 	}
 	for _, l := range leaks {
 		if hits := privacyScan([]byte(l)); len(hits) == 0 {
@@ -24,7 +24,7 @@ func TestPrivacyScanCatchesEveryClass(t *testing.T) {
 			}
 		}
 	}
-	clean := `{"target":"C-04","granularity":"partial","item_ref":"client-project/theme/3","hash":"0836c26e39ae4d35bc062471a187ce55deadbeef"}`
+	clean := `{"target":"C-04","granularity":"partial","item_ref":"alpha/theme/3","hash":"0836c26e39ae4d35bc062471a187ce55deadbeef"}`
 	if hits := privacyScan([]byte(clean)); len(hits) != 0 {
 		t.Errorf("clean verdict flagged: %v", hits)
 	}

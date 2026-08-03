@@ -203,8 +203,8 @@ func TestMetaTranscriptExclusion(t *testing.T) {
 		"/h/.claude/projects/-Users-r-Developer-tmux-ctrl--worktrees-insights-generation/aa.jsonl",
 		"/h/.claude/projects/-Users-r-Developer-tmux-ctrl--worktrees-insights-generation-src/bb.jsonl",
 		"/h/.claude/projects/-Users-r-Developer-insights-eval-data/cc.jsonl",
-		"/h/.claude/projects/-Users-r-Developer-client-project--worktrees-run-insights-command/dd.jsonl",
-		"/h/.claude/projects/-Users-r-Developer-client-project--worktrees-facet-extractor/ee.jsonl",
+		"/h/.claude/projects/-Users-r-Developer-alpha--worktrees-run-insights-command/dd.jsonl",
+		"/h/.claude/projects/-Users-r-Developer-alpha--worktrees-facet-extractor/ee.jsonl",
 		"/h/.claude/projects/-private-tmp-claude-501--Users-r--worktrees-insights-generation-x-scratchpad/ff.jsonl",
 	}
 	for _, p := range meta {
@@ -214,7 +214,7 @@ func TestMetaTranscriptExclusion(t *testing.T) {
 	}
 	nonMeta := []string{
 		"/h/.claude/projects/-Users-r-Developer-tmux-ctrl/gg.jsonl",
-		"/h/.claude/projects/-Users-r-Developer-client-project--worktrees-fix-login/hh.jsonl",
+		"/h/.claude/projects/-Users-r-Developer-alpha--worktrees-fix-login/hh.jsonl",
 		"/h/.claude/projects/-Users-r-Developer-dotfiles/ii.jsonl",
 	}
 	for _, p := range nonMeta {

@@ -32,7 +32,7 @@ func TestSynthesizeEndToEnd(t *testing.T) {
 	}}
 	adopt := func(r Recommendation) string { return "no" }
 
-	rs, report, err := Synthesize(context.Background(), "client-project", group, fake, adopt)
+	rs, report, err := Synthesize(context.Background(), "alpha", group, fake, adopt)
 	if err != nil {
 		t.Fatalf("Synthesize: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestSynthesizeEndToEnd(t *testing.T) {
 }
 
 func prefAnalysis(id, rule, quote string) insights.AgentSessionAnalysis {
-	a := analysisWith("/Users/dev/Developer/client-project", "/Users/dev/Developer/client-project")
+	a := analysisWith("/Users/dev/Developer/alpha", "/Users/dev/Developer/alpha")
 	a.Stats.SessionID = id
 	a.Outcome = "fully_achieved"
 	a.StandingPreferences = []insights.StandingPreference{{Rule: rule, EvidenceQuote: quote}}
@@ -69,7 +69,7 @@ func TestSynthesizeDropsNonPoolQuotes(t *testing.T) {
 	}}
 	adopt := func(r Recommendation) string { return "unknown" }
 
-	rs, report, err := Synthesize(context.Background(), "client-project", group, fake, adopt)
+	rs, report, err := Synthesize(context.Background(), "alpha", group, fake, adopt)
 	if err != nil {
 		t.Fatalf("Synthesize: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestSynthesizeClaudeMdRuleRejectsSuccessOnlyEvidence(t *testing.T) {
 	}}
 	adopt := func(r Recommendation) string { return "unknown" }
 
-	_, report, err := Synthesize(context.Background(), "client-project", group, fake, adopt)
+	_, report, err := Synthesize(context.Background(), "alpha", group, fake, adopt)
 	if err != nil {
 		t.Fatalf("Synthesize: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestSynthesizeClaudeMdRuleAcceptsPrefEvidence(t *testing.T) {
 	}}
 	adopt := func(r Recommendation) string { return "unknown" }
 
-	_, report, err := Synthesize(context.Background(), "client-project", group, fake, adopt)
+	_, report, err := Synthesize(context.Background(), "alpha", group, fake, adopt)
 	if err != nil {
 		t.Fatalf("Synthesize: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestPrefCountDistinct(t *testing.T) {
 	}}
 	adopt := func(r Recommendation) string { return "unknown" }
 
-	rs, _, err := Synthesize(context.Background(), "client-project", group, fake, adopt)
+	rs, _, err := Synthesize(context.Background(), "alpha", group, fake, adopt)
 	if err != nil {
 		t.Fatalf("Synthesize: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestSynthesizeQuantitativeClaimInRecommendation(t *testing.T) {
 	}}
 	adopt := func(r Recommendation) string { return "unknown" }
 
-	_, report, err := Synthesize(context.Background(), "client-project", group, fake, adopt)
+	_, report, err := Synthesize(context.Background(), "alpha", group, fake, adopt)
 	if err != nil {
 		t.Fatalf("Synthesize: %v", err)
 	}

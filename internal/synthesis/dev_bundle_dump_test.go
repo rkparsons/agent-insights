@@ -2,7 +2,7 @@ package synthesis
 
 // Bundle dump: builds the production bundles exactly as RunSynthesize would
 // and writes them to BUNDLE_DUMP_DIR with size stats — the free probe for
-// output-cap risk (a client-project run has brushed the 64k output-token cap).
+// output-cap risk (a large-repo run has brushed the 64k output-token cap).
 // Read-only over the live store.
 
 import (
