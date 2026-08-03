@@ -129,9 +129,12 @@ func parseRubric(name string, raw []byte) (Rubric, error) {
 }
 
 // rubricEntries lists <dataDir>/rubrics's *.yaml files, sorted by name (as
-// os.ReadDir already returns them). Fails closed: a missing rubrics/ dir
-// names the expected path rather than silently yielding zero rubrics — a
-// wrong --data or an unchecked-out data repo must not look like "no rubrics".
+// os.ReadDir already returns them). Fails closed on a missing rubrics/ dir
+// AND on an existing-but-empty one (zero .yaml files) — both name the
+// expected path rather than silently yielding zero rubrics, which would
+// otherwise pass RunOutcome's fail-fast check vacuously and only surface at
+// the paid probes/scoring stage. A wrong --data or an unchecked-out data
+// repo must never look like "no rubrics".
 func rubricEntries(dataDir string) (string, []os.DirEntry, error) {
 	dir := filepath.Join(dataDir, "rubrics")
 	entries, err := os.ReadDir(dir)
@@ -139,13 +142,16 @@ func rubricEntries(dataDir string) (string, []os.DirEntry, error) {
 		if os.IsNotExist(err) {
 			return dir, nil, fmt.Errorf("no rubrics directory at %s — expected the eval data repo's rubrics/ (check --data / dataDir points at a checked-out insights-eval-data)", dir)
 		}
-		return dir, nil, err
+		return dir, nil, fmt.Errorf("reading %s: %w (check --data / dataDir points at a checked-out insights-eval-data)", dir, err)
 	}
 	var out []os.DirEntry
 	for _, e := range entries {
 		if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") {
 			out = append(out, e)
 		}
+	}
+	if len(out) == 0 {
+		return dir, nil, fmt.Errorf("no rubric .yaml files in %s — check --data points at the eval data repo", dir)
 	}
 	return dir, out, nil
 }

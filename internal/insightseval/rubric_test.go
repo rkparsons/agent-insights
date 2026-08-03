@@ -1,6 +1,7 @@
 package insightseval
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -11,7 +12,7 @@ import (
 )
 
 // testdataDir is the loader's dataDir for the synthetic testdata/rubrics
-// fixture (T-01.yaml only) — no real session ids, no embedded copies.
+// fixture (T-01.yaml, T-02.yaml) — no real session ids, no embedded copies.
 const testdataDir = "testdata"
 
 // t01Sha256 locks parseRubric's hash algorithm to sha256hex over the raw
@@ -25,8 +26,13 @@ func TestLoadRubricsFromTestdata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rubrics) != 1 {
-		t.Fatalf("rubrics = %d, want 1 (testdata/rubrics/T-01.yaml only)", len(rubrics))
+	if len(rubrics) != 2 {
+		t.Fatalf("rubrics = %d, want 2 (testdata/rubrics/T-01.yaml, T-02.yaml)", len(rubrics))
+	}
+	for i := 1; i < len(rubrics); i++ {
+		if rubrics[i-1].ID >= rubrics[i].ID {
+			t.Fatalf("not sorted: %s >= %s", rubrics[i-1].ID, rubrics[i].ID)
+		}
 	}
 	r := rubrics[0]
 	if r.ID != "T-01" || r.Part != "regression" || r.Repos[0] != "alpha" {
@@ -35,9 +41,25 @@ func TestLoadRubricsFromTestdata(t *testing.T) {
 	if r.Hash != t01Sha256 {
 		t.Fatalf("T-01 hash = %q, want %q (sha256 over raw file bytes — adjudication keys depend on this)", r.Hash, t01Sha256)
 	}
+	if rubrics[1].ID != "T-02" || rubrics[1].Part != "negative" {
+		t.Fatalf("T-02: %+v", rubrics[1])
+	}
 	h, err := RubricSetHash(testdataDir)
 	if err != nil || len(h) != 64 {
 		t.Fatalf("hash: %q %v", h, err)
+	}
+}
+
+// TestLoadRubricsRejectsDuplicateID: two files parsing to the same rubric id
+// must error naming both files (rubric.go's dup guard), not silently keep
+// the first or the last.
+func TestLoadRubricsRejectsDuplicateID(t *testing.T) {
+	dataDir := t.TempDir()
+	dup := "id: T-01\npart: negative\nstatement: s\n"
+	mustWriteFile(t, filepath.Join(dataDir, "rubrics", "A.yaml"), dup)
+	mustWriteFile(t, filepath.Join(dataDir, "rubrics", "B.yaml"), dup)
+	if _, err := LoadRubrics(dataDir); err == nil || !strings.Contains(err.Error(), "duplicated") {
+		t.Fatalf("LoadRubrics(%s): err = %v, want a duplicated-id error", dataDir, err)
 	}
 }
 
@@ -52,6 +74,36 @@ func TestLoadRubricsMissingDirFailsClosed(t *testing.T) {
 	}
 	if _, err := RubricSetHash(empty); err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("RubricSetHash(%s): err = %v, want error naming %s", empty, err, want)
+	}
+}
+
+// TestLoadRubricsEmptyDirFailsClosed: an EXISTING rubrics/ dir with zero
+// .yaml files must also fail closed and name the path — otherwise
+// RunOutcome's fail-fast LoadRubrics check passes vacuously (0 rubrics, no
+// error), RubricSetHash returns a plausible-looking 64-hex hash of nothing,
+// and a full paid pipeline run persists a fabricated rubric_set_hash before
+// ScoreRun finally fails much later at the probes stage. SeedStatuses must
+// likewise error rather than silently returning (0, nil).
+func TestLoadRubricsEmptyDirFailsClosed(t *testing.T) {
+	dataDir := t.TempDir()
+	want := filepath.Join(dataDir, "rubrics")
+	if err := os.MkdirAll(want, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadRubrics(dataDir); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("LoadRubrics(%s): err = %v, want error naming %s", dataDir, err, want)
+	}
+	if _, err := RubricSetHash(dataDir); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("RubricSetHash(%s): err = %v, want error naming %s", dataDir, err, want)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "benchmark.json")); !os.IsNotExist(err) {
+		t.Fatal(err) // sanity: no benchmark.json means SeedStatuses would hit its own error first if reordered
+	}
+	mustWriteFile(t, filepath.Join(dataDir, "benchmark.json"), `{"buckets":{}}`)
+	if added, err := SeedStatuses(dataDir); err == nil {
+		t.Fatalf("SeedStatuses(%s): added=%d err=nil, want an error naming %s (must not silently return 0)", dataDir, added, want)
+	} else if !strings.Contains(err.Error(), want) {
+		t.Fatalf("SeedStatuses(%s): err = %v, want error naming %s", dataDir, err, want)
 	}
 }
 

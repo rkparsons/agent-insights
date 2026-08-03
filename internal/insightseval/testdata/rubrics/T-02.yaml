@@ -1,0 +1,11 @@
+id: T-02
+part: negative
+statement: >-
+  Synthetic second loader-test rubric: fabricated statement for exercising
+  multi-file loading (sorted-id output, one file per id), not a real eval
+  target.
+forbidden_generalizations:
+  - synthetic forbidden generalization
+notes: >-
+  Synthetic testdata rubric used only by insightseval loader tests; not part
+  of the real eval set.
