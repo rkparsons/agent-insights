@@ -15,7 +15,7 @@ func analysisWith(repo, cwd string) insights.AgentSessionAnalysis {
 
 func TestRepoKey(t *testing.T) {
 	home := "/Users/dev"
-	aliases := map[string]string{"terminal-app": "tmux-ctrl"}
+	cfg := insights.Config{Aliases: map[string]string{"terminal-app": "tmux-ctrl"}}
 	cases := []struct {
 		name, repo, cwd, want string
 	}{
@@ -30,7 +30,7 @@ func TestRepoKey(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := RepoKey(analysisWith(c.repo, c.cwd), aliases)
+			got := RepoKey(analysisWith(c.repo, c.cwd), cfg)
 			if got != c.want {
 				t.Errorf("RepoKey(repo=%q,cwd=%q) = %q, want %q", c.repo, c.cwd, got, c.want)
 			}
@@ -52,7 +52,7 @@ func TestGroupByRepoFloor(t *testing.T) {
 	}
 	as = append(as, analysisWith("", home+"/.dotfiles")) // dropped by RepoKey
 
-	groups := GroupByRepo(as, 10, map[string]string{"terminal-app": "tmux-ctrl"})
+	groups := GroupByRepo(as, 10, insights.Config{Aliases: map[string]string{"terminal-app": "tmux-ctrl"}})
 	if len(groups["client-project"]) != 12 {
 		t.Errorf("client-project = %d, want 12", len(groups["client-project"]))
 	}

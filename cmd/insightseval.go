@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"tmux-ctrl/internal/insights"
 	"tmux-ctrl/internal/insightseval"
 )
 
@@ -71,7 +72,13 @@ func runEvalFreeze(args []string) {
 			os.Exit(2)
 		}
 	}
-	rep, err := insightseval.RunFreeze(dataDir)
+	icfg, err := insights.LoadConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval freeze: load config: %v\n", err)
+		os.Exit(1)
+	}
+	icfg.WarnIfNoRepos()
+	rep, err := insightseval.RunFreeze(dataDir, icfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tmux-ctrl insights eval freeze: %v\n", err)
 		os.Exit(1)

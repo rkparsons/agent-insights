@@ -66,7 +66,7 @@ func buildFixtureWorld(t *testing.T) string {
 
 func TestRunFreezeEndToEnd(t *testing.T) {
 	data := buildFixtureWorld(t)
-	rep, err := RunFreeze(data)
+	rep, err := RunFreeze(data, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestRunFreezeEndToEnd(t *testing.T) {
 		}
 	}
 	// idempotent re-run
-	if _, err := RunFreeze(data); err != nil {
+	if _, err := RunFreeze(data, insights.Config{}); err != nil {
 		t.Fatalf("re-run: %v", err)
 	}
 }
@@ -107,7 +107,7 @@ func TestRunFreezeSkewSkipsPool(t *testing.T) {
 	}
 	f.Close()
 
-	rep, err := RunFreeze(data)
+	rep, err := RunFreeze(data, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestRunFreezeGapRecordedNotBlocking(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rep, err := RunFreeze(data)
+	rep, err := RunFreeze(data, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestRunFreezeGapRecordedNotBlocking(t *testing.T) {
 // because its live transcript is later pruned.
 func TestRunFreezePreservesEntryAfterLiveTranscriptPrunedNotAGap(t *testing.T) {
 	data := buildFixtureWorld(t)
-	rep1, err := RunFreeze(data)
+	rep1, err := RunFreeze(data, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +208,7 @@ func TestRunFreezePreservesEntryAfterLiveTranscriptPrunedNotAGap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rep2, err := RunFreeze(data)
+	rep2, err := RunFreeze(data, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestRunFreezePreservesEntryAfterLiveTranscriptPrunedNotAGap(t *testing.T) {
 // no re-copy, no clobbered buckets.
 func TestRunFreezeReusesCanonicalBenchmarkAndPoolOnNewLiveAnalysis(t *testing.T) {
 	data := buildFixtureWorld(t)
-	rep1, err := RunFreeze(data)
+	rep1, err := RunFreeze(data, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestRunFreezeReusesCanonicalBenchmarkAndPoolOnNewLiveAnalysis(t *testing.T)
 		t.Fatal(err)
 	}
 
-	rep2, err := RunFreeze(data)
+	rep2, err := RunFreeze(data, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +307,7 @@ func TestRunFreezeReusesCanonicalBenchmarkAndPoolOnNewLiveAnalysis(t *testing.T)
 // not the (possibly independently mutated) live pool.
 func TestRunFreezeIgnoresLivePoolDriftOnceV1Canonical(t *testing.T) {
 	data := buildFixtureWorld(t)
-	rep1, err := RunFreeze(data)
+	rep1, err := RunFreeze(data, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +328,7 @@ func TestRunFreezeIgnoresLivePoolDriftOnceV1Canonical(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rep2, err := RunFreeze(data)
+	rep2, err := RunFreeze(data, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,7 +357,7 @@ func TestRunFreezeSkewResolvedByRejudgeThenPoolWritten(t *testing.T) {
 	}
 	f.Close()
 
-	rep1, err := RunFreeze(data)
+	rep1, err := RunFreeze(data, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -389,7 +389,7 @@ func TestRunFreezeSkewResolvedByRejudgeThenPoolWritten(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rep2, err := RunFreeze(data)
+	rep2, err := RunFreeze(data, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +430,7 @@ func TestRunFreezeDoesNotReuseEmptyBenchmark(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rep, err := RunFreeze(data)
+	rep, err := RunFreeze(data, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -453,7 +453,7 @@ func TestRunFreezeDoesNotReuseEmptyBenchmark(t *testing.T) {
 
 func TestRunFreezeGroundTruthCanonicalOnce(t *testing.T) {
 	data := buildFixtureWorld(t)
-	if _, err := RunFreeze(data); err != nil {
+	if _, err := RunFreeze(data, insights.Config{}); err != nil {
 		t.Fatal(err)
 	}
 	// a NEW live synthesis lands after the freeze — it must not join ground-truth/
@@ -462,7 +462,7 @@ func TestRunFreezeGroundTruthCanonicalOnce(t *testing.T) {
 	if err := os.WriteFile(newer, []byte(`{"repo":"myrepo"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rep, err := RunFreeze(data)
+	rep, err := RunFreeze(data, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}

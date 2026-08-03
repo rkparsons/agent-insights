@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"tmux-ctrl/internal/insights"
 )
 
 func TestDevBundleDump(t *testing.T) {
@@ -21,7 +23,7 @@ func TestDevBundleDump(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	groups := GroupByRepo(analyses, DefaultMinSessions, nil)
+	groups := GroupByRepo(analyses, DefaultMinSessions, insights.Config{})
 	for k, g := range groups {
 		b := BuildBundle(k, g)
 		raw, err := json.MarshalIndent(b, "", " ")

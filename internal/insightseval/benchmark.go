@@ -119,14 +119,13 @@ func allBucketsResolved(b Benchmark) bool {
 // descriptive and possibly reversed) and the scoring population (as_consumed
 // minus meta-sessions). An unresolved count mismatch is returned as a problem;
 // its populations are still written for inspection.
-func BuildBenchmark(frozenAt time.Time, analyses []insights.AgentSessionAnalysis, truths map[string]synthesis.RepoSynthesis) (Benchmark, []string) {
-	icfg, _ := insights.LoadConfig() // best-effort; grouping still works unaliased on error
+func BuildBenchmark(frozenAt time.Time, analyses []insights.AgentSessionAnalysis, truths map[string]synthesis.RepoSynthesis, cfg insights.Config) (Benchmark, []string) {
 	b := Benchmark{FrozenAt: frozenAt, Buckets: map[string]BucketPopulations{}, Statuses: map[string]string{}}
 	var problems []string
 	for repo, t := range truths {
 		var bucket []insights.AgentSessionAnalysis
 		for _, a := range analyses {
-			if synthesis.RepoKey(a, icfg.Aliases) == repo {
+			if synthesis.RepoKey(a, cfg) == repo {
 				bucket = append(bucket, a)
 			}
 		}

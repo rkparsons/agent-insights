@@ -36,7 +36,7 @@ func TestBuildBenchmarkPopulations(t *testing.T) {
 			// reversed From/To, as the pre-sort-fix reports print
 			Window: synthesis.Window{From: "2026-06-28", To: "2026-06-24", AnalyzedCount: 3}},
 	}
-	b, problems := BuildBenchmark(gen, analyses, truths)
+	b, problems := BuildBenchmark(gen, analyses, truths, insights.Config{})
 	if len(problems) != 0 {
 		t.Fatalf("problems: %v", problems)
 	}
@@ -69,7 +69,7 @@ func TestBuildBenchmarkRepoPathStripsWorktree(t *testing.T) {
 	truths := map[string]synthesis.RepoSynthesis{
 		"myrepo": {GeneratedAt: gen, Window: synthesis.Window{From: "2026-06-24", To: "2026-06-24", AnalyzedCount: 1}},
 	}
-	b, problems := BuildBenchmark(gen, analyses, truths)
+	b, problems := BuildBenchmark(gen, analyses, truths, insights.Config{})
 	if len(problems) != 0 {
 		t.Fatalf("problems: %v", problems)
 	}
@@ -88,7 +88,7 @@ func TestBuildBenchmarkPostGenerationFallback(t *testing.T) {
 	truths := map[string]synthesis.RepoSynthesis{
 		"myrepo": {GeneratedAt: gen, Window: synthesis.Window{From: "2026-06-24", To: "2026-06-24", AnalyzedCount: 1}},
 	}
-	b, problems := BuildBenchmark(gen, analyses, truths)
+	b, problems := BuildBenchmark(gen, analyses, truths, insights.Config{})
 	if len(problems) != 0 {
 		t.Fatalf("problems: %v", problems)
 	}
@@ -105,7 +105,7 @@ func TestBuildBenchmarkUnresolvedMismatch(t *testing.T) {
 	truths := map[string]synthesis.RepoSynthesis{
 		"myrepo": {GeneratedAt: gen, Window: synthesis.Window{From: "2026-06-24", To: "2026-06-24", AnalyzedCount: 5}},
 	}
-	b, problems := BuildBenchmark(gen, analyses, truths)
+	b, problems := BuildBenchmark(gen, analyses, truths, insights.Config{})
 	if len(problems) != 1 {
 		t.Fatalf("problems = %v", problems)
 	}

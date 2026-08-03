@@ -40,7 +40,8 @@ func RunSynthesize(ctx context.Context, syn Synthesizer, opts Options) (sum Summ
 	if err != nil {
 		return Summary{}, err
 	}
-	groups := GroupByRepo(analyses, opts.MinSessions, cfg.Aliases)
+	cfg.WarnIfNoRepos()
+	groups := GroupByRepo(analyses, opts.MinSessions, cfg)
 
 	keys := make([]string, 0, len(groups))
 	for k := range groups {

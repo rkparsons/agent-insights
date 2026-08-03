@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+
+	"tmux-ctrl/internal/insights"
 )
 
 func TestOpportunityRecallMiss(t *testing.T) {
@@ -231,7 +233,7 @@ func TestGateRealclient-project(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	groups := GroupByRepo(analyses, DefaultMinSessions, nil)
+	groups := GroupByRepo(analyses, DefaultMinSessions, insights.Config{})
 	group := groups["client-project"]
 	if len(group) == 0 {
 		t.Skip("no client-project analyses present")

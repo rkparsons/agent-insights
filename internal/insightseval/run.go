@@ -37,8 +37,10 @@ type FreezeReport struct {
 // which reads the stamped mtime from v1 once v1 is canonical rather than the
 // (possibly since-rejudged) live pool — are still recomputed fresh every run.
 // Gaps (transcripts pruned before the freeze ever ran) are recorded into
-// their bucket but never gate the pool.
-func RunFreeze(dataDir string) (FreezeReport, error) {
+// their bucket but never gate the pool. cfg is loaded once by the CLI entry
+// point (cmd/insightseval.go) and threaded through to every RepoKey grouping
+// call below, so FreezeCorpus/BuildBenchmark never load it themselves.
+func RunFreeze(dataDir string, cfg insights.Config) (FreezeReport, error) {
 	var rep FreezeReport
 	if err := EnsureRepoScaffold(dataDir); err != nil {
 		return rep, err
@@ -66,7 +68,7 @@ func RunFreeze(dataDir string) (FreezeReport, error) {
 	}
 
 	frozenAt := time.Now().UTC()
-	rep.Manifest, rep.FreezeStats, err = FreezeCorpus(dataDir, byID, frozenAt)
+	rep.Manifest, rep.FreezeStats, err = FreezeCorpus(dataDir, byID, frozenAt, cfg)
 	if err != nil {
 		return rep, fmt.Errorf("corpus: %w", err)
 	}
@@ -86,7 +88,7 @@ func RunFreeze(dataDir string) (FreezeReport, error) {
 	if reuseBenchmark {
 		rep.Benchmark = existingBenchmark
 	} else {
-		rep.Benchmark, problems = BuildBenchmark(frozenAt, analyses, truths)
+		rep.Benchmark, problems = BuildBenchmark(frozenAt, analyses, truths, cfg)
 	}
 
 	v1Dir := filepath.Join(dataDir, "baseline-pool", "v1")

@@ -16,9 +16,9 @@ const DefaultMinSessions = 10
 // segment stripped first, so a worktree-specific configured repo still folds to its
 // project root; unmatched ("") analyses derive the project root from cwd (the segment
 // under ~/Developer/<project>), never basename(cwd) (which would misfile worktree
-// leaves like ".../terminal-app/.worktrees/x/src" as "src"). aliases (old-name -> canonical,
-// from insights.Config) folds a pre-rename project path segment onto its current key.
-func RepoKey(a insights.AgentSessionAnalysis, aliases map[string]string) string {
+// leaves like ".../terminal-app/.worktrees/x/src" as "src"). cfg.Canonical folds a
+// pre-rename project path segment onto its current key.
+func RepoKey(a insights.AgentSessionAnalysis, cfg insights.Config) string {
 	if r := a.Stats.Repo; r != "" {
 		return filepath.Base(stripWorktree(r))
 	}
@@ -26,10 +26,7 @@ func RepoKey(a insights.AgentSessionAnalysis, aliases map[string]string) string 
 	if proj == "" {
 		return ""
 	}
-	if alias, ok := aliases[proj]; ok {
-		return alias
-	}
-	return proj
+	return cfg.Canonical(proj)
 }
 
 // stripWorktree truncates a path at a "/.worktrees/" segment, if present.
@@ -81,12 +78,11 @@ func LoadAnalyses() ([]insights.AgentSessionAnalysis, error) {
 }
 
 // GroupByRepo buckets analyses by RepoKey, dropping the "" key and any bucket
-// with fewer than minSessions analyses. aliases is threaded through to RepoKey
-// (see insights.Config.Aliases).
-func GroupByRepo(analyses []insights.AgentSessionAnalysis, minSessions int, aliases map[string]string) map[string][]insights.AgentSessionAnalysis {
+// with fewer than minSessions analyses. cfg is threaded through to RepoKey.
+func GroupByRepo(analyses []insights.AgentSessionAnalysis, minSessions int, cfg insights.Config) map[string][]insights.AgentSessionAnalysis {
 	byKey := map[string][]insights.AgentSessionAnalysis{}
 	for _, a := range analyses {
-		k := RepoKey(a, aliases)
+		k := RepoKey(a, cfg)
 		if k == "" {
 			continue
 		}

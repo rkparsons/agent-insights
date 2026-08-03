@@ -40,7 +40,7 @@ func TestFreezeCorpusWritesManifestAndFiles(t *testing.T) {
 	}
 	frozenAt := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
 
-	m, stats, err := FreezeCorpus(data, byID, frozenAt)
+	m, stats, err := FreezeCorpus(data, byID, frozenAt, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestFreezeCorpusRerunPreservesEntriesAndTracksDivergence(t *testing.T) {
 	projects, data := freezeCorpusFixture(t)
 	frozenAt1 := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
 
-	m1, stats1, err := FreezeCorpus(data, nil, frozenAt1)
+	m1, stats1, err := FreezeCorpus(data, nil, frozenAt1, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestFreezeCorpusRerunPreservesEntriesAndTracksDivergence(t *testing.T) {
 	f.Close()
 
 	frozenAt2 := time.Date(2026, 7, 5, 9, 0, 0, 0, time.UTC)
-	m2, stats2, err := FreezeCorpus(data, nil, frozenAt2)
+	m2, stats2, err := FreezeCorpus(data, nil, frozenAt2, insights.Config{})
 	if err != nil {
 		t.Fatalf("re-freeze must not error on append-only-violated live transcript: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestFreezeCorpusRerunPreservesEntriesAndTracksDivergence(t *testing.T) {
 func TestFreezeCorpusRerunDetectsTamperedFrozenFile(t *testing.T) {
 	_, data := freezeCorpusFixture(t)
 	frozenAt := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
-	if _, _, err := FreezeCorpus(data, nil, frozenAt); err != nil {
+	if _, _, err := FreezeCorpus(data, nil, frozenAt, insights.Config{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -189,7 +189,7 @@ func TestFreezeCorpusRerunDetectsTamperedFrozenFile(t *testing.T) {
 	}
 	tf.Close()
 
-	_, _, err = FreezeCorpus(data, nil, frozenAt)
+	_, _, err = FreezeCorpus(data, nil, frozenAt, insights.Config{})
 	if err == nil || !strings.Contains(err.Error(), "sess-1") {
 		t.Fatalf("want hard error naming sess-1, got %v", err)
 	}
@@ -198,7 +198,7 @@ func TestFreezeCorpusRerunDetectsTamperedFrozenFile(t *testing.T) {
 func TestFreezeCorpusRerunFreezesNewSession(t *testing.T) {
 	projects, data := freezeCorpusFixture(t)
 	frozenAt := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
-	if _, _, err := FreezeCorpus(data, nil, frozenAt); err != nil {
+	if _, _, err := FreezeCorpus(data, nil, frozenAt, insights.Config{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -207,7 +207,7 @@ func TestFreezeCorpusRerunFreezesNewSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, stats, err := FreezeCorpus(data, nil, frozenAt)
+	m, stats, err := FreezeCorpus(data, nil, frozenAt, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +233,7 @@ func TestFreezeCorpusRerunFreezesNewSession(t *testing.T) {
 func TestFreezeCorpusRerunPreservesEntryAfterLiveTranscriptPruned(t *testing.T) {
 	projects, data := freezeCorpusFixture(t)
 	frozenAt := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
-	m1, _, err := FreezeCorpus(data, nil, frozenAt)
+	m1, _, err := FreezeCorpus(data, nil, frozenAt, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestFreezeCorpusRerunPreservesEntryAfterLiveTranscriptPruned(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	m2, stats2, err := FreezeCorpus(data, nil, frozenAt)
+	m2, stats2, err := FreezeCorpus(data, nil, frozenAt, insights.Config{})
 	if err != nil {
 		t.Fatalf("re-freeze after live prune must not error: %v", err)
 	}
@@ -307,7 +307,7 @@ func TestFreezeCorpusDedupesSameSessionAcrossProjectDirs(t *testing.T) {
 	}
 
 	frozenAt := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
-	m, stats, err := FreezeCorpus(data, nil, frozenAt)
+	m, stats, err := FreezeCorpus(data, nil, frozenAt, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -397,7 +397,7 @@ func TestFreezeCorpusFreezesAgentMetaSidechains(t *testing.T) {
 	}
 	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
 
-	m, _, err := FreezeCorpus(data, nil, time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC))
+	m, _, err := FreezeCorpus(data, nil, time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC), insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -458,7 +458,7 @@ func TestFreezeCorpusDedupesSameSidechainAcrossProjectDirs(t *testing.T) {
 	}
 
 	frozenAt := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
-	m, _, err := FreezeCorpus(data, nil, frozenAt)
+	m, _, err := FreezeCorpus(data, nil, frozenAt, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}

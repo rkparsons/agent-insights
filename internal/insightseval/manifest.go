@@ -80,12 +80,8 @@ func loadManifest(dataDir string) (Manifest, bool, error) {
 // of the manifest and gets reclassified as a gap. The live walk only ADDS
 // ids/sidechain-keys not already present; it never removes one. FrozenAt is
 // likewise carried over from the first freeze.
-func FreezeCorpus(dataDir string, byID map[string]insights.AgentSessionAnalysis, frozenAt time.Time) (Manifest, FreezeStats, error) {
+func FreezeCorpus(dataDir string, byID map[string]insights.AgentSessionAnalysis, frozenAt time.Time, cfg insights.Config) (Manifest, FreezeStats, error) {
 	var stats FreezeStats
-	icfg, err := insights.LoadConfig()
-	if err != nil {
-		return Manifest{}, stats, fmt.Errorf("load config: %w", err)
-	}
 	existing, hasExisting, err := loadManifest(dataDir)
 	if err != nil {
 		return Manifest{}, stats, fmt.Errorf("load existing manifest: %w", err)
@@ -142,7 +138,7 @@ func FreezeCorpus(dataDir string, byID map[string]insights.AgentSessionAnalysis,
 		}
 		e := ManifestEntry{SessionID: r.SessionID, SHA256: sha, Mtime: r.Mtime, Bytes: n, SourcePath: r.Path}
 		if a, ok := byID[r.SessionID]; ok {
-			e.RepoKey = synthesis.RepoKey(a, icfg.Aliases)
+			e.RepoKey = synthesis.RepoKey(a, cfg)
 			e.Start = a.Stats.Start
 		}
 		m.Entries = append(m.Entries, e)

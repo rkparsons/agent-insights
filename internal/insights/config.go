@@ -2,9 +2,11 @@ package insights
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
@@ -83,4 +85,20 @@ func (c Config) Canonical(name string) string {
 		return alias
 	}
 	return name
+}
+
+var warnNoReposOnce sync.Once
+
+// WarnIfNoRepos prints one stderr line, once per process, when c has no
+// configured repos (missing config file or an explicitly empty repos list).
+// Grouping entry points (synthesize, eval freeze/benchmark) call this after
+// LoadConfig so an empty config degrades visibly instead of silently falling
+// back to path heuristics for every session.
+func (c Config) WarnIfNoRepos() {
+	if len(c.Repos) > 0 {
+		return
+	}
+	warnNoReposOnce.Do(func() {
+		fmt.Fprintln(os.Stderr, "agent-insights: no repos configured (~/.config/agent-insights/config.yaml); grouping falls back to path heuristics")
+	})
 }
