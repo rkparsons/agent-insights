@@ -12,7 +12,7 @@ func TestRedactRunsBasenamesRepoPath(t *testing.T) {
 	// resolveRepo returns the repo's full PATH (producer design); the committed
 	// artifact must carry only the basename, never the home path (F7 privacy).
 	runs := []sessionRun{
-		{Stats: AgentSessionStats{Repo: "/Users/rp/Developer/personal/home-cluster"}, Repeats: []RepeatResult{repeat(jf("fully_achieved"))}},
+		{Stats: AgentSessionStats{Repo: "/Users/dev/Developer/personal/home-cluster"}, Repeats: []RepeatResult{repeat(jf("fully_achieved"))}},
 		{Stats: AgentSessionStats{Repo: ""}, Repeats: []RepeatResult{repeat(jf("fully_achieved"))}},
 	}
 	got := redactRuns(runs)

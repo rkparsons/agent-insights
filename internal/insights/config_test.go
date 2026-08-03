@@ -20,7 +20,7 @@ func TestLoadConfigMissingFileDefaults(t *testing.T) {
 
 func TestLoadConfigEnvOverride(t *testing.T) {
 	path := t.TempDir() + "/config.yaml"
-	yaml := "repos:\n  - /a/b\naliases:\n  terminal-app: tmux-ctrl\ncadence_days: 14\nmin_sessions: 5\n"
+	yaml := "repos:\n  - /a/b\naliases:\n  oldname: newname\ncadence_days: 14\nmin_sessions: 5\n"
 	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -33,8 +33,8 @@ func TestLoadConfigEnvOverride(t *testing.T) {
 	if len(cfg.Repos) != 1 || cfg.Repos[0] != "/a/b" {
 		t.Errorf("Repos = %v, want [/a/b]", cfg.Repos)
 	}
-	if cfg.Aliases["terminal-app"] != "tmux-ctrl" {
-		t.Errorf("Aliases[terminal-app] = %q, want tmux-ctrl", cfg.Aliases["terminal-app"])
+	if cfg.Aliases["oldname"] != "newname" {
+		t.Errorf("Aliases[oldname] = %q, want newname", cfg.Aliases["oldname"])
 	}
 	if cfg.CadenceDays != 14 {
 		t.Errorf("CadenceDays = %d, want 14", cfg.CadenceDays)
@@ -56,9 +56,9 @@ func TestResolverPrefixMatch(t *testing.T) {
 }
 
 func TestCanonicalAlias(t *testing.T) {
-	cfg := Config{Aliases: map[string]string{"terminal-app": "tmux-ctrl"}}
-	if got := cfg.Canonical("terminal-app"); got != "tmux-ctrl" {
-		t.Errorf("Canonical(terminal-app) = %q, want tmux-ctrl", got)
+	cfg := Config{Aliases: map[string]string{"oldname": "newname"}}
+	if got := cfg.Canonical("oldname"); got != "newname" {
+		t.Errorf("Canonical(oldname) = %q, want newname", got)
 	}
 	if got := cfg.Canonical("unknown"); got != "unknown" {
 		t.Errorf("Canonical(unknown) = %q, want passthrough", got)

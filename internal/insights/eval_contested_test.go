@@ -72,7 +72,7 @@ func TestBuildCardsDropsMetaSession(t *testing.T) {
 	// low recognition value. Display-only: buildCards returns nil for a meta session.
 	inc := FrictionIncident{Type: "wrong_approach", OneLine: "x", EvidenceQuote: "q"}
 	sr := sessionRun{
-		Stats:         AgentSessionStats{Cwd: "/home/rp/insights-dev", AiTitle: ""},
+		Stats:         AgentSessionStats{Cwd: "/home/user/insights-dev", AiTitle: ""},
 		FirstUserTurn: "analyze this session",
 		ZeroFriction:  true,
 		Repeats:       []RepeatResult{repeat(jf("unclear", inc))},

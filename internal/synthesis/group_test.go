@@ -15,14 +15,14 @@ func analysisWith(repo, cwd string) insights.AgentSessionAnalysis {
 
 func TestRepoKey(t *testing.T) {
 	home := "/Users/dev"
-	cfg := insights.Config{Aliases: map[string]string{"terminal-app": "tmux-ctrl"}}
+	cfg := insights.Config{Aliases: map[string]string{"oldname": "tmux-ctrl"}}
 	cases := []struct {
 		name, repo, cwd, want string
 	}{
 		{"configured repo", home + "/Developer/alpha", home + "/Developer/alpha", "alpha"},
 		{"configured worktree", home + "/Developer/alpha/.worktrees/feat-1", home + "/Developer/alpha/.worktrees/feat-1", "alpha"},
-		{"terminal-app worktree folds to tmux-ctrl", "", home + "/Developer/terminal-app/.worktrees/preview/src", "tmux-ctrl"},
-		{"terminal-app plain folds to tmux-ctrl", "", home + "/Developer/terminal-app", "tmux-ctrl"},
+		{"oldname worktree folds to tmux-ctrl", "", home + "/Developer/oldname/.worktrees/preview/src", "tmux-ctrl"},
+		{"oldname plain folds to tmux-ctrl", "", home + "/Developer/oldname", "tmux-ctrl"},
 		{"unconfigured developer repo", "", home + "/Developer/somelib/src", "somelib"},
 		{"non-developer dotfiles dropped", "", home + "/.dotfiles", ""},
 		{"home path dropped", "", home, ""},
@@ -44,20 +44,20 @@ func TestGroupByRepoFloor(t *testing.T) {
 	for i := 0; i < 12; i++ {
 		as = append(as, analysisWith(home+"/Developer/alpha", home+"/Developer/alpha"))
 	}
-	for i := 0; i < 3; i++ { // terminal-app folds to tmux-ctrl but is below floor on its own...
-		as = append(as, analysisWith("", home+"/Developer/terminal-app/.worktrees/w/src"))
+	for i := 0; i < 3; i++ { // oldname folds to tmux-ctrl but is below floor on its own...
+		as = append(as, analysisWith("", home+"/Developer/oldname/.worktrees/w/src"))
 	}
 	for i := 0; i < 8; i++ { // ...plus configured tmux-ctrl → combined 11 clears floor
 		as = append(as, analysisWith(home+"/Developer/tmux-ctrl", home+"/Developer/tmux-ctrl"))
 	}
 	as = append(as, analysisWith("", home+"/.dotfiles")) // dropped by RepoKey
 
-	groups := GroupByRepo(as, 10, insights.Config{Aliases: map[string]string{"terminal-app": "tmux-ctrl"}})
+	groups := GroupByRepo(as, 10, insights.Config{Aliases: map[string]string{"oldname": "tmux-ctrl"}})
 	if len(groups["alpha"]) != 12 {
 		t.Errorf("alpha = %d, want 12", len(groups["alpha"]))
 	}
 	if len(groups["tmux-ctrl"]) != 11 {
-		t.Errorf("tmux-ctrl = %d, want 11 (8 configured + 3 terminal-app fold)", len(groups["tmux-ctrl"]))
+		t.Errorf("tmux-ctrl = %d, want 11 (8 configured + 3 oldname fold)", len(groups["tmux-ctrl"]))
 	}
 	if _, ok := groups[""]; ok {
 		t.Error("empty key must never appear as a group")

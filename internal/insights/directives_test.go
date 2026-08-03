@@ -53,7 +53,7 @@ func TestNormalizeClauseAndTokens(t *testing.T) {
 }
 
 func TestExtractClausesSanitizes(t *testing.T) {
-	got := extractClauses("look at /Users/dev/Developer/terminal-app/main.go and fix the bug there")
+	got := extractClauses("look at /Users/dev/Developer/alpha/main.go and fix the bug there")
 	if len(got) != 1 || got[0] != "look at [path] and fix the bug there" {
 		t.Fatalf("got %#v", got)
 	}

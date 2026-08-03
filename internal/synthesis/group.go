@@ -16,7 +16,7 @@ const DefaultMinSessions = 10
 // segment stripped first, so a worktree-specific configured repo still folds to its
 // project root; unmatched ("") analyses derive the project root from cwd (the segment
 // under ~/Developer/<project>), never basename(cwd) (which would misfile worktree
-// leaves like ".../terminal-app/.worktrees/x/src" as "src"). cfg.Canonical folds a
+// leaves like ".../alpha/.worktrees/x/src" as "src"). cfg.Canonical folds a
 // pre-rename project path segment onto its current key.
 func RepoKey(a insights.AgentSessionAnalysis, cfg insights.Config) string {
 	if r := a.Stats.Repo; r != "" {

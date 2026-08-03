@@ -15,11 +15,11 @@ func TestClassifyMechanicalError(t *testing.T) {
 		ok   bool
 	}{
 		{"<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>", modeEditBeforeRead, true},
-		{"File does not exist. Note: your current working directory is /Users/dev/Developer/terminal-app/.worktrees/preview-issues.", modeWrongCwd, true},
+		{"File does not exist. Note: your current working directory is /Users/dev/Developer/alpha/.worktrees/preview-issues.", modeWrongCwd, true},
 		{"Exit code 1\n(eval):cd:1: no such file or directory: src", modeWrongCwd, true},
 		{"Exit code 1\npattern ./...: directory prefix . does not contain main module or its selected dependencies", modeWrongCwd, true},
-		{"Exit code 1\ngo: cannot find main module, but found .git/config in /Users/dev/Developer/terminal-app", modeWrongCwd, true},
-		{"Refusing to write through symlink: /Users/dev/.config/terminal-app/config.yaml. Resolve the symlink and pass the real target path explicitly.", modeSymlinkEdit, true},
+		{"Exit code 1\ngo: cannot find main module, but found .git/config in /Users/dev/Developer/alpha", modeWrongCwd, true},
+		{"Refusing to write through symlink: /Users/dev/.config/alpha/config.yaml. Resolve the symlink and pass the real target path explicitly.", modeSymlinkEdit, true},
 		{"<tool_use_error>String to replace not found in file.</tool_use_error>", "", false},
 		{"<tool_use_error>File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.</tool_use_error>", "", false},
 		{"Exit code 1", "", false},
@@ -52,16 +52,16 @@ func TestErrorSignature(t *testing.T) {
 
 func TestSanitizeEvidenceText(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"File does not exist. Note: your current working directory is /Users/dev/Developer/terminal-app/.worktrees/preview-issues.",
+		{"File does not exist. Note: your current working directory is /Users/dev/Developer/alpha/.worktrees/preview-issues.",
 			"File does not exist. Note: your current working directory is [path]"},
-		{"Refusing to write through symlink: /Users/dev/.config/terminal-app/config.yaml. Resolve the symlink and pass the real target path explicitly.",
+		{"Refusing to write through symlink: /Users/dev/.config/alpha/config.yaml. Resolve the symlink and pass the real target path explicitly.",
 			"Refusing to write through symlink: [path] Resolve the symlink and pass the real target path explicitly."},
 		{"<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>",
 			"File has not been read yet. Read it first before writing to it."},
 		{"resume session 8f3d2a1b-4c5d-6e7f-8a9b-0c1d2e3f4a5b please", "resume session [id] please"},
 		{"fix sc-42 first", "fix [ticket] first"},
 		{"tail -f /dev/null stays intact", "tail -f /dev/null stays intact"},
-		{"echo hi > /tmp/terminal-app_perm_test.txt — and nothing else", "echo hi > [path] — and nothing else"},
+		{"echo hi > /tmp/alpha_perm_test.txt — and nothing else", "echo hi > [path] — and nothing else"},
 		{"set $HOME/.config first", "set [path] first"},
 	}
 	for _, c := range cases {
