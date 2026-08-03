@@ -59,7 +59,7 @@ func TestSaveAndLoadAdjudications(t *testing.T) {
 		t.Fatal("invalid decision must be rejected")
 	}
 	leaky := sampleAdj("accept")
-	leaky.Note = "session 00000000-0000-4000-8000-00000000dead"
+	leaky.Note = "session 00000000-0000-4000-8000-000000000099"
 	if err := SaveAdjudication(data, leaky); err == nil || !strings.Contains(err.Error(), "privacy") {
 		t.Fatalf("privacy scan must block the write: %v", err)
 	}

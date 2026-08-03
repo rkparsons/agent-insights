@@ -4,13 +4,13 @@ import "testing"
 
 func TestPrivacyScanCatchesEveryClass(t *testing.T) {
 	leaks := []string{
-		"session 00000000-0000-4000-8000-00000000dead did it", // session id
+		"session 0abc1234-de56-4f78-9abc-def012345678 did it", // session id
 		"path /Users/dev/x",                        // cwd/home
 		"path /home/rick/x",
 		"under $HOME/.claude",
-		"branch TICKET-0000",           // ticket-branch marker
-		"repo/.worktrees/insights", // worktree path
-		"session 00000000-0000-4000-8000-00000000dead did it", // uppercase-hex session id
+		"branch TICKET-0000",                                     // ticket-branch marker
+		"repo/.worktrees/insights",                            // worktree path
+		"session 0ABC1234-DE56-4F78-9ABC-DEF012345678 did it", // uppercase-hex session id
 		"branch TICKET-0000",
 	}
 	for _, l := range leaks {

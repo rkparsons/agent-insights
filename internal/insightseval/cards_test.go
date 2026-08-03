@@ -12,7 +12,7 @@ import (
 func cardResults() []TargetResult {
 	r := scoreRubric() // Task 6 fixture: ID C-77, expected bucket client-project
 	return []TargetResult{{
-		Rubric: r,
+		Rubric:  r,
 		Verdict: TargetVerdict{ID: r.ID},
 		Pending: []PendingCard{
 			{TargetID: r.ID, Trigger: CorroborationMismatch, Adjudicable: true,
@@ -61,7 +61,7 @@ func TestBuildCardsRejectsSessionIDLeak(t *testing.T) {
 	results := cardResults()
 	// a one_line that itself contains a session uuid must be caught
 	oneLines := map[string]map[string]string{"client-project": {
-		"sX": "mentions 00000000-0000-4000-8000-00000000dead verbatim",
+		"sX": "mentions 0abc1234-de56-4f78-9abc-def012345678 verbatim",
 	}}
 	if _, err := BuildCards(results, map[string][]string{"C-77": {"sA", "sB"}}, oneLines); err == nil {
 		t.Fatal("cards containing a session id must be rejected")
