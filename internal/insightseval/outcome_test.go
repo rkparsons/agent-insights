@@ -42,6 +42,7 @@ func buildOutcomeFixture(t *testing.T) (string, OutcomeOptions) {
 	if err := writeJSON(filepath.Join(data, "benchmark.json"), b); err != nil {
 		t.Fatal(err)
 	}
+	writeMinimalRubricSet(t, data)
 	mustWriteFile(t, filepath.Join(data, "config-snapshot", "global", "CLAUDE.md"), "frozen")
 	mustWriteFile(t, filepath.Join(data, "config-snapshot", "global", "settings.json"), "{}")
 	mustWriteFile(t, filepath.Join(data, "config-snapshot", "repos", "myrepo", "CLAUDE.md"), "repo rules")

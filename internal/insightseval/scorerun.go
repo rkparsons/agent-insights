@@ -183,7 +183,7 @@ func newScoreSession(ctx context.Context, opts ScoreOptions, scratchStamp time.T
 	if s.rec, s.recPath, err = loadScoreableRecord(opts); err != nil {
 		return nil, nil, err
 	}
-	if s.rubrics, err = LoadRubrics(); err != nil {
+	if s.rubrics, err = LoadRubrics(opts.DataDir); err != nil {
 		return nil, nil, err
 	}
 	if s.statuses, err = Statuses(opts.DataDir); err != nil {
@@ -341,7 +341,7 @@ func ScoreRun(ctx context.Context, opts ScoreOptions) (Verdict, ScoreArtifacts, 
 	if opts.ScoredAt.IsZero() {
 		opts.ScoredAt = time.Now().UTC()
 	}
-	rubricSetHash, err := RubricSetHash()
+	rubricSetHash, err := RubricSetHash(opts.DataDir)
 	if err != nil {
 		return Verdict{}, none, err
 	}
@@ -453,7 +453,7 @@ func ScoreTargets(ctx context.Context, opts ScoreOptions) ([]TargetResult, []str
 	}
 	// Id validation precedes the session: a typo'd target must be named
 	// before any cache loading or probe spend.
-	rubrics, err := LoadRubrics()
+	rubrics, err := LoadRubrics(opts.DataDir)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -499,7 +499,7 @@ func ProbeRun(ctx context.Context, opts ScoreOptions) ([]ProbeResult, error) {
 	if opts.Repeats <= 0 {
 		opts.Repeats = 3
 	}
-	rubrics, err := LoadRubrics()
+	rubrics, err := LoadRubrics(opts.DataDir)
 	if err != nil {
 		return nil, err
 	}

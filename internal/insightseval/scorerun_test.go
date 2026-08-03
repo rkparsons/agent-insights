@@ -12,8 +12,9 @@ import (
 )
 
 // buildScoreFixture mirrors buildOutcomeFixture with the bucket named
-// tmux-ctrl so the embedded rubrics with repos [tmux-ctrl, ...] see items,
-// and with statuses seeded (scoring fail-closes on missing statuses).
+// tmux-ctrl so the synthetic rubric fixture's M1 (repos [tmux-ctrl, ...])
+// sees items, and with statuses seeded (scoring fail-closes on missing
+// statuses).
 func buildScoreFixture(t *testing.T) (string, OutcomeOptions) {
 	t.Helper()
 	withFakeCredentials(t)
@@ -32,6 +33,7 @@ func buildScoreFixture(t *testing.T) (string, OutcomeOptions) {
 	if err := writeJSON(filepath.Join(data, "benchmark.json"), b); err != nil {
 		t.Fatal(err)
 	}
+	writeMinimalRubricSet(t, data)
 	mustWriteFile(t, filepath.Join(data, "config-snapshot", "global", "CLAUDE.md"), "frozen")
 	mustWriteFile(t, filepath.Join(data, "config-snapshot", "global", "settings.json"), "{}")
 	mustWriteFile(t, filepath.Join(data, "config-snapshot", "repos", "tmux-ctrl", "CLAUDE.md"), "repo rules")
@@ -91,7 +93,7 @@ func runScoreFixture(t *testing.T) (OutcomeOptions, RunRecord) {
 }
 
 func m1Match() MatchResult {
-	// M1 has exactly 2 required nuances (rubrics/M1.yaml)
+	// M1 has exactly 2 required nuances (writeMinimalRubricSet's M1.yaml)
 	return MatchResult{Matches: []ItemMatch{{ItemID: "tmux-ctrl/theme/0", Granularity: "full",
 		NuanceResults: []bool{true, true}, ForbiddenFormsMatched: []int{}}}}
 }
@@ -180,7 +182,12 @@ func TestScoreRunRejectsL1SampleAndEmptyRecords(t *testing.T) {
 	if err := writeJSON(filepath.Join(cacheDir, "run-records", "r.json"), rec); err != nil {
 		t.Fatal(err)
 	}
-	_, _, err := ScoreRun(context.Background(), ScoreOptions{DataDir: t.TempDir(), CacheDir: cacheDir,
+	// RubricSetHash runs before the L1-sample rejection check, so the data dir
+	// still needs a valid rubrics/ — this test targets record-shape rejection,
+	// not rubric loading.
+	dataDir := t.TempDir()
+	writeMinimalRubricSet(t, dataDir)
+	_, _, err := ScoreRun(context.Background(), ScoreOptions{DataDir: dataDir, CacheDir: cacheDir,
 		ClaudeVersion: "1.0.0 (test)", Matcher: &scriptedMatcher{},
 		ScoredAt: time.Date(2026, 7, 5, 10, 0, 0, 0, time.UTC)})
 	if err == nil || !strings.Contains(err.Error(), "insights eval outcome") {

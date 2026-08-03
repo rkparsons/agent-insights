@@ -20,12 +20,13 @@ func TestDevCacheHoles(t *testing.T) {
 		t.Fatal(err)
 	}
 	cacheDir := filepath.Join(home, "Library", "Caches", "tmux-ctrl", "insights-eval")
+	dataDir := filepath.Join(home, "Developer", "insights-eval-data")
 	cache := NewCache(cacheDir)
 	rec, err := LoadRunRecord(filepath.Join(cacheDir, "run-records", devCurRecord))
 	if err != nil {
 		t.Fatal(err)
 	}
-	rubrics, err := LoadRubrics()
+	rubrics, err := LoadRubrics(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}

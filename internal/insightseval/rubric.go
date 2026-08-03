@@ -1,8 +1,8 @@
 package insightseval
 
 import (
-	"embed"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -12,12 +12,9 @@ import (
 	"tmux-ctrl/internal/synthesis"
 )
 
-//go:embed rubrics/*.yaml
-var rubricFS embed.FS
-
-// Rubric encodes one eval target from docs/insights-eval/insights-eval-spec.md. Rubrics co-evolve
-// with the harness and scoring code, so they live embedded here, not in the
-// append-only data repo.
+// Rubric encodes one eval target from docs/insights-eval/insights-eval-spec.md. Rubrics
+// name real session ids and employer-specific repos, so they live in the
+// private data repo (<dataDir>/rubrics), not embedded in this public tree.
 type Rubric struct {
 	ID                       string   `yaml:"id"`
 	Part                     string   `yaml:"part"`
@@ -34,10 +31,10 @@ type Rubric struct {
 	// tighten the cap.
 	SourceThemeSessionIDs []string `yaml:"source_theme_session_ids,omitempty"`
 	AnchorTheme           string   `yaml:"anchor_theme,omitempty"` // "<bucket>/<theme-index>" in frozen ground truth (pre-strip anchor source)
-	Surface                  string   `yaml:"surface"`
-	PassAt                   string   `yaml:"pass_at"`
-	SeedStatus               string   `yaml:"seed_status,omitempty"`
-	Notes                    string   `yaml:"notes,omitempty"`
+	Surface               string   `yaml:"surface"`
+	PassAt                string   `yaml:"pass_at"`
+	SeedStatus            string   `yaml:"seed_status,omitempty"`
+	Notes                 string   `yaml:"notes,omitempty"`
 	// Hash is the sha256 of the rubric file bytes: adjudication keys and
 	// per-rubric matcher payloads re-key when the file changes.
 	Hash string `yaml:"-"`
@@ -131,16 +128,39 @@ func parseRubric(name string, raw []byte) (Rubric, error) {
 	return r, nil
 }
 
-// LoadRubrics parses and validates every embedded rubric, sorted by id.
-func LoadRubrics() ([]Rubric, error) {
-	entries, err := rubricFS.ReadDir("rubrics")
+// rubricEntries lists <dataDir>/rubrics's *.yaml files, sorted by name (as
+// os.ReadDir already returns them). Fails closed: a missing rubrics/ dir
+// names the expected path rather than silently yielding zero rubrics — a
+// wrong --data or an unchecked-out data repo must not look like "no rubrics".
+func rubricEntries(dataDir string) (string, []os.DirEntry, error) {
+	dir := filepath.Join(dataDir, "rubrics")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return dir, nil, fmt.Errorf("no rubrics directory at %s — expected the eval data repo's rubrics/ (check --data / dataDir points at a checked-out insights-eval-data)", dir)
+		}
+		return dir, nil, err
+	}
+	var out []os.DirEntry
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") {
+			out = append(out, e)
+		}
+	}
+	return dir, out, nil
+}
+
+// LoadRubrics parses and validates every rubric under <dataDir>/rubrics,
+// sorted by id.
+func LoadRubrics(dataDir string) ([]Rubric, error) {
+	dir, entries, err := rubricEntries(dataDir)
 	if err != nil {
 		return nil, err
 	}
 	var out []Rubric
 	seen := map[string]string{}
 	for _, e := range entries {
-		raw, err := rubricFS.ReadFile(filepath.ToSlash(filepath.Join("rubrics", e.Name())))
+		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
 			return nil, err
 		}
@@ -160,14 +180,14 @@ func LoadRubrics() ([]Rubric, error) {
 
 // RubricSetHash covers file names and bytes, so a rubric edit re-keys the
 // scoring stage without touching pipeline caches.
-func RubricSetHash() (string, error) {
-	entries, err := rubricFS.ReadDir("rubrics")
+func RubricSetHash(dataDir string) (string, error) {
+	dir, entries, err := rubricEntries(dataDir)
 	if err != nil {
 		return "", err
 	}
 	parts := []string{"rubric-set"}
-	for _, e := range entries { // ReadDir is sorted
-		raw, err := rubricFS.ReadFile("rubrics/" + e.Name())
+	for _, e := range entries { // sorted
+		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
 			return "", err
 		}
@@ -190,7 +210,7 @@ func defaultStatus(r Rubric) string {
 // rubric's default, never overwriting an existing entry (ratchet flips are
 // deliberate manual edits). Everything else in the file is preserved.
 func SeedStatuses(dataDir string) (int, error) {
-	rubrics, err := LoadRubrics()
+	rubrics, err := LoadRubrics(dataDir)
 	if err != nil {
 		return 0, err
 	}

@@ -171,10 +171,10 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 		return rec, fmt.Errorf("benchmark has no buckets — nothing to run (fail-closed)")
 	}
 
-	if rec.RubricSetHash, err = RubricSetHash(); err != nil {
+	if rec.RubricSetHash, err = RubricSetHash(opts.DataDir); err != nil {
 		return rec, err
 	}
-	if _, err := LoadRubrics(); err != nil { // fail fast on invalid rubrics
+	if _, err := LoadRubrics(opts.DataDir); err != nil { // fail fast on invalid rubrics
 		return rec, err
 	}
 

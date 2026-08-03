@@ -29,7 +29,7 @@ func TestDevAnchorQAPass(t *testing.T) {
 	const poolVersion = "v1"
 	poolDir := filepath.Join(dataDir, "baseline-pool", poolVersion)
 
-	rubrics, err := LoadRubrics()
+	rubrics, err := LoadRubrics(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestDevAnchorQAPass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rsh, err := RubricSetHash()
+	rsh, err := RubricSetHash(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -19,7 +19,7 @@ func TestPartARubricsAnchorsResolveInFrozenData(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dataDir, "manifest.json")); err != nil {
 		t.Skip("insights-eval-data not present")
 	}
-	rubrics, err := LoadRubrics()
+	rubrics, err := LoadRubrics(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestAnchorThemeResolvesPreStripAnchors(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dataDir, "manifest.json")); err != nil {
 		t.Skip("insights-eval-data not present")
 	}
-	rubrics, err := LoadRubrics()
+	rubrics, err := LoadRubrics(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}

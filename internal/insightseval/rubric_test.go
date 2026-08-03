@@ -10,37 +10,48 @@ import (
 	"tmux-ctrl/internal/synthesis"
 )
 
-func TestLoadRubricsEmbeddedValid(t *testing.T) {
-	rubrics, err := LoadRubrics()
+// testdataDir is the loader's dataDir for the synthetic testdata/rubrics
+// fixture (T-01.yaml only) — no real session ids, no embedded copies.
+const testdataDir = "testdata"
+
+// t01Sha256 locks parseRubric's hash algorithm to sha256hex over the raw
+// file bytes: precomputed via `shasum -a 256 testdata/rubrics/T-01.yaml`.
+// Every human adjudication in the data repo is keyed by this hash, so a
+// silent algorithm change here would silently orphan every adjudication.
+const t01Sha256 = "80a4e919a0cc707f8ab814e165350867ec4100024a8200b0161598e857c7c4f6"
+
+func TestLoadRubricsFromTestdata(t *testing.T) {
+	rubrics, err := LoadRubrics(testdataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rubrics) < 9 { // M1-M6 + N-01..N-03 land in this task; Part A later
-		t.Fatalf("rubrics = %d", len(rubrics))
+	if len(rubrics) != 1 {
+		t.Fatalf("rubrics = %d, want 1 (testdata/rubrics/T-01.yaml only)", len(rubrics))
 	}
-	byID := map[string]Rubric{}
-	for _, r := range rubrics {
-		byID[r.ID] = r
+	r := rubrics[0]
+	if r.ID != "T-01" || r.Part != "regression" || r.Repos[0] != "alpha" {
+		t.Fatalf("T-01: %+v", r)
 	}
-	m3 := byID["M3"]
-	if m3.Part != "gap" || m3.Tier != "HIGH" || len(m3.AnchorSessionIDs) != 0 {
-		t.Fatalf("M3: %+v", m3)
+	if r.Hash != t01Sha256 {
+		t.Fatalf("T-01 hash = %q, want %q (sha256 over raw file bytes — adjudication keys depend on this)", r.Hash, t01Sha256)
 	}
-	if m3.PassAt != "full" {
-		t.Fatalf("M3 pass_at default: %q", m3.PassAt)
+	h, err := RubricSetHash(testdataDir)
+	if err != nil || len(h) != 64 {
+		t.Fatalf("hash: %q %v", h, err)
 	}
-	if byID["N-01"].Part != "negative" {
-		t.Fatalf("N-01: %+v", byID["N-01"])
+}
+
+// TestLoadRubricsMissingDirFailsClosed: a dataDir with no rubrics/ subdir
+// (wrong --data, or an unchecked-out data repo) must error naming the
+// expected path, not silently return zero rubrics.
+func TestLoadRubricsMissingDirFailsClosed(t *testing.T) {
+	empty := t.TempDir()
+	want := filepath.Join(empty, "rubrics")
+	if _, err := LoadRubrics(empty); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("LoadRubrics(%s): err = %v, want error naming %s", empty, err, want)
 	}
-	// sorted by ID
-	for i := 1; i < len(rubrics); i++ {
-		if rubrics[i-1].ID >= rubrics[i].ID {
-			t.Fatalf("not sorted: %s >= %s", rubrics[i-1].ID, rubrics[i].ID)
-		}
-	}
-	h1, err := RubricSetHash()
-	if err != nil || len(h1) != 64 {
-		t.Fatalf("hash: %q %v", h1, err)
+	if _, err := RubricSetHash(empty); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("RubricSetHash(%s): err = %v, want error naming %s", empty, err, want)
 	}
 }
 
@@ -54,6 +65,7 @@ func TestSeedStatusesFillsOnlyMissing(t *testing.T) {
 	if err := writeJSON(filepath.Join(data, "benchmark.json"), b); err != nil {
 		t.Fatal(err)
 	}
+	writeGapHeavyRubricSet(t, data)
 	added, err := SeedStatuses(data)
 	if err != nil {
 		t.Fatal(err)

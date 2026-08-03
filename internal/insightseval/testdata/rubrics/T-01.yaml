@@ -1,0 +1,20 @@
+id: T-01
+part: regression
+tier: HIGH
+surface: theme
+repos: [alpha]
+statement: >-
+  Synthetic loader-test rubric: fabricated statement for exercising the
+  filesystem rubric loader, not a real eval target.
+required_nuances:
+  - synthetic nuance for loader coverage
+anchor_theme: alpha/0
+anchor_session_ids:
+  - 00000000-0000-4000-8000-000000000001
+  - 00000000-0000-4000-8000-000000000002
+source_theme_session_ids:
+  - 00000000-0000-4000-8000-000000000001
+  - 00000000-0000-4000-8000-000000000002
+notes: >-
+  Synthetic testdata rubric used only by insightseval loader tests; not part
+  of the real eval set.
