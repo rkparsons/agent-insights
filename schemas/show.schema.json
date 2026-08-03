@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rkparsons/agent-insights/schemas/show.schema.json",
+  "title": "ShowJSON",
+  "description": "insights show --json stdout payload. Mirrors internal/insights.ShowJSON and its nested synthesis-derived types field-for-field.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "syntheses"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "syntheses": { "type": "array", "items": { "$ref": "#/definitions/Synthesis" } }
+  },
+  "definitions": {
+    "Synthesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo", "generated_at", "window", "themes", "recommendations", "meta"],
+      "properties": {
+        "repo": { "type": "string" },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "window": { "$ref": "#/definitions/Window" },
+        "themes": { "type": "array", "items": { "$ref": "#/definitions/Theme" } },
+        "recommendations": { "type": "array", "items": { "$ref": "#/definitions/Recommendation" } },
+        "meta": { "$ref": "#/definitions/Meta" }
+      }
+    },
+    "Window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "session_count", "analyzed_count"],
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "session_count": { "type": "integer" },
+        "analyzed_count": { "type": "integer" }
+      }
+    },
+    "Theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "kind", "summary", "rank", "session_count", "quotes", "session_ids"],
+      "properties": {
+        "title": { "type": "string" },
+        "kind": { "type": "string" },
+        "summary": { "type": "string" },
+        "rank": { "type": "integer" },
+        "incident_count": { "type": "integer" },
+        "session_count": { "type": "integer" },
+        "type_breakdown": { "type": "object", "additionalProperties": { "type": "integer" } },
+        "quotes": { "type": "array", "items": { "type": "string" } },
+        "session_ids": { "type": "array", "items": { "type": "string" } },
+        "signal_refs": { "type": "array", "items": { "type": "string" } },
+        "over_generalized": { "type": "boolean" }
+      }
+    },
+    "Recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "statement", "theme_refs", "session_count", "quotes", "already_adopted", "acted_key"],
+      "properties": {
+        "type": { "type": "string" },
+        "statement": { "type": "string" },
+        "theme_refs": { "type": "array", "items": { "type": "integer" } },
+        "session_count": { "type": "integer" },
+        "quotes": { "type": "array", "items": { "type": "string" } },
+        "already_adopted": { "type": "string" },
+        "audience": { "type": "string" },
+        "acted_key": { "type": "string" }
+      }
+    },
+    "Meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "unthemed_friction"],
+      "properties": {
+        "model": { "type": "string" },
+        "unthemed_friction": { "type": "integer" },
+        "validation_errors": { "type": "array", "items": { "type": "string" } },
+        "pref_count_by_rec": { "type": "object", "additionalProperties": { "type": "integer" } }
+      }
+    }
+  }
+}

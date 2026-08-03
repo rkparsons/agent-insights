@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rkparsons/agent-insights/schemas/status.schema.json",
+  "title": "StatusJSON",
+  "description": "insights status --json stdout payload. Mirrors internal/insights.StatusJSON field-for-field; schema_version is pinned to the contract's current ContractVersion.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "store_root", "log_path", "running", "due_repos", "acted_keys"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "store_root": { "type": "string" },
+    "log_path": { "type": "string" },
+    "running": { "type": "boolean" },
+    "due_repos": { "type": "array", "items": { "type": "string" } },
+    "acted_keys": { "type": "array", "items": { "type": "string" } },
+    "last_run": { "$ref": "#/definitions/LastRun" }
+  },
+  "definitions": {
+    "LastRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["started_at"],
+      "properties": {
+        "started_at": { "type": "string", "format": "date-time" },
+        "finished_at": { "type": "string", "format": "date-time" },
+        "error": { "type": "string" }
+      }
+    }
+  }
+}

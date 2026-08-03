@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "store_root": "/Users/dev/.config/agent-insights",
+  "log_path": "/Users/dev/.config/agent-insights/logs/synthesize-2026-08-01.log",
+  "running": false,
+  "due_repos": ["alpha", "beta"],
+  "acted_keys": ["259b3a44157897ee"],
+  "last_run": {
+    "started_at": "2026-08-01T00:00:00Z",
+    "finished_at": "2026-08-01T00:05:00Z"
+  }
+}
