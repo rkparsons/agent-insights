@@ -4,12 +4,12 @@ import (
 	"sort"
 	"strings"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 // sessionStat pairs a transcript ref with its deterministic stats for curation.
 type sessionStat struct {
-	Ref   claude.TranscriptRef
+	Ref   transcript.TranscriptRef
 	Stats AgentSessionStats
 	Bytes int64
 }
@@ -18,7 +18,7 @@ type sessionStat struct {
 // it filled, and how many repeats it gets (5 for the dangerous zero-friction
 // direction, 3 otherwise).
 type curatedSession struct {
-	Ref     claude.TranscriptRef
+	Ref     transcript.TranscriptRef
 	Stats   AgentSessionStats
 	Cell    string
 	Repeats int
@@ -181,7 +181,7 @@ func CurateIDs(stats []AgentSessionStats, sizes map[string]int64) map[string]str
 	pool := make([]sessionStat, 0, len(stats))
 	for _, s := range stats {
 		pool = append(pool, sessionStat{
-			Ref:   claude.TranscriptRef{SessionID: s.SessionID},
+			Ref:   transcript.TranscriptRef{SessionID: s.SessionID},
 			Stats: s,
 			Bytes: sizes[s.SessionID],
 		})

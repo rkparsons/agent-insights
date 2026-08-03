@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 // RunBackfill scans every top-level transcript, applies incremental + gate skips, and
@@ -22,7 +22,7 @@ func RunBackfill(ctx context.Context, repo RepoResolver, judge Judge, opts Optio
 	}
 	defer lock.Release()
 
-	refs, err := claude.WalkTranscripts()
+	refs, err := transcript.WalkTranscripts()
 	if err != nil {
 		return RunSummary{}, err
 	}
@@ -56,7 +56,7 @@ func RunBackfill(ctx context.Context, repo RepoResolver, judge Judge, opts Optio
 			}
 		}
 
-		events, canary, _, err := claude.LoadTranscript(ref.Path)
+		events, canary, _, err := transcript.LoadTranscript(ref.Path)
 		if err != nil {
 			recordErrored(&sum, &manifest, ref, err)
 			continue
@@ -117,7 +117,7 @@ func metaTranscript(path string) bool {
 // countRemaining reports how many deduped sessions still need analysis: neither done (a
 // current analysis file) nor gated at the current threshold. Errored sessions count as
 // remaining. Read-only over the analysis files + in-memory manifest; no transcript decode.
-func countRemaining(refs []claude.TranscriptRef, manifest map[string]ManifestEntry, opts Options) int {
+func countRemaining(refs []transcript.TranscriptRef, manifest map[string]ManifestEntry, opts Options) int {
 	return planCounts(refs, manifest, opts, time.Now()).ToProcess
 }
 
@@ -127,7 +127,7 @@ func countRemaining(refs []claude.TranscriptRef, manifest map[string]ManifestEnt
 // quiet-for window), or pending (everything else — including previously-errored
 // and never-seen sessions). No transcript decode, so pending is an upper bound: a
 // never-seen session that turns out trivial gates only once actually decoded.
-func planCounts(refs []claude.TranscriptRef, manifest map[string]ManifestEntry, opts Options, now time.Time) BackfillCounts {
+func planCounts(refs []transcript.TranscriptRef, manifest map[string]ManifestEntry, opts Options, now time.Time) BackfillCounts {
 	var c BackfillCounts
 	for _, ref := range refs {
 		if metaTranscript(ref.Path) {
@@ -166,7 +166,7 @@ type BackfillCounts struct {
 // many are left" between usage windows and backs the `--dry-run` / pre-run summary.
 // Lock-free — a concurrent run only shifts the snapshot.
 func BackfillPlan(opts Options) (BackfillCounts, error) {
-	refs, err := claude.WalkTranscripts()
+	refs, err := transcript.WalkTranscripts()
 	if err != nil {
 		return BackfillCounts{}, err
 	}
@@ -177,7 +177,7 @@ func BackfillPlan(opts Options) (BackfillCounts, error) {
 	return planCounts(dedupNewest(refs), manifest, opts, time.Now()), nil
 }
 
-func recordErrored(sum *RunSummary, manifest *map[string]ManifestEntry, ref claude.TranscriptRef, err error) {
+func recordErrored(sum *RunSummary, manifest *map[string]ManifestEntry, ref transcript.TranscriptRef, err error) {
 	sum.Errored++
 	e := ManifestEntry{SessionID: ref.SessionID, TranscriptMtime: ref.Mtime, Outcome: "errored", Error: err.Error(), At: time.Now().UTC()}
 	(*manifest)[ref.SessionID] = e
@@ -188,7 +188,7 @@ func recordErrored(sum *RunSummary, manifest *map[string]ManifestEntry, ref clau
 // file) wins; then a gated entry at the same threshold; then the quiet window. Errored
 // sessions are NOT skipped: they have no analysis file, so they are simply "not done" and
 // get retried next run.
-func backfillSkip(ref claude.TranscriptRef, m map[string]ManifestEntry, opts Options, now time.Time) (string, bool) {
+func backfillSkip(ref transcript.TranscriptRef, m map[string]ManifestEntry, opts Options, now time.Time) (string, bool) {
 	if analyzedFresh(ref.SessionID, ref.Mtime) {
 		return "incremental", true
 	}
@@ -203,14 +203,14 @@ func backfillSkip(ref claude.TranscriptRef, m map[string]ManifestEntry, opts Opt
 
 // dedupNewest keeps the newest ref per session-id (a resume copies a transcript into
 // more than one project dir).
-func dedupNewest(refs []claude.TranscriptRef) []claude.TranscriptRef {
-	best := map[string]claude.TranscriptRef{}
+func dedupNewest(refs []transcript.TranscriptRef) []transcript.TranscriptRef {
+	best := map[string]transcript.TranscriptRef{}
 	for _, r := range refs {
 		if cur, ok := best[r.SessionID]; !ok || r.Mtime.After(cur.Mtime) {
 			best[r.SessionID] = r
 		}
 	}
-	out := make([]claude.TranscriptRef, 0, len(best))
+	out := make([]transcript.TranscriptRef, 0, len(best))
 	for _, r := range best {
 		out = append(out, r)
 	}

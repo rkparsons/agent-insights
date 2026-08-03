@@ -10,7 +10,7 @@ import (
 	"slices"
 
 	"tmux-ctrl/internal/insights"
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 // SessionFacts is the cached output of the decode→stats→reduce stage for one
@@ -89,7 +89,7 @@ func RecomputeFacts(c *Corpus, cache *Cache, factsCodeVersion, poolDir string, i
 			if err != nil {
 				return res, err
 			}
-			events, canary, _, err := claude.LoadTranscript(ref.Path)
+			events, canary, _, err := transcript.LoadTranscript(ref.Path)
 			if err != nil {
 				return res, fmt.Errorf("decode %s: %w", id, err)
 			}

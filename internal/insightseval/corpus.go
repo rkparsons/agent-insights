@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
-// Corpus reads the frozen transcript corpus, synthesizing claude.TranscriptRefs
+// Corpus reads the frozen transcript corpus, synthesizing transcript.TranscriptRefs
 // for the pipeline's consumers. Frozen files are canonical: every materialized
 // plain transcript is verified against its manifest sha before use.
 type Corpus struct {
@@ -60,17 +60,17 @@ func (c *Corpus) Entry(id string) (ManifestEntry, bool) {
 // Ref materializes the frozen transcript into plainDir and returns a
 // TranscriptRef whose Mtime is the manifest's (freeze-time) mtime, so
 // downstream stamping matches the frozen world, not the extraction time.
-func (c *Corpus) Ref(id string) (claude.TranscriptRef, error) {
+func (c *Corpus) Ref(id string) (transcript.TranscriptRef, error) {
 	e, ok := c.entries[id]
 	if !ok {
-		return claude.TranscriptRef{}, fmt.Errorf("corpus: no frozen transcript for %s (recorded gap?)", id)
+		return transcript.TranscriptRef{}, fmt.Errorf("corpus: no frozen transcript for %s (recorded gap?)", id)
 	}
 	plain := filepath.Join(c.plainDir, id+".jsonl")
 	gz := filepath.Join(c.dataDir, "corpus", id+".jsonl.gz")
 	if err := materialize(gz, plain, e.SHA256, e.Mtime); err != nil {
-		return claude.TranscriptRef{}, err
+		return transcript.TranscriptRef{}, err
 	}
-	return claude.TranscriptRef{SessionID: id, Path: plain, Mtime: e.Mtime}, nil
+	return transcript.TranscriptRef{SessionID: id, Path: plain, Mtime: e.Mtime}, nil
 }
 
 // SidechainFiles returns the raw sidechain entries (jsonl + meta.json) mapped
@@ -81,8 +81,8 @@ func (c *Corpus) SidechainFiles(parentID string) []SidechainEntry {
 
 // SidechainRefs materializes the parent's .jsonl sidechains (meta files are
 // metadata, not transcripts) under plainDir/sidechains/<parent>/.
-func (c *Corpus) SidechainRefs(parentID string) ([]claude.TranscriptRef, error) {
-	var out []claude.TranscriptRef
+func (c *Corpus) SidechainRefs(parentID string) ([]transcript.TranscriptRef, error) {
+	var out []transcript.TranscriptRef
 	for _, s := range c.sidechains[parentID] {
 		if filepath.Ext(s.File) != ".jsonl" {
 			continue
@@ -92,7 +92,7 @@ func (c *Corpus) SidechainRefs(parentID string) ([]claude.TranscriptRef, error) 
 		if err := materialize(gz, plain, s.SHA256, s.Mtime); err != nil {
 			return nil, err
 		}
-		out = append(out, claude.TranscriptRef{SessionID: parentID, Path: plain, Mtime: s.Mtime})
+		out = append(out, transcript.TranscriptRef{SessionID: parentID, Path: plain, Mtime: s.Mtime})
 	}
 	return out, nil
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 // scriptedJudge returns a different JudgedFields per call (cycling), so multi-repeat
@@ -20,14 +20,14 @@ func (s *scriptedJudge) Judge(ctx context.Context, in ReducedInput) (JudgedField
 	return o, nil
 }
 
-func userEvent(text string) claude.TranscriptEvent {
-	return claude.TranscriptEvent{Type: "user", Message: &claude.Message{Content: []claude.ContentBlock{{Type: "text", Text: text}}}}
+func userEvent(text string) transcript.TranscriptEvent {
+	return transcript.TranscriptEvent{Type: "user", Message: &transcript.Message{Content: []transcript.ContentBlock{{Type: "text", Text: text}}}}
 }
 
 func TestRunRepeatCapturesRawAndValidated(t *testing.T) {
 	// Transcript where the user literally said a long verbatim phrase.
-	events := []claude.TranscriptEvent{userEvent("please follow the existing conventions and do not add comments")}
-	ext := Extract(events, claude.Canary{}, "sid", noRepo)
+	events := []transcript.TranscriptEvent{userEvent("please follow the existing conventions and do not add comments")}
+	ext := Extract(events, transcript.Canary{}, "sid", noRepo)
 
 	raw := JudgedFields{
 		UnderlyingGoal: "g", SessionType: "single_task", Outcome: "fully_achieved", BriefSummary: "s",
@@ -77,7 +77,7 @@ func TestRunRepeatCapturesRawAndValidated(t *testing.T) {
 }
 
 func TestFirstGenuineUserTurnSkipsNoise(t *testing.T) {
-	events := []claude.TranscriptEvent{
+	events := []transcript.TranscriptEvent{
 		userEvent("[Request interrupted by user]"),
 		userEvent("<task-notification>done</task-notification>"),
 		userEvent("Base directory for this skill: /x"),
@@ -94,7 +94,7 @@ func TestFirstGenuineUserTurnTruncates(t *testing.T) {
 	for i := 0; i < 400; i++ {
 		long += "x"
 	}
-	got := firstGenuineUserTurn([]claude.TranscriptEvent{userEvent(long)})
+	got := firstGenuineUserTurn([]transcript.TranscriptEvent{userEvent(long)})
 	if r := []rune(got); len(r) != openingMaxRunes+1 || r[openingMaxRunes] != '…' {
 		t.Errorf("expected %d runes + ellipsis, got %d", openingMaxRunes, len([]rune(got)))
 	}

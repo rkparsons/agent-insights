@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 	"tmux-ctrl/internal/userconfig"
 )
 
@@ -30,8 +30,8 @@ func TestResolveRepo(t *testing.T) {
 }
 
 func TestAnalyzeMergesValidatesDropsAndFlags(t *testing.T) {
-	transcript := `{"type":"user","sessionId":"sess1","cwd":"/repo","message":{"role":"user","content":[{"type":"text","text":"the approach was wrong; please follow the existing conventions and keep the diff small"}]}}`
-	ev, c := claude.DecodeTranscript(strings.NewReader(transcript))
+	raw := `{"type":"user","sessionId":"sess1","cwd":"/repo","message":{"role":"user","content":[{"type":"text","text":"the approach was wrong; please follow the existing conventions and keep the diff small"}]}}`
+	ev, c := transcript.DecodeTranscript(strings.NewReader(raw))
 
 	judge := fakeJudge{fields: JudgedFields{
 		UnderlyingGoal:    "fix it",
@@ -64,7 +64,7 @@ func TestAnalyzeMergesValidatesDropsAndFlags(t *testing.T) {
 }
 
 func TestAnalyzePropagatesJudgeError(t *testing.T) {
-	ev, c := claude.DecodeTranscript(strings.NewReader(`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi there friend"}]}}`))
+	ev, c := transcript.DecodeTranscript(strings.NewReader(`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi there friend"}]}}`))
 	_, _, err := Analyze(context.Background(), ev, c, "s", noRepo, fakeJudge{err: context.DeadlineExceeded})
 	if err == nil {
 		t.Error("expected judge error to propagate")

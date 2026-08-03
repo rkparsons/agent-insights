@@ -274,7 +274,7 @@ func TestFreezeCorpusRerunPreservesEntryAfterLiveTranscriptPruned(t *testing.T) 
 
 // TestFreezeCorpusDedupesSameSessionAcrossProjectDirs covers finding B: a
 // resume can copy an entire project dir into a second project dir, surfacing
-// the same session-id twice from claude.WalkTranscripts. FreezeCorpus must
+// the same session-id twice from transcript.WalkTranscripts. FreezeCorpus must
 // collapse to one entry (newest content), not duplicate or hard-fail.
 func TestFreezeCorpusDedupesSameSessionAcrossProjectDirs(t *testing.T) {
 	projects := t.TempDir()

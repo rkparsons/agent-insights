@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 func runReducedBudget(t *testing.T, in string, repo RepoResolver, budget int) SessionExtraction {
 	t.Helper()
-	ev, c := claude.DecodeTranscript(strings.NewReader(in))
+	ev, c := transcript.DecodeTranscript(strings.NewReader(in))
 	return extractWithBudget(ev, c, "s", repo, budget)
 }
 

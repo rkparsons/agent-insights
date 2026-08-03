@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 func TestRunBackfillGatesAndRecords(t *testing.T) {
@@ -131,7 +131,7 @@ func TestBackfillSkipStaleGateOnThresholdChange(t *testing.T) {
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
 	mt := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	now := mt.Add(time.Minute)
-	ref := claude.TranscriptRef{SessionID: "s", Mtime: mt}
+	ref := transcript.TranscriptRef{SessionID: "s", Mtime: mt}
 	m := map[string]ManifestEntry{"s": {SessionID: "s", TranscriptMtime: mt, Outcome: "gated", Threshold: 5}}
 	if _, skip := backfillSkip(ref, m, Options{MinAssistantTurns: 5}, now); !skip {
 		t.Error("same threshold should skip")
@@ -144,7 +144,7 @@ func TestBackfillSkipStaleGateOnThresholdChange(t *testing.T) {
 func TestBackfillSkipQuiet(t *testing.T) {
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
-	ref := claude.TranscriptRef{SessionID: "s1", Path: "/p/s1.jsonl", Mtime: now.Add(-1 * time.Hour)}
+	ref := transcript.TranscriptRef{SessionID: "s1", Path: "/p/s1.jsonl", Mtime: now.Add(-1 * time.Hour)}
 	cases := []struct {
 		name     string
 		quietFor time.Duration
@@ -179,7 +179,7 @@ func TestBackfillSkipIncrementalBeatsQuiet(t *testing.T) {
 	if err := WriteAnalysis(AgentSessionAnalysis{Stats: AgentSessionStats{SessionID: "s1"}, TranscriptMtime: mt}); err != nil {
 		t.Fatal(err)
 	}
-	ref := claude.TranscriptRef{SessionID: "s1", Path: "/p/s1.jsonl", Mtime: mt}
+	ref := transcript.TranscriptRef{SessionID: "s1", Path: "/p/s1.jsonl", Mtime: mt}
 	reason, skip := backfillSkip(ref, map[string]ManifestEntry{}, Options{QuietFor: 24 * time.Hour}, now)
 	if reason != "incremental" || !skip {
 		t.Fatalf("got (%q,%v) want (\"incremental\",true)", reason, skip)
@@ -189,7 +189,7 @@ func TestBackfillSkipIncrementalBeatsQuiet(t *testing.T) {
 func TestPlanCountsQuiet(t *testing.T) {
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
-	refs := []claude.TranscriptRef{
+	refs := []transcript.TranscriptRef{
 		{SessionID: "quiet1", Path: "/h/.claude/projects/-Users-r-Developer-tmux-ctrl/quiet1.jsonl", Mtime: now.Add(-1 * time.Hour)},
 	}
 	c := planCounts(refs, map[string]ManifestEntry{}, Options{QuietFor: 24 * time.Hour, MinAssistantTurns: 5}, now)
@@ -226,7 +226,7 @@ func TestMetaTranscriptExclusion(t *testing.T) {
 
 func TestPlanCountsMetaEvenUnderForce(t *testing.T) {
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
-	refs := []claude.TranscriptRef{
+	refs := []transcript.TranscriptRef{
 		{SessionID: "meta1", Path: "/h/.claude/projects/-Users-r-Developer-insights-eval-data/meta1.jsonl"},
 		{SessionID: "real1", Path: "/h/.claude/projects/-Users-r-Developer-tmux-ctrl/real1.jsonl"},
 	}

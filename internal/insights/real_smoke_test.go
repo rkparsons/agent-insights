@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 // TestRealSmoke runs the production pipeline over real transcripts when
@@ -30,7 +30,7 @@ func TestRealSmoke(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			ev, c := claude.DecodeTranscript(strings.NewReader(string(data)))
+			ev, c := transcript.DecodeTranscript(strings.NewReader(string(data)))
 			if len(ev) == 0 {
 				t.Fatal("decoded 0 events")
 			}

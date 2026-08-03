@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 // Options configures an analyze run.
@@ -56,7 +56,7 @@ func RunSingle(ctx context.Context, sessionOrPath string, repo RepoResolver, jud
 		sum.SkippedIncremental = 1
 		return sum, nil
 	}
-	events, canary, _, err := claude.LoadTranscript(ref.Path)
+	events, canary, _, err := transcript.LoadTranscript(ref.Path)
 	if err != nil {
 		return sum, err
 	}
@@ -74,15 +74,15 @@ func RunSingle(ctx context.Context, sessionOrPath string, repo RepoResolver, jud
 
 // resolveRef accepts a filesystem path (used as-is) or a session-id (resolved via the
 // projects tree).
-func resolveRef(sessionOrPath string) (claude.TranscriptRef, error) {
+func resolveRef(sessionOrPath string) (transcript.TranscriptRef, error) {
 	if fi, err := os.Stat(sessionOrPath); err == nil && !fi.IsDir() {
-		return claude.TranscriptRef{
+		return transcript.TranscriptRef{
 			SessionID: sessionIDFromPath(sessionOrPath),
 			Path:      sessionOrPath,
 			Mtime:     fi.ModTime(),
 		}, nil
 	}
-	return claude.FindTranscript(sessionOrPath)
+	return transcript.FindTranscript(sessionOrPath)
 }
 
 func sessionIDFromPath(p string) string {
@@ -91,7 +91,7 @@ func sessionIDFromPath(p string) string {
 
 // analyzeSession runs the producer on already-decoded events, stamps the decode-time
 // mtime, and atomically stores the artifact. The caller has already gated.
-func analyzeSession(ctx context.Context, ref claude.TranscriptRef, events []claude.TranscriptEvent, canary claude.Canary, repo RepoResolver, judge Judge) (ValidationReport, error) {
+func analyzeSession(ctx context.Context, ref transcript.TranscriptRef, events []transcript.TranscriptEvent, canary transcript.Canary, repo RepoResolver, judge Judge) (ValidationReport, error) {
 	a, rep, err := Analyze(ctx, events, canary, ref.SessionID, repo, judge)
 	if err != nil {
 		return ValidationReport{}, err

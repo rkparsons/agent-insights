@@ -3,7 +3,7 @@ package insights
 import (
 	"strings"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 // VerbatimIndex backs the anti-fabrication quote check. It holds two corpora:
@@ -57,7 +57,7 @@ func (b *verbatimBuilder) addAll(s string) {
 	b.all.WriteByte('\n')
 }
 
-func (b *verbatimBuilder) add(ev claude.TranscriptEvent) {
+func (b *verbatimBuilder) add(ev transcript.TranscriptEvent) {
 	if ev.Message == nil {
 		return
 	}

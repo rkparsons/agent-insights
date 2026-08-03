@@ -3,12 +3,12 @@ package insights
 import (
 	"testing"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 func stat(id string, turns, toolErrors, interrupts, rejections, edits, writes int, repo, cwd string, bytes int64) sessionStat {
 	return sessionStat{
-		Ref:   claude.TranscriptRef{SessionID: id, Path: "/p/" + id + ".jsonl"},
+		Ref:   transcript.TranscriptRef{SessionID: id, Path: "/p/" + id + ".jsonl"},
 		Bytes: bytes,
 		Stats: AgentSessionStats{
 			SessionID: id, Repo: repo, Cwd: cwd,

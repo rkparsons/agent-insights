@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 	"tmux-ctrl/internal/userconfig"
 )
 
@@ -29,13 +29,13 @@ func TestLightEvalReal(t *testing.T) {
 	repo := resolveRepo(&cfg)
 
 	// 1. Curate deterministically from the live corpus (decode-only, no LLM).
-	refs, err := claude.WalkTranscripts()
+	refs, err := transcript.WalkTranscripts()
 	if err != nil {
 		t.Fatalf("walk transcripts: %v", err)
 	}
 	var pool []sessionStat
 	for _, ref := range refs {
-		ev, c, _, err := claude.LoadTranscript(ref.Path)
+		ev, c, _, err := transcript.LoadTranscript(ref.Path)
 		if err != nil || len(ev) == 0 {
 			continue
 		}
@@ -58,7 +58,7 @@ func TestLightEvalReal(t *testing.T) {
 	var runs []sessionRun
 	skipped := 0
 	for _, cs := range curated {
-		ev, c, _, err := claude.LoadTranscript(cs.Ref.Path)
+		ev, c, _, err := transcript.LoadTranscript(cs.Ref.Path)
 		if err != nil || len(ev) == 0 {
 			t.Logf("skip %s: load failed (%v)", cs.Ref.SessionID, err)
 			skipped++

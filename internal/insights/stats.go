@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 func sortedKeys(m map[string]bool) []string {
@@ -82,7 +82,7 @@ func newStatsBuilder(sessionID string, repo RepoResolver) *statsBuilder {
 	}
 }
 
-func (b *statsBuilder) add(ev claude.TranscriptEvent) {
+func (b *statsBuilder) add(ev transcript.TranscriptEvent) {
 	if ev.Cwd != "" {
 		b.cwd = ev.Cwd
 	}
@@ -146,7 +146,7 @@ func (b *statsBuilder) add(ev claude.TranscriptEvent) {
 // tool_results split into interrupt / rejection / genuine error; interrupt text
 // blocks (is_error-absent) counted too; real user prose counted once, excluding
 // synthetic/injected content, task-notifications, rejections, and interrupts.
-func (b *statsBuilder) addUserEvent(m *claude.Message) {
+func (b *statsBuilder) addUserEvent(m *transcript.Message) {
 	var textParts []string
 	for _, blk := range m.Content {
 		switch blk.Type {
@@ -227,7 +227,7 @@ func (b *statsBuilder) classifyToolError(body string) {
 	}
 }
 
-func (b *statsBuilder) countTool(blk claude.ContentBlock) {
+func (b *statsBuilder) countTool(blk transcript.ContentBlock) {
 	if blk.ToolName == "" {
 		return
 	}
@@ -248,7 +248,7 @@ func (b *statsBuilder) countTool(blk claude.ContentBlock) {
 // addAssistantMessage accumulates per-message stats once per distinct message.id.
 // One assistant message spans multiple JSONL lines (one per content block) with
 // identical usage, so de-duping by id is required to avoid ~2.6-3.5x inflation.
-func (b *statsBuilder) addAssistantMessage(m *claude.Message) {
+func (b *statsBuilder) addAssistantMessage(m *transcript.Message) {
 	if m.ID != "" && b.seenMsg[m.ID] {
 		return
 	}

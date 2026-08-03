@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files")
@@ -25,7 +25,7 @@ func TestGolden(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			ev, c := claude.DecodeTranscript(strings.NewReader(string(data)))
+			ev, c := transcript.DecodeTranscript(strings.NewReader(string(data)))
 			r := Extract(ev, c, name, noRepo)
 
 			statsJSON, err := json.MarshalIndent(r.Stats, "", "  ")

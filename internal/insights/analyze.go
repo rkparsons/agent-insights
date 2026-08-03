@@ -3,7 +3,7 @@ package insights
 import (
 	"context"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 // Analyze produces one complete AgentSessionAnalysis for a session: it extracts the
@@ -13,7 +13,7 @@ import (
 // with no deadline means no timeout — the step-6 caller must set one.
 func Analyze(
 	ctx context.Context,
-	events []claude.TranscriptEvent, canary claude.Canary,
+	events []transcript.TranscriptEvent, canary transcript.Canary,
 	sessionID string, repo RepoResolver, judge Judge,
 ) (AgentSessionAnalysis, ValidationReport, error) {
 	ext := Extract(events, canary, sessionID, repo)

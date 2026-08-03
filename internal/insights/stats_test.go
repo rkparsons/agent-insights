@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 func runExtract(t *testing.T, in string, repo RepoResolver) SessionExtraction {
 	t.Helper()
-	ev, c := claude.DecodeTranscript(strings.NewReader(in))
+	ev, c := transcript.DecodeTranscript(strings.NewReader(in))
 	return Extract(ev, c, "s", repo)
 }
 

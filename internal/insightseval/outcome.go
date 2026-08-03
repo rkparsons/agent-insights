@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"tmux-ctrl/internal/insights"
-	"tmux-ctrl/internal/sources/claude"
 	"tmux-ctrl/internal/synthesis"
+	"tmux-ctrl/internal/transcript"
 )
 
 const consecutiveLLMFailureLimit = 3
@@ -178,7 +178,7 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 		return rec, err
 	}
 
-	factsCV, err := CodeVersion("internal/insights", "internal/sources/claude")
+	factsCV, err := CodeVersion("internal/insights", "internal/transcript")
 	if err != nil {
 		return rec, err
 	}
@@ -420,7 +420,7 @@ func judgeSession(ctx context.Context, cache *Cache, corpus *Corpus, facts Facts
 	if err != nil {
 		return a, false, err
 	}
-	events, canary, _, err := claude.LoadTranscript(ref.Path)
+	events, canary, _, err := transcript.LoadTranscript(ref.Path)
 	if err != nil {
 		return a, false, err
 	}

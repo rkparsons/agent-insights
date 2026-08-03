@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 // quoteCheck records, per raw (pre-validation) evidence quote, whether it is a
@@ -70,7 +70,7 @@ func runRepeat(ctx context.Context, ext SessionExtraction, judge Judge) (RepeatR
 }
 
 // runSession extracts once, runs `repeats` Judge calls, and assembles the sessionRun.
-func runSession(ctx context.Context, events []claude.TranscriptEvent, canary claude.Canary, sessionID string, repo RepoResolver, cell string, repeats int, judge Judge) (sessionRun, error) {
+func runSession(ctx context.Context, events []transcript.TranscriptEvent, canary transcript.Canary, sessionID string, repo RepoResolver, cell string, repeats int, judge Judge) (sessionRun, error) {
 	ext := Extract(events, canary, sessionID, repo)
 	sr := sessionRun{
 		Stats:         ext.Stats,
@@ -96,7 +96,7 @@ const openingMaxRunes = 280
 // truncated — skipping injected/synthetic content, interrupts, rejections, and
 // task-notifications (the same predicates the reducer uses) so a card opening is
 // never an interrupt marker or a subagent dump. Mirrors verbatim.go's user case.
-func firstGenuineUserTurn(events []claude.TranscriptEvent) string {
+func firstGenuineUserTurn(events []transcript.TranscriptEvent) string {
 	for _, ev := range events {
 		if ev.Type != "user" || ev.Message == nil {
 			continue

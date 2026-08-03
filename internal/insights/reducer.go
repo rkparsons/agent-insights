@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 const defaultBudget = 160_000 // ~40K tokens; spine is exempt
@@ -34,7 +34,7 @@ func (b *reducerBuilder) prose(priority int, text string) {
 	b.rows = append(b.rows, reducedRow{priority, b.ordinal, text})
 }
 
-func (b *reducerBuilder) add(ev claude.TranscriptEvent) {
+func (b *reducerBuilder) add(ev transcript.TranscriptEvent) {
 	if ev.Message == nil {
 		return
 	}
@@ -46,7 +46,7 @@ func (b *reducerBuilder) add(ev claude.TranscriptEvent) {
 	}
 }
 
-func (b *reducerBuilder) addUser(m *claude.Message) {
+func (b *reducerBuilder) addUser(m *transcript.Message) {
 	var textParts []string
 	for _, blk := range m.Content {
 		if blk.Type != "tool_result" {
@@ -87,7 +87,7 @@ func (b *reducerBuilder) addUser(m *claude.Message) {
 	}
 }
 
-func (b *reducerBuilder) addAssistant(m *claude.Message) {
+func (b *reducerBuilder) addAssistant(m *transcript.Message) {
 	for _, blk := range m.Content {
 		switch blk.Type {
 		case "text":
@@ -111,7 +111,7 @@ func rejectedRow(body string) string {
 	return "[Rejected]"
 }
 
-func toolRow(blk claude.ContentBlock) string {
+func toolRow(blk transcript.ContentBlock) string {
 	key := toolKey(blk)
 	if key == "" {
 		return "[Tool: " + blk.ToolName + "]"
@@ -119,7 +119,7 @@ func toolRow(blk claude.ContentBlock) string {
 	return "[Tool: " + blk.ToolName + " " + trimRunes(key, 120) + "]"
 }
 
-func toolKey(blk claude.ContentBlock) string {
+func toolKey(blk transcript.ContentBlock) string {
 	if blk.ToolName == "Agent" {
 		if st, ok := blk.ToolInput["subagent_type"].(string); ok && st != "" {
 			return st

@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"tmux-ctrl/internal/insights"
-	"tmux-ctrl/internal/sources/claude"
 	"tmux-ctrl/internal/synthesis"
+	"tmux-ctrl/internal/transcript"
 )
 
 type ManifestEntry struct {
@@ -116,14 +116,14 @@ func FreezeCorpus(dataDir string, byID map[string]insights.AgentSessionAnalysis,
 		stats.AlreadyFrozen++
 	}
 
-	rawRefs, err := claude.WalkTranscripts()
+	rawRefs, err := transcript.WalkTranscripts()
 	if err != nil {
 		return m, stats, err
 	}
 	// A resume can copy an entire project dir (transcripts included) into a
 	// second project dir, so the same session-id can surface twice; collapse
 	// to one ref before freezing, newest Mtime wins — mirroring
-	// claude.FindTranscript's documented newest-wins resolution.
+	// transcript.FindTranscript's documented newest-wins resolution.
 	for _, r := range dedupeTranscriptRefs(rawRefs) {
 		if prev, ok := existingEntries[r.SessionID]; ok {
 			if info, statErr := os.Stat(r.Path); statErr == nil && info.Size() != prev.Bytes {
@@ -144,7 +144,7 @@ func FreezeCorpus(dataDir string, byID map[string]insights.AgentSessionAnalysis,
 		m.Entries = append(m.Entries, e)
 		stats.Frozen++
 	}
-	scs, err := listSidechains(claude.ProjectsDir())
+	scs, err := listSidechains(transcript.ProjectsDir())
 	if err != nil {
 		return m, stats, err
 	}
@@ -186,14 +186,14 @@ func FreezeCorpus(dataDir string, byID map[string]insights.AgentSessionAnalysis,
 
 // dedupeTranscriptRefs collapses refs sharing a session-id to one, newest
 // Mtime wins.
-func dedupeTranscriptRefs(refs []claude.TranscriptRef) []claude.TranscriptRef {
-	bySession := make(map[string]claude.TranscriptRef, len(refs))
+func dedupeTranscriptRefs(refs []transcript.TranscriptRef) []transcript.TranscriptRef {
+	bySession := make(map[string]transcript.TranscriptRef, len(refs))
 	for _, r := range refs {
 		if prev, ok := bySession[r.SessionID]; !ok || r.Mtime.After(prev.Mtime) {
 			bySession[r.SessionID] = r
 		}
 	}
-	out := make([]claude.TranscriptRef, 0, len(bySession))
+	out := make([]transcript.TranscriptRef, 0, len(bySession))
 	for _, r := range bySession {
 		out = append(out, r)
 	}

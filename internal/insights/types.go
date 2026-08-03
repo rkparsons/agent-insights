@@ -1,14 +1,14 @@
 // Package insights interprets a decoded Claude Code transcript into the
 // deterministic half of an AgentSessionAnalysis: a token-budgeted ReducedInput (for the
 // LLM analysis skill) and an AgentSessionStats struct (exact numbers an LLM must never
-// guess). The decoder/format lives in sources/claude; this package never parses
+// guess). The decoder/format lives in internal/transcript; this package never parses
 // raw JSON.
 package insights
 
 import (
 	"time"
 
-	"tmux-ctrl/internal/sources/claude"
+	"tmux-ctrl/internal/transcript"
 )
 
 // TokenUsage aggregates assistant usage. Input/Output/CacheCreation are summed
@@ -65,7 +65,7 @@ type AgentSessionStats struct {
 	OtherErrorSignatures map[string]int    `json:"other_error_signatures,omitempty"`
 	DirectiveClauses     []DirectiveClause `json:"directive_clauses,omitempty"`
 
-	Canary claude.Canary `json:"canary"`
+	Canary transcript.Canary `json:"canary"`
 }
 
 // ReducedInput is the stdin payload for the analysis skill.
