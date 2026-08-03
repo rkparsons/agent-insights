@@ -241,7 +241,7 @@ func TestGateRealRepo(t *testing.T) {
 	groups := GroupByRepo(analyses, DefaultMinSessions, insights.Config{})
 	group := groups[exp.Bucket]
 	if len(group) == 0 {
-		t.Skipf("no %s analyses present", exp.Bucket)
+		t.Fatalf("no %s analyses present: SYNTHESIS_REAL opted into spend, so a stale real_gate.bucket must fail, not skip", exp.Bucket)
 	}
 	workDir := t.TempDir()
 	if err := skills.Materialize(workDir); err != nil {

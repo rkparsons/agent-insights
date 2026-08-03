@@ -80,4 +80,10 @@ func TestRealGateExpectationResolvesHere(t *testing.T) {
 	if err != nil || !fi.IsDir() {
 		t.Fatalf("real_gate.repo_path is not a directory: %v", err)
 	}
+	// The gate groups with a zero insights.Config, so RepoKey reduces to
+	// basename(repo) with no alias fold: bucket and repo_path basename cannot
+	// disagree without the gate silently grouping into an empty bucket.
+	if base := filepath.Base(exp.RepoPath); base != exp.Bucket {
+		t.Fatalf("real_gate.bucket %q != basename(repo_path) %q; the gate would find no analyses", exp.Bucket, base)
+	}
 }

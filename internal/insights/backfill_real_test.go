@@ -11,7 +11,7 @@ import (
 // TestRunBackfillReal exercises the full backfill (real claude -p, subscription auth) over
 // a SMALL set of real transcripts when INSIGHTS_REAL_BACKFILL (a glob) is set. It copies
 // the matched files into an isolated projects dir so the scan is bounded to them and never
-// touches the whole corpus (that run is Richard's to trigger). It confirms the window-
+// touches the whole corpus (that run is the maintainer's to trigger). It confirms the window-
 // resilient contract end to end: run 1 completes and writes analyses; an identical run 2
 // is a no-op with 0 remaining. Manual gate — real subscription calls.
 //
