@@ -45,7 +45,7 @@ Iterative refinement of the terminal UI's appearance including section header gr
 Backend Auth & API Refactoring 
 ~9 sessions 
 
-Work on TypeScript agents-api routers and shared backend auth middleware, including enforcing required token auth, removing anonymous handling, fixing 401 errors, and deduplicating boilerplate. Claude traced auth consumers across the codebase, refactored shared utilities, and caught subtle bugs like async-rejection hangs. Sessions typically ended with verified fixes, passing tests, and committed changes. 
+Work on TypeScript backend-api routers and shared backend auth middleware, including enforcing required token auth, removing anonymous handling, fixing 401 errors, and deduplicating boilerplate. Claude traced auth consumers across the codebase, refactored shared utilities, and caught subtle bugs like async-rejection hangs. Sessions typically ended with verified fixes, passing tests, and committed changes. 
 
 PR Review, Test Cleanup & Version Control 
 ~10 sessions 
@@ -259,7 +259,7 @@ File Not Found
 
 ## Impressive Things You Did
 
-Over 174 sessions you've leaned on Claude for deep debugging, TUI/rendering work in Go, and rigorous PR hygiene across a tmux-control and agents-api codebase. 
+Over 174 sessions you've leaned on Claude for deep debugging, TUI/rendering work in Go, and rigorous PR hygiene across a tmux-control and backend-api codebase. 
 
 TDD-driven root cause debugging 
 You consistently push Claude past surface symptoms to verified root causes, demanding failing red tests before fixes. For tricky rendering bugs you built oracle diagnostic tools and ran midterm-vs-x/vt repros to prove the real cause (OSC title sequences, grapheme-width mismatches) rather than accepting the first hypothesis. This discipline turned 22 sessions into solid 'good_debugging' wins. 

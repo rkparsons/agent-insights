@@ -10,7 +10,7 @@ import (
 
 func qaAnalysis(goal string, oneLines ...string) insights.AgentSessionAnalysis {
 	var a insights.AgentSessionAnalysis
-	a.Stats.Cwd = "/Users/x/Developer/secret"
+	a.Stats.Cwd = "/Users/dev/Developer/secret"
 	a.Stats.GitBranch = "secret-branch"
 	a.UnderlyingGoal = goal
 	a.SessionType = "single_task"

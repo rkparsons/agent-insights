@@ -30,12 +30,12 @@ func buildOutcomeFixture(t *testing.T) (string, OutcomeOptions) {
 	data, plain := buildCorpusFixture(t)
 	_ = plain
 	pool := filepath.Join(data, "baseline-pool", "v1")
-	writePoolAnalysis(t, pool, "s1", "/Users/x/Developer/myrepo", 3)
-	writePoolAnalysis(t, pool, "s2", "/Users/x/Developer/myrepo", 4)
+	writePoolAnalysis(t, pool, "s1", "/Users/dev/Developer/myrepo", 3)
+	writePoolAnalysis(t, pool, "s2", "/Users/dev/Developer/myrepo", 4)
 	b := Benchmark{
 		FrozenAt: time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC),
 		Buckets: map[string]BucketPopulations{
-			"myrepo": {RepoPath: "/Users/x/Developer/myrepo",
+			"myrepo": {RepoPath: "/Users/dev/Developer/myrepo",
 				AsConsumed: []string{"s1", "s2"}, Scoring: []string{"s1", "s2"}, Resolved: true},
 		},
 		Statuses: map[string]string{},

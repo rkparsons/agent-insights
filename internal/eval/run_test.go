@@ -36,7 +36,7 @@ func buildFixtureWorld(t *testing.T) string {
 
 	a := insights.AgentSessionAnalysis{
 		Stats: insights.AgentSessionStats{
-			SessionID: "s1", Repo: "/Users/x/Developer/myrepo",
+			SessionID: "s1", Repo: "/Users/dev/Developer/myrepo",
 			Start: time.Date(2026, 6, 25, 9, 0, 0, 0, time.UTC),
 		},
 		TranscriptMtime: mtime,
@@ -131,7 +131,7 @@ func TestRunFreezeGapRecordedNotBlocking(t *testing.T) {
 	// ever possible for it.
 	aPruned := insights.AgentSessionAnalysis{
 		Stats: insights.AgentSessionStats{
-			SessionID: "s-pruned", Repo: "/Users/x/Developer/myrepo",
+			SessionID: "s-pruned", Repo: "/Users/dev/Developer/myrepo",
 			Start: time.Date(2026, 6, 26, 9, 0, 0, 0, time.UTC),
 		},
 		TranscriptMtime: time.Date(2026, 6, 26, 10, 0, 0, 0, time.UTC),
@@ -252,7 +252,7 @@ func TestRunFreezeReusesCanonicalBenchmarkAndPoolOnNewLiveAnalysis(t *testing.T)
 	// truth's AnalyzedCount, so a rebuild would clobber the resolved bucket).
 	newAnalysis := insights.AgentSessionAnalysis{
 		Stats: insights.AgentSessionStats{
-			SessionID: "s2", Repo: "/Users/x/Developer/myrepo",
+			SessionID: "s2", Repo: "/Users/dev/Developer/myrepo",
 			Start: time.Date(2026, 6, 26, 9, 0, 0, 0, time.UTC),
 		},
 		TranscriptMtime: time.Date(2026, 6, 26, 10, 0, 0, 0, time.UTC),
@@ -319,7 +319,7 @@ func TestRunFreezeIgnoresLivePoolDriftOnceV1Canonical(t *testing.T) {
 	// v1 at all — simulates a stray/bogus re-write of the live analysis.
 	mutated := insights.AgentSessionAnalysis{
 		Stats: insights.AgentSessionStats{
-			SessionID: "s1", Repo: "/Users/x/Developer/myrepo",
+			SessionID: "s1", Repo: "/Users/dev/Developer/myrepo",
 			Start: time.Date(2026, 6, 25, 9, 0, 0, 0, time.UTC),
 		},
 		TranscriptMtime: time.Date(2026, 6, 25, 10, 0, 0, 0, time.UTC).Add(3 * time.Hour),
@@ -380,7 +380,7 @@ func TestRunFreezeSkewResolvedByRejudgeThenPoolWritten(t *testing.T) {
 	// (grown) transcript stamps its current mtime.
 	rejudged := insights.AgentSessionAnalysis{
 		Stats: insights.AgentSessionStats{
-			SessionID: "s1", Repo: "/Users/x/Developer/myrepo",
+			SessionID: "s1", Repo: "/Users/dev/Developer/myrepo",
 			Start: time.Date(2026, 6, 25, 9, 0, 0, 0, time.UTC),
 		},
 		TranscriptMtime: frozenMtime,

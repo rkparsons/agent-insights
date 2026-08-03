@@ -35,7 +35,7 @@ func TestFreezeCorpusWritesManifestAndFiles(t *testing.T) {
 	start := time.Date(2026, 6, 25, 10, 0, 0, 0, time.UTC)
 	byID := map[string]insights.AgentSessionAnalysis{
 		"sess-1": {Stats: insights.AgentSessionStats{
-			SessionID: "sess-1", Repo: "/Users/x/Developer/myrepo", Start: start,
+			SessionID: "sess-1", Repo: "/Users/dev/Developer/myrepo", Start: start,
 		}},
 	}
 	frozenAt := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)

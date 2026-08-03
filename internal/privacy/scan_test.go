@@ -48,29 +48,26 @@ func TestScanAllowsKnownSyntheticForms(t *testing.T) {
 	}
 }
 
-// selfPackagePrefix excludes this package's own source from the scan: scan.go
-// necessarily spells out every leak pattern as a literal (label strings like
-// "client-project"/"terminal-app"/"dev"), and scan_test.go's fixtures above
-// embed real examples of each leak class plus the synthetic-allowed forms —
-// both always trip Scan on themselves. This is the scanner's own definition
-// and unit tests, not a committed artifact that could leak anything.
-const selfPackagePrefix = "internal/privacy/"
+// selfScanExempt names the only two files excluded from the repo-wide walk:
+// scan.go necessarily spells out every leak pattern as a literal (label
+// strings like "client-project"/"terminal-app"/"dev"), and scan_test.go's
+// fixtures above embed real examples of each leak class plus the
+// synthetic-allowed forms — both always trip Scan on themselves. Named
+// individually rather than excluding the whole package directory so a future
+// file added here is still scanned.
+var selfScanExempt = map[string]bool{
+	"internal/privacy/scan.go":      true,
+	"internal/privacy/scan_test.go": true,
+}
 
 // TestScanRepoWide is the CI backstop: it walks every git-tracked file and
-// fails if any of them trip a privacy check. It is gated behind PRIVACY_SCAN=1
-// because it currently fails on evals/*.md (client-project, TICKET-0000, terminal-app — see
-// task-12-report.md for the exact file list); Task 13 redacts those docs.
-// TODO(task-13): delete the gate below once evals/*.md is clean, so this runs
-// unconditionally in `go test ./...` / CI.
+// fails if any of them trip a privacy check. Unconditional — it runs in a
+// plain `go test ./...`, so a leak can never be committed without a red test.
 func TestScanRepoWide(t *testing.T) {
-	if os.Getenv("PRIVACY_SCAN") == "" {
-		t.Skip("set PRIVACY_SCAN=1 to run; see the TODO above for why this is gated")
-	}
-
 	root := repoRoot(t)
 	var offenders []string
 	for _, f := range gitLsFiles(t, root) {
-		if strings.HasPrefix(f, selfPackagePrefix) {
+		if selfScanExempt[f] {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(root, f))

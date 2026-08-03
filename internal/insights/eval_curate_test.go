@@ -104,7 +104,7 @@ func TestCuratePredicates(t *testing.T) {
 
 func TestCurateIDsSelectsOutlierAndCells(t *testing.T) {
 	mk := func(id string, turns, errs int) AgentSessionStats {
-		return AgentSessionStats{SessionID: id, Repo: "/Users/x/Developer/r", AssistantTurns: turns, ToolErrors: errs}
+		return AgentSessionStats{SessionID: id, Repo: "/Users/dev/Developer/r", AssistantTurns: turns, ToolErrors: errs}
 	}
 	stats := []AgentSessionStats{
 		mk("a-outlier", 200, 0),

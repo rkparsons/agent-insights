@@ -1,6 +1,6 @@
 # Insights-pipeline eval spec — classification layer
 
-_Consolidates `caught-insights.md` (22 the pipeline produced) + `missed-insights.md` (6 it didn't) into one source set for the eval suite. Classifications and nuance only — implementation (fixtures, scoring, harness) is a later phase. Derived from a manual diff of the custom pipeline (`insights-pipline-report.md`) against fable (`fable-insights-report.md`) and Claude's built-in `/insights` (`default-insights-report.md`). 2026-07-03._
+_Consolidates `caught-insights.md` (22 the pipeline produced) + `missed-insights.md` (6 it didn't) into one source set for the eval suite. Classifications and nuance only — implementation (fixtures, scoring, harness) is a later phase. Derived from a manual diff of the custom pipeline (`insights-pipeline-report.md`) against fable (`fable-insights-report.md`) and Claude's built-in `/insights` (`default-insights-report.md`). 2026-07-03._
 
 ## The two eval arms
 
@@ -72,7 +72,7 @@ Not individual evals — the root causes the gap evals (Part B) exist to test:
 ### Considered and excluded (not eval targets)
 - **terminal-app out of scope** — terminal-app was renamed to tmux-ctrl; the pipeline's tmux-ctrl window already swept the renamed sessions. Not a coverage gap.
 - **Auto-run gofmt/go build hook** — generic tooling advice, no measured friction; format already handled at commit time.
-- **Concrete client-project repo-facts** (prompt-manifest.json regenerate-on-rebase; auto-named worktrees review-only vs `sc-XXXXX`; testing-guidelines as team doc) — low-frequency/repo-specific; memory-caliber not eval-caliber. Team-doc placement folds into M2.
+- **Concrete client-project repo-facts** (generated manifest.json regenerate-on-rebase; auto-named worktrees review-only vs `TICKET-NNNNN`; testing-guidelines as team doc) — low-frequency/repo-specific; memory-caliber not eval-caliber. Team-doc placement folds into M2.
 - **Audit ALL touched test files** — the granular counterpart to C-F; folded into the paired caught/missed nuance below rather than a standalone eval.
 
 ---

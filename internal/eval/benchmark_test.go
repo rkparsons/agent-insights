@@ -23,13 +23,13 @@ func TestBuildBenchmarkPopulations(t *testing.T) {
 	gen := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
 	day := func(d int) time.Time { return time.Date(2026, 6, d, 9, 0, 0, 0, time.UTC) }
 	analyses := []insights.AgentSessionAnalysis{
-		analysisFor("a1", "/Users/x/Developer/myrepo", "", day(24)),
-		analysisFor("a2", "/Users/x/Developer/myrepo", "", day(26)),
+		analysisFor("a1", "/Users/dev/Developer/myrepo", "", day(24)),
+		analysisFor("a2", "/Users/dev/Developer/myrepo", "", day(26)),
 		// meta: cwd mentions insights → excluded from scoring only
-		analysisFor("a3", "/Users/x/Developer/myrepo/.worktrees/insights-generation",
-			"/Users/x/Developer/myrepo/.worktrees/insights-generation", day(28)),
+		analysisFor("a3", "/Users/dev/Developer/myrepo/.worktrees/insights-generation",
+			"/Users/dev/Developer/myrepo/.worktrees/insights-generation", day(28)),
 		// other repo: not in this bucket
-		analysisFor("b1", "/Users/x/Developer/other", "", day(25)),
+		analysisFor("b1", "/Users/dev/Developer/other", "", day(25)),
 	}
 	truths := map[string]synthesis.RepoSynthesis{
 		"myrepo": {GeneratedAt: gen,
@@ -53,7 +53,7 @@ func TestBuildBenchmarkPopulations(t *testing.T) {
 	if bp.WindowFrom != "2026-06-24" || bp.WindowTo != "2026-06-28" {
 		t.Fatalf("window not normalized: %+v", bp)
 	}
-	if bp.RepoPath != "/Users/x/Developer/myrepo" {
+	if bp.RepoPath != "/Users/dev/Developer/myrepo" {
 		t.Fatalf("repo path: %q", bp.RepoPath)
 	}
 }
@@ -63,7 +63,7 @@ func TestBuildBenchmarkPopulations(t *testing.T) {
 func TestBuildBenchmarkRepoPathStripsWorktree(t *testing.T) {
 	gen := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
 	analyses := []insights.AgentSessionAnalysis{
-		analysisFor("a1", "/Users/x/Developer/myrepo/.worktrees/some-feature", "",
+		analysisFor("a1", "/Users/dev/Developer/myrepo/.worktrees/some-feature", "",
 			time.Date(2026, 6, 24, 9, 0, 0, 0, time.UTC)),
 	}
 	truths := map[string]synthesis.RepoSynthesis{
@@ -73,7 +73,7 @@ func TestBuildBenchmarkRepoPathStripsWorktree(t *testing.T) {
 	if len(problems) != 0 {
 		t.Fatalf("problems: %v", problems)
 	}
-	if got := b.Buckets["myrepo"].RepoPath; got != "/Users/x/Developer/myrepo" {
+	if got := b.Buckets["myrepo"].RepoPath; got != "/Users/dev/Developer/myrepo" {
 		t.Fatalf("RepoPath = %q, want worktree segment stripped", got)
 	}
 }
@@ -81,9 +81,9 @@ func TestBuildBenchmarkRepoPathStripsWorktree(t *testing.T) {
 func TestBuildBenchmarkPostGenerationFallback(t *testing.T) {
 	gen := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
 	analyses := []insights.AgentSessionAnalysis{
-		analysisFor("a1", "/Users/x/Developer/myrepo", "", time.Date(2026, 6, 24, 9, 0, 0, 0, time.UTC)),
+		analysisFor("a1", "/Users/dev/Developer/myrepo", "", time.Date(2026, 6, 24, 9, 0, 0, 0, time.UTC)),
 		// started after the report was generated → excluded by the fallback
-		analysisFor("a9", "/Users/x/Developer/myrepo", "", time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC)),
+		analysisFor("a9", "/Users/dev/Developer/myrepo", "", time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC)),
 	}
 	truths := map[string]synthesis.RepoSynthesis{
 		"myrepo": {GeneratedAt: gen, Window: synthesis.Window{From: "2026-06-24", To: "2026-06-24", AnalyzedCount: 1}},
@@ -100,7 +100,7 @@ func TestBuildBenchmarkPostGenerationFallback(t *testing.T) {
 func TestBuildBenchmarkUnresolvedMismatch(t *testing.T) {
 	gen := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
 	analyses := []insights.AgentSessionAnalysis{
-		analysisFor("a1", "/Users/x/Developer/myrepo", "", time.Date(2026, 6, 24, 9, 0, 0, 0, time.UTC)),
+		analysisFor("a1", "/Users/dev/Developer/myrepo", "", time.Date(2026, 6, 24, 9, 0, 0, 0, time.UTC)),
 	}
 	truths := map[string]synthesis.RepoSynthesis{
 		"myrepo": {GeneratedAt: gen, Window: synthesis.Window{From: "2026-06-24", To: "2026-06-24", AnalyzedCount: 5}},

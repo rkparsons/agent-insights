@@ -26,9 +26,9 @@ func writePoolAnalysis(t *testing.T, dir, id, repo string, turns int) {
 func TestRecomputeFactsMergesPoolJudgmentWithFrozenStats(t *testing.T) {
 	data, plain := buildCorpusFixture(t) // s1, s2 frozen
 	pool := t.TempDir()
-	writePoolAnalysis(t, pool, "s1", "/Users/x/Developer/myrepo", 99) // stale turn count
-	writePoolAnalysis(t, pool, "s2", "/Users/x/Developer/myrepo", 99)
-	writePoolAnalysis(t, pool, "gapped", "/Users/x/Developer/myrepo", 7) // no corpus file
+	writePoolAnalysis(t, pool, "s1", "/Users/dev/Developer/myrepo", 99) // stale turn count
+	writePoolAnalysis(t, pool, "s2", "/Users/dev/Developer/myrepo", 99)
+	writePoolAnalysis(t, pool, "gapped", "/Users/dev/Developer/myrepo", 7) // no corpus file
 	c, err := OpenCorpus(data, plain)
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestRecomputeFactsMergesPoolJudgmentWithFrozenStats(t *testing.T) {
 			if a.Stats.AssistantTurns != 0 {
 				t.Fatalf("stats not recomputed for %s: turns=%d", a.Stats.SessionID, a.Stats.AssistantTurns)
 			}
-			if a.Stats.Repo != "/Users/x/Developer/myrepo" {
+			if a.Stats.Repo != "/Users/dev/Developer/myrepo" {
 				t.Fatalf("repo not preserved: %q", a.Stats.Repo)
 			}
 			if !a.TranscriptMtime.Equal(time.Date(2026, 6, 25, 10, 0, 0, 0, time.UTC)) {

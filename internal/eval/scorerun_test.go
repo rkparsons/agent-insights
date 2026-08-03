@@ -20,12 +20,12 @@ func buildScoreFixture(t *testing.T) (string, OutcomeOptions) {
 	withFakeCredentials(t)
 	data, _ := buildCorpusFixture(t)
 	pool := filepath.Join(data, "baseline-pool", "v1")
-	writePoolAnalysis(t, pool, "s1", "/Users/x/Developer/tmux-ctrl", 3)
-	writePoolAnalysis(t, pool, "s2", "/Users/x/Developer/tmux-ctrl", 4)
+	writePoolAnalysis(t, pool, "s1", "/Users/dev/Developer/tmux-ctrl", 3)
+	writePoolAnalysis(t, pool, "s2", "/Users/dev/Developer/tmux-ctrl", 4)
 	b := Benchmark{
 		FrozenAt: time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC),
 		Buckets: map[string]BucketPopulations{
-			"tmux-ctrl": {RepoPath: "/Users/x/Developer/tmux-ctrl",
+			"tmux-ctrl": {RepoPath: "/Users/dev/Developer/tmux-ctrl",
 				AsConsumed: []string{"s1", "s2"}, Scoring: []string{"s1", "s2"}, Resolved: true},
 		},
 		Statuses: map[string]string{},

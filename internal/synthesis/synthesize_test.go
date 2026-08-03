@@ -175,7 +175,7 @@ func TestSynthesizeQuantitativeClaimInRecommendation(t *testing.T) {
 
 func TestFinalizeIsDeterministicAndUsesProvidedTime(t *testing.T) {
 	group := []insights.AgentSessionAnalysis{
-		{Stats: insights.AgentSessionStats{SessionID: "s1", Repo: "/Users/x/Developer/myrepo",
+		{Stats: insights.AgentSessionStats{SessionID: "s1", Repo: "/Users/dev/Developer/myrepo",
 			Start: time.Date(2026, 6, 20, 9, 0, 0, 0, time.UTC)},
 			JudgedFields: insights.JudgedFields{
 				Outcome: "fully_achieved", SessionType: "single_task",

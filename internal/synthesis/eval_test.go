@@ -155,7 +155,10 @@ func TestRawFabricationRatePassesThroughReport(t *testing.T) {
 }
 
 func TestPrivacyLeaksSurfacedFromRenderedRun(t *testing.T) {
-	s := RepoSynthesis{Themes: []Theme{{Kind: "friction", Title: "leak 4b1f6c58-3c9e-4a1d-9c2e-2b6f8e0a1234", Rank: 1}}}
+	// Shaped like a session id but in the 0abc1234- synthetic form that
+	// internal/privacy's repo-wide scan allows, so this fixture isn't itself a
+	// committed leak while still tripping leakPatterns' generic UUID regex.
+	s := RepoSynthesis{Themes: []Theme{{Kind: "friction", Title: "leak 0abc1234-de56-4f78-9abc-def012345678", Rank: 1}}}
 	res := EvaluateRun(s, s, ValidationReport{}, EvidenceBundle{})
 	if len(res.PrivacyLeaks) == 0 {
 		t.Error("expected PrivacyLeaks to surface a UUID embedded in a rendered theme title")
