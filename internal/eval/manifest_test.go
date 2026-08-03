@@ -17,7 +17,7 @@ import (
 func TestFreezeCorpusWritesManifestAndFiles(t *testing.T) {
 	projects := t.TempDir()
 	data := t.TempDir()
-	proj := filepath.Join(projects, "-Users-x-Developer-myrepo")
+	proj := filepath.Join(projects, "-Users-dev-Developer-myrepo")
 	if err := os.MkdirAll(filepath.Join(proj, "sess-1", "subagents"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestFreezeCorpusWritesManifestAndFiles(t *testing.T) {
 func freezeCorpusFixture(t *testing.T) (projects, data string) {
 	t.Helper()
 	projects, data = t.TempDir(), t.TempDir()
-	proj := filepath.Join(projects, "-Users-x-Developer-myrepo")
+	proj := filepath.Join(projects, "-Users-dev-Developer-myrepo")
 	if err := os.MkdirAll(filepath.Join(proj, "sess-1", "subagents"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestFreezeCorpusRerunPreservesEntriesAndTracksDivergence(t *testing.T) {
 	}
 
 	// live transcript keeps growing after the first freeze
-	proj := filepath.Join(projects, "-Users-x-Developer-myrepo")
+	proj := filepath.Join(projects, "-Users-dev-Developer-myrepo")
 	f, err := os.OpenFile(filepath.Join(proj, "sess-1.jsonl"), os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		t.Fatal(err)
@@ -202,7 +202,7 @@ func TestFreezeCorpusRerunFreezesNewSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	proj := filepath.Join(projects, "-Users-x-Developer-myrepo")
+	proj := filepath.Join(projects, "-Users-dev-Developer-myrepo")
 	if err := os.WriteFile(filepath.Join(proj, "sess-3.jsonl"), []byte(`{"a":3}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestFreezeCorpusRerunPreservesEntryAfterLiveTranscriptPruned(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	proj := filepath.Join(projects, "-Users-x-Developer-myrepo")
+	proj := filepath.Join(projects, "-Users-dev-Developer-myrepo")
 	if err := os.Remove(filepath.Join(proj, "sess-1.jsonl")); err != nil {
 		t.Fatal(err)
 	}
@@ -279,8 +279,8 @@ func TestFreezeCorpusRerunPreservesEntryAfterLiveTranscriptPruned(t *testing.T) 
 func TestFreezeCorpusDedupesSameSessionAcrossProjectDirs(t *testing.T) {
 	projects := t.TempDir()
 	data := t.TempDir()
-	projA := filepath.Join(projects, "-Users-x-Developer-myrepo")
-	projB := filepath.Join(projects, "-Users-x-Developer-myrepo-resume")
+	projA := filepath.Join(projects, "-Users-dev-Developer-myrepo")
+	projB := filepath.Join(projects, "-Users-dev-Developer-myrepo-resume")
 	if err := os.MkdirAll(projA, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -346,7 +346,7 @@ func TestListSidechainsUnreadableSubdirErrors(t *testing.T) {
 		t.Skip("running as root; permission bits are not enforced")
 	}
 	projects := t.TempDir()
-	blocked := filepath.Join(projects, "-Users-x-Developer-myrepo", "sess-1", "subagents")
+	blocked := filepath.Join(projects, "-Users-dev-Developer-myrepo", "sess-1", "subagents")
 	if err := os.MkdirAll(blocked, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -381,7 +381,7 @@ func TestListSidechainsMissingRootReturnsNilError(t *testing.T) {
 func TestFreezeCorpusFreezesAgentMetaSidechains(t *testing.T) {
 	projects := t.TempDir()
 	data := t.TempDir()
-	proj := filepath.Join(projects, "-Users-x-Developer-myrepo")
+	proj := filepath.Join(projects, "-Users-dev-Developer-myrepo")
 	subagents := filepath.Join(proj, "sess-1", "subagents")
 	if err := os.MkdirAll(subagents, 0o755); err != nil {
 		t.Fatal(err)
@@ -425,8 +425,8 @@ func TestFreezeCorpusFreezesAgentMetaSidechains(t *testing.T) {
 func TestFreezeCorpusDedupesSameSidechainAcrossProjectDirs(t *testing.T) {
 	projects := t.TempDir()
 	data := t.TempDir()
-	projA := filepath.Join(projects, "-Users-x-Developer-myrepo")
-	projB := filepath.Join(projects, "-Users-x-Developer-myrepo-resume")
+	projA := filepath.Join(projects, "-Users-dev-Developer-myrepo")
+	projB := filepath.Join(projects, "-Users-dev-Developer-myrepo-resume")
 	if err := os.MkdirAll(filepath.Join(projA, "sess-1", "subagents"), 0o755); err != nil {
 		t.Fatal(err)
 	}

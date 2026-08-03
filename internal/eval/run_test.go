@@ -21,7 +21,7 @@ func buildFixtureWorld(t *testing.T) string {
 	t.Setenv("AGENT_INSIGHTS_DIR", insightsDir)
 	t.Setenv("HOME", t.TempDir())
 
-	proj := filepath.Join(projects, "-Users-x-Developer-myrepo")
+	proj := filepath.Join(projects, "-Users-dev-Developer-myrepo")
 	if err := os.MkdirAll(proj, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestRunFreezeEndToEnd(t *testing.T) {
 func TestRunFreezeSkewSkipsPool(t *testing.T) {
 	data := buildFixtureWorld(t)
 	// grow the transcript after analysis: mtime now differs from the stamp
-	proj := filepath.Join(os.Getenv("AGENT_INSIGHTS_PROJECTS_DIR"), "-Users-x-Developer-myrepo")
+	proj := filepath.Join(os.Getenv("AGENT_INSIGHTS_PROJECTS_DIR"), "-Users-dev-Developer-myrepo")
 	f, err := os.OpenFile(filepath.Join(proj, "s1.jsonl"), os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		t.Fatal(err)
@@ -203,7 +203,7 @@ func TestRunFreezePreservesEntryAfterLiveTranscriptPrunedNotAGap(t *testing.T) {
 		t.Fatalf("first freeze must be clean: %+v", rep1.Issues)
 	}
 
-	proj := filepath.Join(os.Getenv("AGENT_INSIGHTS_PROJECTS_DIR"), "-Users-x-Developer-myrepo")
+	proj := filepath.Join(os.Getenv("AGENT_INSIGHTS_PROJECTS_DIR"), "-Users-dev-Developer-myrepo")
 	if err := os.Remove(filepath.Join(proj, "s1.jsonl")); err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +347,7 @@ func TestRunFreezeIgnoresLivePoolDriftOnceV1Canonical(t *testing.T) {
 // written.
 func TestRunFreezeSkewResolvedByRejudgeThenPoolWritten(t *testing.T) {
 	data := buildFixtureWorld(t)
-	proj := filepath.Join(os.Getenv("AGENT_INSIGHTS_PROJECTS_DIR"), "-Users-x-Developer-myrepo")
+	proj := filepath.Join(os.Getenv("AGENT_INSIGHTS_PROJECTS_DIR"), "-Users-dev-Developer-myrepo")
 	f, err := os.OpenFile(filepath.Join(proj, "s1.jsonl"), os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		t.Fatal(err)

@@ -2,7 +2,8 @@
 
 Repeatable workflow for mining ~30 days of Claude Code session transcripts for friction,
 workflow-improvement opportunities, and Claude-asset (skill/memory/hook/settings) recommendations.
-Built 2026-07-03. Companion reducer script: `usage-analysis-reduce_sessions.py` (same dir).
+Built 2026-07-03. Depended on a one-off reducer script, not carried into this repo — the
+Go pipeline in this repo supersedes it (see `insights-pipeline-strategy.md`).
 
 ## Architecture: 3 layers, by trust level
 
@@ -26,7 +27,7 @@ Built 2026-07-03. Companion reducer script: `usage-analysis-reduce_sessions.py` 
    - denial: tool_result starting `The user doesn't want to proceed`
    - slash command: `<command-name>X</command-name>` in user content
    - `entrypoint` field: `cli` = interactive, `sdk-cli` = programmatic (analyze separately!)
-2. **Reduce**: run `usage-analysis-reduce_sessions.py` (edit DAYS/SELF_SESSION consts).
+2. **Reduce**: run the reducer script (window length and self-session id as constants).
    Outputs `reduced/sessions.jsonl` + `reduced/aggregate.json`.
 3. **Read aggregate in main context** — this alone surfaces the mechanical trends
    (top error snippets, permission failures, skill usage skew) and drives batch design.

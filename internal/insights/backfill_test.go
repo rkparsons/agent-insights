@@ -190,7 +190,7 @@ func TestPlanCountsQuiet(t *testing.T) {
 	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
 	refs := []transcript.TranscriptRef{
-		{SessionID: "quiet1", Path: "/h/.claude/projects/-Users-r-Developer-tmux-ctrl/quiet1.jsonl", Mtime: now.Add(-1 * time.Hour)},
+		{SessionID: "quiet1", Path: "/h/.claude/projects/-Users-dev-Developer-tmux-ctrl/quiet1.jsonl", Mtime: now.Add(-1 * time.Hour)},
 	}
 	c := planCounts(refs, map[string]ManifestEntry{}, Options{QuietFor: 24 * time.Hour, MinAssistantTurns: 5}, now)
 	if c.Quiet != 1 || c.ToProcess != 0 {
@@ -200,12 +200,12 @@ func TestPlanCountsQuiet(t *testing.T) {
 
 func TestMetaTranscriptExclusion(t *testing.T) {
 	meta := []string{
-		"/h/.claude/projects/-Users-r-Developer-tmux-ctrl--worktrees-insights-generation/aa.jsonl",
-		"/h/.claude/projects/-Users-r-Developer-tmux-ctrl--worktrees-insights-generation-src/bb.jsonl",
-		"/h/.claude/projects/-Users-r-Developer-insights-eval-data/cc.jsonl",
-		"/h/.claude/projects/-Users-r-Developer-alpha--worktrees-run-insights-command/dd.jsonl",
-		"/h/.claude/projects/-Users-r-Developer-alpha--worktrees-facet-extractor/ee.jsonl",
-		"/h/.claude/projects/-private-tmp-claude-501--Users-r--worktrees-insights-generation-x-scratchpad/ff.jsonl",
+		"/h/.claude/projects/-Users-dev-Developer-tmux-ctrl--worktrees-insights-generation/aa.jsonl",
+		"/h/.claude/projects/-Users-dev-Developer-tmux-ctrl--worktrees-insights-generation-src/bb.jsonl",
+		"/h/.claude/projects/-Users-dev-Developer-insights-eval-data/cc.jsonl",
+		"/h/.claude/projects/-Users-dev-Developer-alpha--worktrees-run-insights-command/dd.jsonl",
+		"/h/.claude/projects/-Users-dev-Developer-alpha--worktrees-facet-extractor/ee.jsonl",
+		"/h/.claude/projects/-private-tmp-claude-501--Users-dev--worktrees-insights-generation-x-scratchpad/ff.jsonl",
 	}
 	for _, p := range meta {
 		if !metaTranscript(p) {
@@ -213,9 +213,9 @@ func TestMetaTranscriptExclusion(t *testing.T) {
 		}
 	}
 	nonMeta := []string{
-		"/h/.claude/projects/-Users-r-Developer-tmux-ctrl/gg.jsonl",
-		"/h/.claude/projects/-Users-r-Developer-alpha--worktrees-fix-login/hh.jsonl",
-		"/h/.claude/projects/-Users-r-Developer-dotfiles/ii.jsonl",
+		"/h/.claude/projects/-Users-dev-Developer-tmux-ctrl/gg.jsonl",
+		"/h/.claude/projects/-Users-dev-Developer-alpha--worktrees-fix-login/hh.jsonl",
+		"/h/.claude/projects/-Users-dev-Developer-dotfiles/ii.jsonl",
 	}
 	for _, p := range nonMeta {
 		if metaTranscript(p) {
@@ -227,8 +227,8 @@ func TestMetaTranscriptExclusion(t *testing.T) {
 func TestPlanCountsMetaEvenUnderForce(t *testing.T) {
 	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
 	refs := []transcript.TranscriptRef{
-		{SessionID: "meta1", Path: "/h/.claude/projects/-Users-r-Developer-insights-eval-data/meta1.jsonl"},
-		{SessionID: "real1", Path: "/h/.claude/projects/-Users-r-Developer-tmux-ctrl/real1.jsonl"},
+		{SessionID: "meta1", Path: "/h/.claude/projects/-Users-dev-Developer-insights-eval-data/meta1.jsonl"},
+		{SessionID: "real1", Path: "/h/.claude/projects/-Users-dev-Developer-tmux-ctrl/real1.jsonl"},
 	}
 	c := planCounts(refs, map[string]ManifestEntry{}, Options{Force: true, MinAssistantTurns: 5}, time.Now())
 	if c.Meta != 1 || c.ToProcess != 1 {

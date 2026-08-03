@@ -3,7 +3,7 @@
 Corpus: 652 sessions / 324MB across 8 repos; 331 interactive (client-project 179, terminal-app 113, tmux-ctrl 18, misc 21).
 Method: deterministic reduction → 9 sonnet batch analyses → deterministic verification of every cross-batch claim
 (counts below are exact regex/parser counts over real user prompts, not model estimates).
-Companion playbook: `usage-friction-analysis.md`.
+Companion playbook: `fable-insights-strategy.md`.
 
 ## Recommendations, ranked by impact
 

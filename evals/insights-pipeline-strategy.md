@@ -63,9 +63,11 @@ LAYER 2 — per repo
 Both LLM calls run as nested `claude -p <skill>` with schema-enforced structured
 output, under subscription auth (API-key env vars scrubbed so billing can't
 silently divert), with `--no-session-persistence` so analysis runs don't pollute
-the very transcript corpus they read. Both skills are tmux-ctrl-agnostic (JSON in /
-JSON out) and live outside the repo as personal skills; their schemas are embedded
-in Go with drift-guard tests. Model locked to Opus 4.8 for both layers, chosen by
+the very transcript corpus they read. Both skills are pipeline-repo-agnostic (JSON in /
+JSON out) and ship embedded in the binary, materialized per run into a scratch
+cwd as project-level skills (so no ~/.claude install and the skill content is
+hashable); their schemas are single-sourced from the same embedded files, with
+drift-guard tests. Model locked to Opus 4.8 for both layers, chosen by
 A/B eval (0 fabricated friction on clean sessions, 100% verbatim quotes, best
 run-to-run stability; Haiku is the documented cheap fallback, Sonnet was
 dominated).

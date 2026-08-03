@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Rubric encodes one eval target from docs/insights-eval/insights-eval-spec.md. Rubrics
+// Rubric encodes one eval target from evals/insights-eval-spec.md. Rubrics
 // name real session ids and employer-specific repos, so they live in the
 // private data repo (<dataDir>/rubrics), not embedded in this public tree.
 type Rubric struct {

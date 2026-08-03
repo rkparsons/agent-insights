@@ -1,6 +1,6 @@
 # Insights-pipeline eval spec — classification layer
 
-_Consolidates `caught-insights.md` (22 the pipeline produced) + `missed-insights.md` (6 it didn't) into one source set for the eval suite. Classifications and nuance only — implementation (fixtures, scoring, harness) is a later phase. Derived from a manual diff of the custom pipeline (`insights-pipeline-report.md`) against fable (`fable-insights-report.md`) and Claude's built-in `/insights` (`default-insights-report.md`). 2026-07-03._
+_Consolidates two working notes (22 insights the pipeline produced, 6 it didn't; not carried into this repo) into one source set for the eval suite. Classifications and nuance only — implementation (fixtures, scoring, harness) is a later phase. Derived from a manual diff of the custom pipeline (`insights-pipeline-report.md`) against fable (`fable-insights-report.md`) and Claude's built-in `/insights` (`default-insights-report.md`). 2026-07-03._
 
 ## The two eval arms
 

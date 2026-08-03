@@ -32,6 +32,12 @@ RepoSynthesis snapshot (JSON source of truth; markdown render derived)
 
 Full design write-up: [`evals/insights-pipeline-strategy.md`](evals/insights-pipeline-strategy.md).
 
+**Eval-gated** is the load-bearing word: neither layer ships on vibes. A frozen
+corpus, hash-keyed rubrics, watermarked baselines, env-pinning and cache-keyed
+scoring make a score reproducible, and a two-tier gate decides whether a change is
+allowed to land. That harness is the bulk of this repo — see
+[The eval harness](#the-eval-harness) below.
+
 ## Install
 
 ```bash
@@ -148,5 +154,11 @@ agent-insights status --json | jq -r '.due_repos[]'
 - **Skills are embedded in the binary**, materialized per run into a scratch working
   directory as project-level skills. Nothing is installed into your `~/.claude`, and a
   run's skill content is hashable — which is what makes env-pinning meaningful.
-- Committed artifacts are checked by a repo-wide privacy scan
-  ([`internal/privacy/`](internal/privacy/)) that runs in a plain `go test ./...`.
+- **Privacy backstop:** a repo-wide scan ([`internal/privacy/`](internal/privacy/))
+  walks every git-tracked file on a plain `go test ./...` and fails on home paths,
+  session-id shapes, ticket markers, and Claude Code's dash-encoded project slugs.
+  It covers the **working tree only** — git history is audited separately before
+  publish. Generic shape patterns live in the source; identity tokens would
+  themselves be the leak if committed, so they load at scan time from a gitignored
+  `.privacy-patterns` file (`AGENT_INSIGHTS_PRIVATE_PATTERNS` overrides the path).
+  A clone without that file still runs every generic class.
