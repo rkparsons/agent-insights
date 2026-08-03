@@ -38,7 +38,7 @@ func TestRunBackfillRetriesErroredOnReRun(t *testing.T) {
 
 	// First run: calls 4 and 5 fail (two errored, never 3 in a row -> no park).
 	j1 := &sequenceJudge{fields: substantialJudged(), failOn: map[int]bool{4: true, 5: true}}
-	sum, err := RunBackfill(context.Background(), noRepo, j1, opts)
+	sum, err := RunBackfill(context.Background(), noRepo, fixedJudge(j1), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestRunBackfillRetriesErroredOnReRun(t *testing.T) {
 	// Second run, identical command; judge now succeeds. The two errored sessions lack an
 	// analysis file -> retried; the three done ones are skipped.
 	j2 := &sequenceJudge{fields: substantialJudged()}
-	sum, err = RunBackfill(context.Background(), noRepo, j2, opts)
+	sum, err = RunBackfill(context.Background(), noRepo, fixedJudge(j2), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestRunBackfillParksAfterConsecutiveFailures(t *testing.T) {
 	}
 	opts := Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute}
 
-	sum, err := RunBackfill(context.Background(), noRepo, fakeJudge{err: errors.New("window hit")}, opts)
+	sum, err := RunBackfill(context.Background(), noRepo, fixedJudge(fakeJudge{err: errors.New("window hit")}), opts)
 	if err != nil {
 		t.Fatalf("a parked run is not an error: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestRunBackfillParksAfterConsecutiveFailures(t *testing.T) {
 	}
 
 	// Window recovered: the same command finishes every remaining session.
-	sum, err = RunBackfill(context.Background(), noRepo, &sequenceJudge{fields: substantialJudged()}, opts)
+	sum, err = RunBackfill(context.Background(), noRepo, fixedJudge(&sequenceJudge{fields: substantialJudged()}), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestRunBackfillIsolatedFailureDoesNotPark(t *testing.T) {
 
 	// ok, fail, ok, fail, ok -> at most one consecutive failure -> no park.
 	j1 := &sequenceJudge{fields: substantialJudged(), failOn: map[int]bool{2: true, 4: true}}
-	sum, err := RunBackfill(context.Background(), noRepo, j1, opts)
+	sum, err := RunBackfill(context.Background(), noRepo, fixedJudge(j1), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestRunBackfillIsolatedFailureDoesNotPark(t *testing.T) {
 	}
 
 	j2 := &sequenceJudge{fields: substantialJudged()}
-	sum, err = RunBackfill(context.Background(), noRepo, j2, opts)
+	sum, err = RunBackfill(context.Background(), noRepo, fixedJudge(j2), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestBackfillPlanCounts(t *testing.T) {
 	writeSession(t, projects, "proj", "done1", 6)  // substantial -> analyzed (done)
 	writeSession(t, projects, "proj", "gated1", 2) // trivial -> gated
 	opts := Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute}
-	if _, err := RunBackfill(context.Background(), noRepo, &sequenceJudge{fields: substantialJudged()}, opts); err != nil {
+	if _, err := RunBackfill(context.Background(), noRepo, fixedJudge(&sequenceJudge{fields: substantialJudged()}), opts); err != nil {
 		t.Fatal(err)
 	}
 	writeSession(t, projects, "proj", "pending1", 6) // fresh substantial -> to process

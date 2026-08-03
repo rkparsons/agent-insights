@@ -22,7 +22,7 @@ func TestRunSingleReal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum, err := RunSingle(context.Background(), target, cfg.Resolver(), NewClaudeJudge(), Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: 10 * time.Minute})
+	sum, err := RunSingle(context.Background(), target, cfg.Resolver(), NewClaudeJudge, Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: 10 * time.Minute})
 	if err != nil {
 		t.Fatalf("RunSingle: %v", err)
 	}

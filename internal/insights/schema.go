@@ -2,19 +2,18 @@ package insights
 
 import (
 	"crypto/sha256"
-	_ "embed"
 	"encoding/hex"
+
+	"tmux-ctrl/skills"
 )
 
-// analysisSchema is the JSON schema passed to `claude -p --json-schema`. It is a
-// committed copy of the analyzing-agent-sessions skill schema; TestSchemaMatchesLiveSkill
-// guards it against drift from the live skill.
-//
-//go:embed schema.json
-var analysisSchema string
+// analysisSchema is the JSON schema passed to `claude -p --json-schema`,
+// single-sourced from the embedded analyzing-agent-sessions skill so the schema
+// and the prompt that documents it cannot drift apart.
+var analysisSchema = string(skills.AnalysisSchema())
 
-// SchemaHash returns the sha256 (hex) of the embedded L1 analysis schema, for
-// eval cache keys and reproducibility records.
+// SchemaHash returns the sha256 (hex) of the L1 analysis schema, for eval cache
+// keys and reproducibility records.
 func SchemaHash() string {
 	sum := sha256.Sum256([]byte(analysisSchema))
 	return hex.EncodeToString(sum[:])

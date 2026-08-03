@@ -24,7 +24,7 @@ func TestRunStateLifecycle(t *testing.T) {
 	}
 	// Empty store: RunSynthesize finds no groups, spends nothing, and must
 	// still record a final ok state. A nil Synthesizer proves no call happens.
-	if _, err := RunSynthesize(context.Background(), nil, Options{LogPath: "/tmp/x.log"}); err != nil {
+	if _, err := RunSynthesize(context.Background(), fixedSynth(nil), Options{LogPath: "/tmp/x.log"}); err != nil {
 		t.Fatal(err)
 	}
 	rs, ok := ReadRunState()
@@ -58,7 +58,7 @@ func TestRunStateFailed(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeAnalysisFixture(t, adir, "s1", "repo1")
-	_, err := RunSynthesize(context.Background(), errSynthesizer{}, Options{MinSessions: 1})
+	_, err := RunSynthesize(context.Background(), fixedSynth(errSynthesizer{}), Options{MinSessions: 1})
 	if err != nil {
 		t.Fatal(err) // per-repo failures skip, they don't error the run
 	}
@@ -70,7 +70,7 @@ func TestRunStateFailed(t *testing.T) {
 
 func TestRunStateDryRunWritesNothing(t *testing.T) {
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
-	if _, err := RunSynthesize(context.Background(), nil, Options{DryRun: true}); err != nil {
+	if _, err := RunSynthesize(context.Background(), fixedSynth(nil), Options{DryRun: true}); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := ReadRunState(); ok {

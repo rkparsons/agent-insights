@@ -13,7 +13,10 @@ import (
 func TestNewAnalyzeCommandArgvAndEnv(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "sk-should-be-scrubbed")
 	t.Setenv("ANTHROPIC_AUTH_TOKEN", "tok-should-be-scrubbed")
-	cmd := newAnalyzeCommand(context.Background(), "claude-opus-4-8", `{"x":1}`, []byte("reduced input"), "", "")
+	cmd, err := newAnalyzeCommand(context.Background(), "claude-opus-4-8", `{"x":1}`, []byte("reduced input"), "", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	args := strings.Join(cmd.Args, "\x00")
 	for _, want := range []string{"claude", "-p", "/analyzing-agent-sessions", "--output-format", "json", "--json-schema", `{"x":1}`, "--model", "claude-opus-4-8", "--no-session-persistence"} {
@@ -93,7 +96,7 @@ func TestJudgeErrorBranches(t *testing.T) {
 }
 
 func TestNewClaudeJudgeConfigured(t *testing.T) {
-	j, ok := NewClaudeJudge().(claudeJudge)
+	j, ok := NewClaudeJudge(t.TempDir()).(claudeJudge)
 	if !ok {
 		t.Fatal("NewClaudeJudge did not return a claudeJudge")
 	}
@@ -129,20 +132,37 @@ func TestWrapClaudeExit(t *testing.T) {
 }
 
 func TestNewAnalyzeCommandPinsConfigDirAndCwd(t *testing.T) {
-	cmd := newAnalyzeCommand(context.Background(), "m", "s", nil, "/tmp/cfg", "/tmp/work")
+	cmd, err := newAnalyzeCommand(context.Background(), "m", "s", nil, "/tmp/cfg", "/tmp/work")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if cmd.Dir != "/tmp/work" {
 		t.Fatalf("Dir = %q", cmd.Dir)
 	}
 	if !slices.Contains(cmd.Env, "CLAUDE_CONFIG_DIR=/tmp/cfg") {
 		t.Fatal("env missing pinned CLAUDE_CONFIG_DIR")
 	}
-	unpinned := newAnalyzeCommand(context.Background(), "m", "s", nil, "", "")
-	if unpinned.Dir != "" {
-		t.Fatalf("unpinned Dir = %q", unpinned.Dir)
+	// An unpinned config dir stays inherited (production); the workdir never can.
+	inherited, err := newAnalyzeCommand(context.Background(), "m", "s", nil, "", "/tmp/work")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, kv := range unpinned.Env {
+	for _, kv := range inherited.Env {
 		if kv == "CLAUDE_CONFIG_DIR=" {
 			t.Fatal("unpinned command must not append an empty CLAUDE_CONFIG_DIR")
 		}
+	}
+}
+
+// The nested claude resolves the skill from its cwd, so an empty workDir is a
+// wiring bug that must fail loudly rather than run against whatever skills are
+// ambient in the caller's cwd.
+func TestNewAnalyzeCommandRejectsEmptyWorkDir(t *testing.T) {
+	if _, err := newAnalyzeCommand(context.Background(), "m", "s", nil, "/tmp/cfg", ""); err == nil {
+		t.Fatal("expected an error for an empty workDir")
+	}
+	j := NewClaudeJudgePinned("/tmp/cfg", "")
+	if _, err := j.Judge(context.Background(), ReducedInput{Text: "x"}); err == nil {
+		t.Fatal("expected the judge to refuse to run without a workdir")
 	}
 }

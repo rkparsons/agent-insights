@@ -15,7 +15,7 @@ import (
 // alike (no flag). It parks cleanly after consecutiveFailureLimit judge failures in a row
 // so a hit usage window doesn't grind through per-session timeouts. Lock-guarded against a
 // concurrent run.
-func RunBackfill(ctx context.Context, repo RepoResolver, judge Judge, opts Options) (RunSummary, error) {
+func RunBackfill(ctx context.Context, repo RepoResolver, newJudge JudgeFactory, opts Options) (RunSummary, error) {
 	lock, err := AcquireLock()
 	if err != nil {
 		return RunSummary{}, err
@@ -30,6 +30,11 @@ func RunBackfill(ctx context.Context, repo RepoResolver, judge Judge, opts Optio
 	if err != nil {
 		return RunSummary{}, err
 	}
+	judge, cleanup, err := judgeForRun(newJudge)
+	if err != nil {
+		return RunSummary{}, err
+	}
+	defer cleanup()
 
 	refs = dedupNewest(refs)
 	var sum RunSummary

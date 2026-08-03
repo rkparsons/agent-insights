@@ -39,7 +39,7 @@ func TestDevStoreCapturedSynthesis(t *testing.T) {
 	if err := json.Unmarshal(env.StructuredOutput, &raw); err != nil {
 		t.Fatal(err)
 	}
-	sum, err := RunSynthesize(context.Background(), capturedSynthesizer{raw: raw}, Options{Repo: repo})
+	sum, err := RunSynthesize(context.Background(), fixedSynth(capturedSynthesizer{raw: raw}), Options{Repo: repo})
 	if err != nil {
 		t.Fatal(err)
 	}

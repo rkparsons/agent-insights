@@ -11,6 +11,10 @@ import (
 	"tmux-ctrl/internal/insights"
 )
 
+// fixedSynth adapts a fake to the SynthesizerFactory seam: the run still
+// materializes its skills workdir, the fake just has no use for it.
+func fixedSynth(s Synthesizer) SynthesizerFactory { return func(string) Synthesizer { return s } }
+
 func writeAnalysisFixture(t *testing.T, adir, id, repo string) {
 	t.Helper()
 	var a insights.AgentSessionAnalysis
@@ -56,7 +60,7 @@ func TestRunSynthesizeDueFilter(t *testing.T) {
 	writeAnalysisFixture(t, adir, "s2", "/Users/dev/Developer/fresh")
 	writeSynthesisFixture(t, dir, "fresh", time.Now().UTC(), 1)
 
-	sum, err := RunSynthesize(context.Background(), nil, Options{DryRun: true, Due: true, MinSessions: 1})
+	sum, err := RunSynthesize(context.Background(), fixedSynth(nil), Options{DryRun: true, Due: true, MinSessions: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +81,7 @@ func TestRunSynthesizeDueFilterNoneDue(t *testing.T) {
 	writeSynthesisFixture(t, dir, "stale", time.Now().UTC(), 1)
 	writeSynthesisFixture(t, dir, "fresh", time.Now().UTC(), 1)
 
-	sum, err := RunSynthesize(context.Background(), nil, Options{DryRun: true, Due: true, MinSessions: 1})
+	sum, err := RunSynthesize(context.Background(), fixedSynth(nil), Options{DryRun: true, Due: true, MinSessions: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +99,7 @@ func TestRunSynthesizeDryRun(t *testing.T) {
 	for i := 0; i < 12; i++ {
 		writeAnalysisFixture(t, adir, "s"+string(rune('a'+i)), "/Users/dev/Developer/client-project")
 	}
-	sum, err := RunSynthesize(context.Background(), fakeSynth{}, Options{DryRun: true, MinSessions: 10})
+	sum, err := RunSynthesize(context.Background(), fixedSynth(fakeSynth{}), Options{DryRun: true, MinSessions: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +126,7 @@ func TestRunSynthesizeBlocksOnPrivacyLeak(t *testing.T) {
 		Themes: []RawTheme{{Title: "Leaked path /Users/dev/secret/notes", Kind: "friction",
 			Summary: "some friction theme summary"}},
 	}}
-	sum, err := RunSynthesize(context.Background(), fake, Options{MinSessions: 10})
+	sum, err := RunSynthesize(context.Background(), fixedSynth(fake), Options{MinSessions: 10})
 	if err != nil {
 		t.Fatal(err)
 	}

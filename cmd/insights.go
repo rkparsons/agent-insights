@@ -70,7 +70,7 @@ func runSynthesize(icfg insights.Config, args []string) {
 	if sopts.Due {
 		sopts.Cadence = time.Duration(icfg.CadenceDays) * 24 * time.Hour
 	}
-	sum, err := synthesis.RunSynthesize(context.Background(), synthesis.NewClaudeSynthesizer(), sopts)
+	sum, err := synthesis.RunSynthesize(context.Background(), synthesis.NewClaudeSynthesizer, sopts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "insights synthesize: %v\n", err)
 		os.Exit(1)
@@ -87,8 +87,7 @@ func runAnalyze(icfg insights.Config, args []string) {
 		os.Exit(2)
 	}
 	repo := icfg.Resolver()
-	judge := insights.NewClaudeJudge()
-	sum, err := insights.RunSingle(context.Background(), target, repo, judge, opts)
+	sum, err := insights.RunSingle(context.Background(), target, repo, insights.NewClaudeJudge, opts)
 	printRunSummary(sum)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", err)
@@ -120,8 +119,7 @@ func runBackfill(icfg insights.Config, args []string) {
 	}
 
 	repo := icfg.Resolver()
-	judge := insights.NewClaudeJudge()
-	sum, err := insights.RunBackfill(context.Background(), repo, judge, opts)
+	sum, err := insights.RunBackfill(context.Background(), repo, insights.NewClaudeJudge, opts)
 	printRunSummary(sum)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tmux-ctrl insights: %v\n", err)

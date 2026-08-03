@@ -13,11 +13,13 @@ import (
 	"strings"
 	"time"
 
-	_ "embed"
+	"tmux-ctrl/skills"
 )
 
-//go:embed schema.json
-var synthesisSchema string
+// synthesisSchema is the JSON schema passed to `claude -p --json-schema`,
+// single-sourced from the embedded synthesizing-workflow-insights skill so the
+// schema and the prompt that documents it cannot drift apart.
+var synthesisSchema = string(skills.SynthesisSchema())
 
 const (
 	synthesisModel        = "claude-opus-4-8"
@@ -103,8 +105,14 @@ func scrubbedEnv() []string {
 
 // newSynthesizeCommand builds the claude invocation that runs the synthesis skill with
 // structured output. The bundle is fed on stdin (argv is never used for it — bundles
-// can exceed the macOS argv cap).
-func newSynthesizeCommand(ctx context.Context, model, schema string, stdin []byte, configDir, workDir string) *exec.Cmd {
+// can exceed the macOS argv cap). workDir is required, not optional: the nested claude
+// resolves /synthesizing-workflow-insights from its cwd, where the run materialized the
+// skills package — an empty workDir would silently fall back to the caller's cwd and
+// whatever skills happen to be ambient there.
+func newSynthesizeCommand(ctx context.Context, model, schema string, stdin []byte, configDir, workDir string) (*exec.Cmd, error) {
+	if workDir == "" {
+		return nil, errors.New("synthesis workDir is empty: the run must materialize the skills into a scratch cwd (skills.TempWorkdir)")
+	}
 	cmd := exec.CommandContext(ctx, "claude", "-p", synthesisSkillCommand,
 		"--output-format", "json",
 		"--json-schema", schema,
@@ -127,23 +135,34 @@ func newSynthesizeCommand(ctx context.Context, model, schema string, stdin []byt
 	if configDir != "" {
 		cmd.Env = append(cmd.Env, "CLAUDE_CONFIG_DIR="+configDir)
 	}
-	if workDir != "" {
-		cmd.Dir = workDir
-	}
-	return cmd
+	cmd.Dir = workDir
+	return cmd, nil
 }
 
+// SynthesizerFactory builds a run's Synthesizer once the run has materialized
+// the skills package into workDir — the nested claude's cwd. The seam is a
+// factory rather than a Synthesizer because only the run owns that directory's
+// lifetime; tests pass a factory that ignores workDir and returns a fake.
+type SynthesizerFactory func(workDir string) Synthesizer
+
 // NewClaudeSynthesizer returns a Synthesizer that shells out to `claude -p` under
-// subscription auth (Opus 4.8, embedded schema). The caller's ctx governs the
-// subprocess timeout; a context with no deadline means no timeout.
-func NewClaudeSynthesizer() Synthesizer { return NewClaudeSynthesizerPinned("", "") }
+// subscription auth (Opus 4.8, embedded schema), running in workDir. The caller's
+// ctx governs the subprocess timeout; a context with no deadline means no timeout.
+func NewClaudeSynthesizer(workDir string) Synthesizer {
+	return NewClaudeSynthesizerPinned("", workDir)
+}
 
 // NewClaudeSynthesizerPinned is NewClaudeSynthesizer with the nested claude's
-// config dir and working directory pinned (see NewClaudeJudgePinned).
+// config dir pinned too (see NewClaudeJudgePinned). An empty configDir leaves
+// that knob inherited; workDir is always required.
 func NewClaudeSynthesizerPinned(configDir, workDir string) Synthesizer {
 	s := claudeSynthesizer{model: synthesisModel, schema: synthesisSchema}
 	s.run = func(ctx context.Context, stdin []byte) ([]byte, error) {
-		out, err := newSynthesizeCommand(ctx, s.model, s.schema, stdin, configDir, workDir).Output()
+		cmd, err := newSynthesizeCommand(ctx, s.model, s.schema, stdin, configDir, workDir)
+		if err != nil {
+			return nil, err
+		}
+		out, err := cmd.Output()
 		if err != nil {
 			return out, wrapClaudeExit(out, err)
 		}

@@ -13,6 +13,7 @@ import (
 	"tmux-ctrl/internal/insights"
 	"tmux-ctrl/internal/synthesis"
 	"tmux-ctrl/internal/transcript"
+	"tmux-ctrl/skills"
 )
 
 const consecutiveLLMFailureLimit = 3
@@ -89,17 +90,25 @@ type VerifiedOutput struct {
 	Report    synthesis.ValidationReport `json:"report"`
 }
 
-// defaultSkillDirs points at the live personal skills — the variable under
-// test; everything else in the nested-claude env is frozen.
-func defaultSkillDirs() (map[string]string, error) {
-	home, err := os.UserHomeDir()
+// defaultSkillDirs materializes the in-repo skills package to a scratch dir and
+// points at those copies — the variable under test; everything else in the
+// nested-claude env is frozen. The bytes are the ones the pipeline binary ships,
+// so the hashes (and the l1/l2 cache keys built from them) are the same values
+// the live ~/.claude trees produced before the skills moved in-repo.
+//
+// The scratch dir is deliberately outside the env-pin's own tree: the nested
+// claude's cwd is pin.WorkDir and its skills come from pin.ConfigDir, and a
+// second copy anywhere above that cwd would make skill resolution ambiguous.
+func defaultSkillDirs() (map[string]string, func(), error) {
+	root, cleanup, err := skills.TempWorkdir()
 	if err != nil {
-		return nil, err
+		return nil, func() {}, err
 	}
-	return map[string]string{
-		"analyzing-agent-sessions":       filepath.Join(home, ".claude", "skills", "analyzing-agent-sessions"),
-		"synthesizing-workflow-insights": filepath.Join(home, ".claude", "skills", "synthesizing-workflow-insights"),
-	}, nil
+	dirs := map[string]string{}
+	for _, name := range skills.Names() {
+		dirs[name] = filepath.Join(root, ".claude", "skills", name)
+	}
+	return dirs, cleanup, nil
 }
 
 // snapshotAdoptPaths applies the adopted-check's path selection
@@ -136,10 +145,11 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 		return RunRecord{}, fmt.Errorf("unknown population %q", opts.Population)
 	}
 	if opts.SkillDirs == nil {
-		dirs, err := defaultSkillDirs()
+		dirs, cleanup, err := defaultSkillDirs()
 		if err != nil {
 			return RunRecord{}, err
 		}
+		defer cleanup()
 		opts.SkillDirs = dirs
 	}
 

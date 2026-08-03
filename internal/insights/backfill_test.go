@@ -22,7 +22,7 @@ func TestRunBackfillGatesAndRecords(t *testing.T) {
 
 	judge := fakeJudge{fields: substantialJudged()}
 	opts := Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute}
-	sum, err := RunBackfill(context.Background(), noRepo, judge, opts)
+	sum, err := RunBackfill(context.Background(), noRepo, fixedJudge(judge), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,10 +50,10 @@ func TestRunBackfillResumeSkips(t *testing.T) {
 	judge := fakeJudge{fields: substantialJudged()}
 	opts := Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute}
 
-	if _, err := RunBackfill(context.Background(), noRepo, judge, opts); err != nil {
+	if _, err := RunBackfill(context.Background(), noRepo, fixedJudge(judge), opts); err != nil {
 		t.Fatal(err)
 	}
-	sum, err := RunBackfill(context.Background(), noRepo, judge, opts)
+	sum, err := RunBackfill(context.Background(), noRepo, fixedJudge(judge), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestRunBackfillCanceledNotRecorded(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // user abort before processing
 	judge := fakeJudge{err: context.Canceled}
-	sum, err := RunBackfill(ctx, noRepo, judge, Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute})
+	sum, err := RunBackfill(ctx, noRepo, fixedJudge(judge), Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute})
 	if err == nil {
 		t.Error("want non-nil error on canceled parent ctx")
 	}
@@ -90,7 +90,7 @@ func TestRunBackfillReprocessesOnNewerMtime(t *testing.T) {
 	writeSession(t, projects, "proj", "grow", 6)
 	judge := fakeJudge{fields: substantialJudged()}
 	opts := Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute}
-	if _, err := RunBackfill(context.Background(), noRepo, judge, opts); err != nil {
+	if _, err := RunBackfill(context.Background(), noRepo, fixedJudge(judge), opts); err != nil {
 		t.Fatal(err)
 	}
 	// bump the transcript mtime beyond the stamped decode-time value
@@ -99,7 +99,7 @@ func TestRunBackfillReprocessesOnNewerMtime(t *testing.T) {
 	if err := os.Chtimes(p, future, future); err != nil {
 		t.Fatal(err)
 	}
-	sum, err := RunBackfill(context.Background(), noRepo, judge, opts)
+	sum, err := RunBackfill(context.Background(), noRepo, fixedJudge(judge), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestRunBackfillRecordsErrored(t *testing.T) {
 	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
 	writeSession(t, projects, "proj", "boom", 6)
 	judge := fakeJudge{err: errors.New("judge failed")}
-	sum, err := RunBackfill(context.Background(), noRepo, judge, Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute})
+	sum, err := RunBackfill(context.Background(), noRepo, fixedJudge(judge), Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute})
 	if err != nil {
 		t.Fatalf("loop should continue past errors, not return: %v", err)
 	}

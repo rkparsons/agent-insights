@@ -53,7 +53,7 @@ func TestLightEvalReal(t *testing.T) {
 	}
 
 	// 2. Run the decomposed pipeline, N repeats per curated session (real LLM).
-	judge := NewClaudeJudge()
+	judge := realJudge(t)
 	var runs []sessionRun
 	skipped := 0
 	for _, cs := range curated {

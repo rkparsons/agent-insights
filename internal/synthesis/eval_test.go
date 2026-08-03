@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"tmux-ctrl/internal/insights"
+	"tmux-ctrl/skills"
 )
 
 func TestOpportunityRecallMiss(t *testing.T) {
@@ -238,7 +239,11 @@ func TestGateRealclient-project(t *testing.T) {
 	if len(group) == 0 {
 		t.Skip("no client-project analyses present")
 	}
-	syn := NewClaudeSynthesizer()
+	workDir := t.TempDir()
+	if err := skills.Materialize(workDir); err != nil {
+		t.Fatal(err)
+	}
+	syn := NewClaudeSynthesizer(workDir)
 	adopt := NewAdoptChecker("/Users/dev/Developer/client-project")
 	a, ra, err := Synthesize(context.Background(), "client-project", group, syn, adopt)
 	if err != nil {

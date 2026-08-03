@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"tmux-ctrl/skills"
 )
 
 func substantialJudged() JudgedFields {
@@ -37,7 +39,7 @@ func TestRunSingleWritesAnalysisAndForcesGate(t *testing.T) {
 	writeSession(t, projects, "proj", "sess-x", 2)
 
 	judge := fakeJudge{fields: substantialJudged()}
-	sum, err := RunSingle(context.Background(), "sess-x", noRepo, judge, Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute})
+	sum, err := RunSingle(context.Background(), "sess-x", noRepo, fixedJudge(judge), Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +51,42 @@ func TestRunSingleWritesAnalysisAndForcesGate(t *testing.T) {
 	}
 }
 
+// TestRunCreatesSkillWorkdir pins the delivery contract: a run materializes the
+// skills package into a scratch cwd, every nested claude command runs there, and
+// the directory does not outlive the run.
+func TestRunCreatesSkillWorkdir(t *testing.T) {
+	projects := t.TempDir()
+	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
+	t.Setenv("TMUX_CTRL_INSIGHTS_DIR", t.TempDir())
+	writeSession(t, projects, "proj", "sess-w", 6)
+
+	var cmdDir string
+	factory := func(workDir string) Judge {
+		cmd, err := newAnalyzeCommand(context.Background(), analysisModel, analysisSchema, nil, "", workDir)
+		if err != nil {
+			t.Fatalf("newAnalyzeCommand with the run's workDir: %v", err)
+		}
+		cmdDir = cmd.Dir
+		// Checked here, not after the run: the directory is gone by then.
+		for _, name := range skills.Names() {
+			if _, err := os.Stat(filepath.Join(cmd.Dir, ".claude", "skills", name, "SKILL.md")); err != nil {
+				t.Errorf("%s not materialized into the run's cwd: %v", name, err)
+			}
+		}
+		return fakeJudge{fields: substantialJudged()}
+	}
+	if _, err := RunBackfill(context.Background(), noRepo, factory, Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute}); err != nil {
+		t.Fatal(err)
+	}
+
+	if cmdDir == "" {
+		t.Fatal("the run never built a judge for a workdir")
+	}
+	if _, err := os.Stat(cmdDir); !os.IsNotExist(err) {
+		t.Errorf("run left its scratch cwd %s behind (err=%v)", cmdDir, err)
+	}
+}
+
 func TestRunSingleIncrementalSkip(t *testing.T) {
 	projects := t.TempDir()
 	t.Setenv("TMUX_CTRL_CLAUDE_PROJECTS_DIR", projects)
@@ -57,10 +95,10 @@ func TestRunSingleIncrementalSkip(t *testing.T) {
 	judge := fakeJudge{fields: substantialJudged()}
 	opts := Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: time.Minute}
 
-	if _, err := RunSingle(context.Background(), "sess-y", noRepo, judge, opts); err != nil {
+	if _, err := RunSingle(context.Background(), "sess-y", noRepo, fixedJudge(judge), opts); err != nil {
 		t.Fatal(err)
 	}
-	sum, err := RunSingle(context.Background(), "sess-y", noRepo, judge, opts)
+	sum, err := RunSingle(context.Background(), "sess-y", noRepo, fixedJudge(judge), opts)
 	if err != nil {
 		t.Fatal(err)
 	}

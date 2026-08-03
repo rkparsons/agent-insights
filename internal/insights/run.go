@@ -2,12 +2,14 @@ package insights
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"tmux-ctrl/internal/transcript"
+	"tmux-ctrl/skills"
 )
 
 // Options configures an analyze run.
@@ -39,7 +41,7 @@ type RunSummary struct {
 // RunSingle analyzes one explicitly named session (id or path). It bypasses the gate
 // (explicit intent overrides the triviality cut) but honors incremental skip unless
 // Force.
-func RunSingle(ctx context.Context, sessionOrPath string, repo RepoResolver, judge Judge, opts Options) (RunSummary, error) {
+func RunSingle(ctx context.Context, sessionOrPath string, repo RepoResolver, newJudge JudgeFactory, opts Options) (RunSummary, error) {
 	lock, err := AcquireLock()
 	if err != nil {
 		return RunSummary{}, err
@@ -56,6 +58,11 @@ func RunSingle(ctx context.Context, sessionOrPath string, repo RepoResolver, jud
 		sum.SkippedIncremental = 1
 		return sum, nil
 	}
+	judge, cleanup, err := judgeForRun(newJudge)
+	if err != nil {
+		return sum, err
+	}
+	defer cleanup()
 	events, canary, _, err := transcript.LoadTranscript(ref.Path)
 	if err != nil {
 		return sum, err
@@ -70,6 +77,21 @@ func RunSingle(ctx context.Context, sessionOrPath string, repo RepoResolver, jud
 	sum.Analyzed = 1
 	sum.DroppedPreferences = rep.DroppedPreferences
 	return sum, nil
+}
+
+// judgeForRun creates the run's scratch cwd with the skills materialized into it
+// and builds the Judge that will run there. Skill delivery is the run's job, not
+// the operator's ~/.claude: every nested claude call in the run works out of this
+// directory, which is removed by the returned cleanup when the run ends.
+func judgeForRun(newJudge JudgeFactory) (Judge, func(), error) {
+	if newJudge == nil {
+		return nil, func() {}, errors.New("no judge factory: a run must be able to build its judge for the materialized workdir")
+	}
+	workDir, cleanup, err := skills.TempWorkdir()
+	if err != nil {
+		return nil, func() {}, err
+	}
+	return newJudge(workDir), cleanup, nil
 }
 
 // resolveRef accepts a filesystem path (used as-is) or a session-id (resolved via the

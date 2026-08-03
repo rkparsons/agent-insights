@@ -31,7 +31,7 @@ func TestAnalyzeReal(t *testing.T) {
 		t.Fatalf("load config: %v", err)
 	}
 	repo := cfg.Resolver()
-	judge := NewClaudeJudge()
+	judge := realJudge(t)
 
 	var repoPopulated bool
 	for _, f := range files {

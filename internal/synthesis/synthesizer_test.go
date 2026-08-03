@@ -61,20 +61,37 @@ func TestWrapClaudeExit(t *testing.T) {
 }
 
 func TestNewSynthesizeCommandPinsConfigDirAndCwd(t *testing.T) {
-	cmd := newSynthesizeCommand(context.Background(), "m", "s", nil, "/tmp/cfg", "/tmp/work")
+	cmd, err := newSynthesizeCommand(context.Background(), "m", "s", nil, "/tmp/cfg", "/tmp/work")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if cmd.Dir != "/tmp/work" {
 		t.Fatalf("Dir = %q", cmd.Dir)
 	}
 	if !slices.Contains(cmd.Env, "CLAUDE_CONFIG_DIR=/tmp/cfg") {
 		t.Fatal("env missing pinned CLAUDE_CONFIG_DIR")
 	}
-	unpinned := newSynthesizeCommand(context.Background(), "m", "s", nil, "", "")
-	if unpinned.Dir != "" {
-		t.Fatalf("unpinned Dir = %q", unpinned.Dir)
+	// An unpinned config dir stays inherited (production); the workdir never can.
+	inherited, err := newSynthesizeCommand(context.Background(), "m", "s", nil, "", "/tmp/work")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, kv := range unpinned.Env {
+	for _, kv := range inherited.Env {
 		if kv == "CLAUDE_CONFIG_DIR=" {
 			t.Fatal("unpinned command must not append an empty CLAUDE_CONFIG_DIR")
 		}
+	}
+}
+
+// The nested claude resolves the skill from its cwd, so an empty workDir is a
+// wiring bug that must fail loudly rather than run against whatever skills are
+// ambient in the caller's cwd.
+func TestNewSynthesizeCommandRejectsEmptyWorkDir(t *testing.T) {
+	if _, err := newSynthesizeCommand(context.Background(), "m", "s", nil, "/tmp/cfg", ""); err == nil {
+		t.Fatal("expected an error for an empty workDir")
+	}
+	s := NewClaudeSynthesizerPinned("/tmp/cfg", "")
+	if _, err := s.Synthesize(context.Background(), EvidenceBundle{}); err == nil {
+		t.Fatal("expected the synthesizer to refuse to run without a workdir")
 	}
 }

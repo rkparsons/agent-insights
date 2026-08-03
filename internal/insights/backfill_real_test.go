@@ -52,10 +52,9 @@ func TestRunBackfillReal(t *testing.T) {
 		t.Fatal(err)
 	}
 	repo := cfg.Resolver()
-	judge := NewClaudeJudge()
 	opts := Options{MinAssistantTurns: DefaultMinAssistantTurns, Timeout: 10 * time.Minute}
 
-	sum, err := RunBackfill(context.Background(), repo, judge, opts)
+	sum, err := RunBackfill(context.Background(), repo, NewClaudeJudge, opts)
 	if err != nil {
 		t.Fatalf("run1: %v", err)
 	}
@@ -68,7 +67,7 @@ func TestRunBackfillReal(t *testing.T) {
 	t.Logf("run1: %+v", sum)
 
 	// Identical re-run: everything is done or gated -> no work, 0 remaining.
-	sum2, err := RunBackfill(context.Background(), repo, judge, opts)
+	sum2, err := RunBackfill(context.Background(), repo, NewClaudeJudge, opts)
 	if err != nil {
 		t.Fatalf("run2: %v", err)
 	}

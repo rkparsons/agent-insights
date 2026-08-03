@@ -37,8 +37,14 @@ func scrubbedEnv() []string {
 
 // newAnalyzeCommand builds the claude invocation that runs the analysis skill with
 // structured output. The reduced transcript is fed on stdin (argv is never used for
-// it — transcripts exceed the macOS argv cap).
-func newAnalyzeCommand(ctx context.Context, model, schema string, stdin []byte, configDir, workDir string) *exec.Cmd {
+// it — transcripts exceed the macOS argv cap). workDir is required, not optional:
+// the nested claude resolves /analyzing-agent-sessions from its cwd, where the run
+// materialized the skills package — an empty workDir would silently fall back to the
+// caller's cwd and whatever skills happen to be ambient there.
+func newAnalyzeCommand(ctx context.Context, model, schema string, stdin []byte, configDir, workDir string) (*exec.Cmd, error) {
+	if workDir == "" {
+		return nil, errors.New("analysis workDir is empty: the run must materialize the skills into a scratch cwd (skills.TempWorkdir)")
+	}
 	cmd := exec.CommandContext(ctx, "claude", "-p", analysisSkillCommand,
 		"--output-format", "json",
 		"--json-schema", schema,
@@ -57,10 +63,8 @@ func newAnalyzeCommand(ctx context.Context, model, schema string, stdin []byte, 
 	if configDir != "" {
 		cmd.Env = append(cmd.Env, "CLAUDE_CONFIG_DIR="+configDir)
 	}
-	if workDir != "" {
-		cmd.Dir = workDir
-	}
-	return cmd
+	cmd.Dir = workDir
+	return cmd, nil
 }
 
 // Judge produces the model-judged fields from a reduced transcript. Injected so
@@ -113,19 +117,29 @@ func (j claudeJudge) Judge(ctx context.Context, in ReducedInput) (JudgedFields, 
 	return jf, nil
 }
 
-// NewClaudeJudge returns a Judge that shells out to `claude -p` under subscription
-// auth (Opus 4.8, embedded schema). The caller's ctx governs the subprocess timeout;
-// a context with no deadline means no timeout — the step-6 caller must set one.
-func NewClaudeJudge() Judge { return NewClaudeJudgePinned("", "") }
+// JudgeFactory builds a run's Judge once the run has materialized the skills
+// package into workDir — the nested claude's cwd. The seam is a factory rather
+// than a Judge because only the run owns that directory's lifetime; tests pass a
+// factory that ignores workDir and returns a fake.
+type JudgeFactory func(workDir string) Judge
 
-// NewClaudeJudgePinned is NewClaudeJudge with the nested claude's config dir and
-// working directory pinned — the eval harness points these at an ephemeral copy of
-// the frozen config snapshot and an empty scratch dir. Empty strings leave the
-// corresponding knob inherited.
+// NewClaudeJudge returns a Judge that shells out to `claude -p` under subscription
+// auth (Opus 4.8, embedded schema), running in workDir. The caller's ctx governs the
+// subprocess timeout; a context with no deadline means no timeout — the step-6 caller
+// must set one.
+func NewClaudeJudge(workDir string) Judge { return NewClaudeJudgePinned("", workDir) }
+
+// NewClaudeJudgePinned is NewClaudeJudge with the nested claude's config dir pinned
+// too — the eval harness points it at an ephemeral copy of the frozen config
+// snapshot. An empty configDir leaves that knob inherited; workDir is always required.
 func NewClaudeJudgePinned(configDir, workDir string) Judge {
 	j := claudeJudge{model: analysisModel, schema: analysisSchema}
 	j.run = func(ctx context.Context, stdin []byte) ([]byte, error) {
-		out, err := newAnalyzeCommand(ctx, j.model, j.schema, stdin, configDir, workDir).Output()
+		cmd, err := newAnalyzeCommand(ctx, j.model, j.schema, stdin, configDir, workDir)
+		if err != nil {
+			return nil, err
+		}
+		out, err := cmd.Output()
 		if err != nil {
 			return out, wrapClaudeExit(out, err)
 		}

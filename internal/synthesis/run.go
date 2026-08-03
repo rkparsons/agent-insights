@@ -2,6 +2,7 @@ package synthesis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"tmux-ctrl/internal/insights"
+	"tmux-ctrl/skills"
 )
 
 type Options struct {
@@ -25,7 +27,7 @@ type Summary struct {
 	Skipped int
 }
 
-func RunSynthesize(ctx context.Context, syn Synthesizer, opts Options) (sum Summary, retErr error) {
+func RunSynthesize(ctx context.Context, newSyn SynthesizerFactory, opts Options) (sum Summary, retErr error) {
 	if opts.MinSessions == 0 {
 		opts.MinSessions = DefaultMinSessions
 	}
@@ -102,6 +104,20 @@ func RunSynthesize(ctx context.Context, syn Synthesizer, opts Options) (sum Summ
 		}
 		writeRunState(rs)
 	}()
+
+	// Skill delivery is the run's job, not the operator's ~/.claude: the nested
+	// claude calls work out of a scratch cwd with the skills materialized into
+	// it, removed when the run ends. Set up after the run-state defer so a
+	// failure here is recorded like any other.
+	if newSyn == nil {
+		return sum, errors.New("no synthesizer factory: a run must be able to build its synthesizer for the materialized workdir")
+	}
+	workDir, cleanupWorkDir, err := skills.TempWorkdir()
+	if err != nil {
+		return sum, err
+	}
+	defer cleanupWorkDir()
+	syn := newSyn(workDir)
 
 	date := time.Now().UTC().Format("2006-01-02")
 	for _, k := range keys {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"tmux-ctrl/internal/synthesis"
+	"tmux-ctrl/skills"
 )
 
 type fakeSynth struct {
@@ -58,6 +59,41 @@ func buildOutcomeFixture(t *testing.T) (string, OutcomeOptions) {
 			"analyzing-agent-sessions":       skillL1,
 			"synthesizing-workflow-insights": skill,
 		},
+	}
+}
+
+// The env pin's skill hashes feed the l1/l2 cache keys, so the dirs it hashes
+// must be the embedded skills the binary ships and the hashing must agree with
+// the skills package's own — a mismatch orphans every paid cache entry.
+func TestDefaultSkillDirsAreTheEmbeddedSkills(t *testing.T) {
+	dirs, cleanup, err := defaultSkillDirs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dirs) != len(skills.Names()) {
+		t.Fatalf("dirs = %v, want one per embedded skill %v", dirs, skills.Names())
+	}
+	var root string
+	for _, name := range skills.Names() {
+		dir, ok := dirs[name]
+		if !ok {
+			t.Fatalf("%s missing from %v", name, dirs)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "SKILL.md")); err != nil {
+			t.Fatalf("%s not materialized: %v", name, err)
+		}
+		root = filepath.Dir(dir)
+	}
+	got, err := hashTree(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != skills.TreeHash() {
+		t.Fatalf("hashTree(materialized) = %s, skills.TreeHash() = %s", got, skills.TreeHash())
+	}
+	cleanup()
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Errorf("cleanup left %s behind (err=%v)", root, err)
 	}
 }
 
