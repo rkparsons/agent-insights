@@ -16,6 +16,12 @@ import (
 	"github.com/rkparsons/agent-insights/internal/transcript"
 )
 
+// Entry time fields are stored in UTC so a freshly-built entry is == to the
+// one a re-run reads back from manifest.json. os.Stat mtimes carry
+// time.Local, and a Local time whose offset is zero survives the JSON
+// round-trip as time.UTC — a different *Location pointer that renders
+// identically, so struct == silently fails on UTC machines (all CI) while
+// passing under an offset zone.
 type ManifestEntry struct {
 	SessionID  string    `json:"session_id"`
 	SHA256     string    `json:"sha256"`
@@ -136,10 +142,10 @@ func FreezeCorpus(dataDir string, byID map[string]insights.AgentSessionAnalysis,
 		if err != nil {
 			return m, stats, err
 		}
-		e := ManifestEntry{SessionID: r.SessionID, SHA256: sha, Mtime: r.Mtime, Bytes: n, SourcePath: r.Path}
+		e := ManifestEntry{SessionID: r.SessionID, SHA256: sha, Mtime: r.Mtime.UTC(), Bytes: n, SourcePath: r.Path}
 		if a, ok := byID[r.SessionID]; ok {
 			e.RepoKey = synthesis.RepoKey(a, cfg)
-			e.Start = a.Stats.Start
+			e.Start = a.Stats.Start.UTC()
 		}
 		m.Entries = append(m.Entries, e)
 		stats.Frozen++
@@ -167,7 +173,7 @@ func FreezeCorpus(dataDir string, byID map[string]insights.AgentSessionAnalysis,
 			return m, stats, err
 		}
 		m.Sidechains = append(m.Sidechains, SidechainEntry{
-			ParentSessionID: sc.Parent, File: name, SHA256: sha, Mtime: sc.Mtime, Bytes: n, SourcePath: sc.Path,
+			ParentSessionID: sc.Parent, File: name, SHA256: sha, Mtime: sc.Mtime.UTC(), Bytes: n, SourcePath: sc.Path,
 		})
 		stats.Frozen++
 	}
