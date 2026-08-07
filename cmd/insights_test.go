@@ -168,6 +168,79 @@ func TestLastRunJSONDiedRun(t *testing.T) {
 	}
 }
 
+// TestBuildStatusJSONDiedRunEndToEnd drives buildStatusJSON through the real
+// store rather than calling lastRunJSON/BuildStatus directly: a "running"
+// run-state record with no lock held must surface as last_run.error and
+// leave running/running_op false/empty. Guards the wiring itself — e.g. a
+// regression that hardcodes the lockHeld flag passed to lastRunJSON, or
+// swaps which flag feeds the died-run check vs. RunningOp — which the
+// unit-level tests above can't catch since they call the helpers directly.
+func TestBuildStatusJSONDiedRunEndToEnd(t *testing.T) {
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_CONFIG", filepath.Join(t.TempDir(), "nonexistent.yaml"))
+	writeRunStateFile(t, synthesis.RunState{Status: "running", StartedAt: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)})
+
+	status, err := buildStatusJSON(insights.Config{CadenceDays: 7, MinSessions: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Running {
+		t.Error("Running = true with no lock held")
+	}
+	if status.RunningOp != "" {
+		t.Errorf("RunningOp = %q, want empty with no lock held", status.RunningOp)
+	}
+	if status.LastRun == nil || status.LastRun.Error != "run died (no exit record)" {
+		t.Errorf("last_run.error = %+v, want %q", status.LastRun, "run died (no exit record)")
+	}
+}
+
+// TestBuildStatusJSONRunningEndToEnd is the live-run sibling: with the lock
+// actually held (via insights.AcquireLock, the real code path a live
+// analyze/synthesize run takes), the same "running" run-state record must
+// NOT produce the died-run error, and running_op must reflect the lock's
+// recorded op.
+func TestBuildStatusJSONRunningEndToEnd(t *testing.T) {
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_CONFIG", filepath.Join(t.TempDir(), "nonexistent.yaml"))
+	writeRunStateFile(t, synthesis.RunState{Status: "running", StartedAt: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)})
+
+	lock, err := insights.AcquireLock("synthesize")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Release()
+
+	status, err := buildStatusJSON(insights.Config{CadenceDays: 7, MinSessions: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.Running {
+		t.Error("Running = false with lock held")
+	}
+	if status.RunningOp != "synthesize" {
+		t.Errorf("RunningOp = %q, want synthesize", status.RunningOp)
+	}
+	if status.LastRun == nil || status.LastRun.Error != "" {
+		t.Errorf("last_run.error = %+v, want empty while lock held", status.LastRun)
+	}
+}
+
+// writeRunStateFile writes rs into the current AGENT_INSIGHTS_DIR store,
+// mirroring synthesis's private runStatePath convention
+// (InsightsDir()/synthesis-run.json) since that helper isn't exported.
+func writeRunStateFile(t *testing.T, rs synthesis.RunState) {
+	t.Helper()
+	data, err := json.Marshal(rs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(insights.InsightsDir(), "synthesis-run.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // captureStdout redirects os.Stdout for the duration of fn and returns what
 // it wrote. Used to test the runStatus/runShow handlers, which write
 // directly to os.Stdout via json.NewEncoder rather than taking an io.Writer
