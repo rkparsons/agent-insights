@@ -183,19 +183,30 @@ func buildStatusJSON(icfg insights.Config) (insights.StatusJSON, error) {
 	}
 	sort.Strings(acted)
 
+	running := insights.LockHeld()
 	var lastRun *insights.LastRunJSON
 	if rs, ok := synthesis.ReadRunState(); ok {
-		lr := insights.LastRunJSON{StartedAt: rs.StartedAt.UTC().Format(time.RFC3339)}
-		if rs.FinishedAt != nil {
-			lr.FinishedAt = rs.FinishedAt.UTC().Format(time.RFC3339)
-		}
-		if rs.Status == "failed" {
-			lr.Error = rs.Reason
-		}
-		lastRun = &lr
+		lastRun = lastRunJSON(rs, running)
 	}
 
-	return insights.BuildStatus(insights.InsightsDir(), insights.SynthesizeLogPath(), insights.LockHeld(), due, acted, lastRun), nil
+	return insights.BuildStatus(insights.InsightsDir(), insights.SynthesizeLogPath(), running, insights.HeldOp(), due, acted, lastRun), nil
+}
+
+// lastRunJSON projects RunState for status --json. A "running" record with a
+// free lock means the run died without rewriting its state — surfaced as an
+// error rather than left looking idle, since the TUI has no other signal.
+func lastRunJSON(rs synthesis.RunState, lockHeld bool) *insights.LastRunJSON {
+	lr := insights.LastRunJSON{StartedAt: rs.StartedAt.UTC().Format(time.RFC3339)}
+	if rs.FinishedAt != nil {
+		lr.FinishedAt = rs.FinishedAt.UTC().Format(time.RFC3339)
+	}
+	switch {
+	case rs.Status == "failed":
+		lr.Error = rs.Reason
+	case rs.Status == "running" && !lockHeld:
+		lr.Error = "run died (no exit record)"
+	}
+	return &lr
 }
 
 // runShow handles `insights show --json`.

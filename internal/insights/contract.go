@@ -14,6 +14,7 @@ type StatusJSON struct {
 	StoreRoot     string       `json:"store_root"`
 	LogPath       string       `json:"log_path"`
 	Running       bool         `json:"running"`
+	RunningOp     string       `json:"running_op,omitempty"` // "analyze" | "synthesize"; set only while running
 	DueRepos      []string     `json:"due_repos"`
 	ActedKeys     []string     `json:"acted_keys"`
 	LastRun       *LastRunJSON `json:"last_run,omitempty"`
@@ -33,7 +34,10 @@ type LastRunJSON struct {
 // reverse would cycle) — callers (cmd/insights.go) gather those and pass
 // them in. nil slices normalize to empty so the JSON output never emits
 // `null` for due_repos/acted_keys.
-func BuildStatus(storeRoot, logPath string, running bool, dueRepos, actedKeys []string, lastRun *LastRunJSON) StatusJSON {
+func BuildStatus(storeRoot, logPath string, running bool, runningOp string, dueRepos, actedKeys []string, lastRun *LastRunJSON) StatusJSON {
+	if !running {
+		runningOp = ""
+	}
 	if dueRepos == nil {
 		dueRepos = []string{}
 	}
@@ -45,6 +49,7 @@ func BuildStatus(storeRoot, logPath string, running bool, dueRepos, actedKeys []
 		StoreRoot:     storeRoot,
 		LogPath:       logPath,
 		Running:       running,
+		RunningOp:     runningOp,
 		DueRepos:      dueRepos,
 		ActedKeys:     actedKeys,
 		LastRun:       lastRun,

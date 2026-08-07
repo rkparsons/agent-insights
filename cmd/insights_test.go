@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rkparsons/agent-insights/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/synthesis"
 )
 
 func TestParseAnalyzeArgs(t *testing.T) {
@@ -150,6 +151,20 @@ func TestRunStatusJSON(t *testing.T) {
 	}
 	if status.DueRepos == nil || status.ActedKeys == nil {
 		t.Errorf("due_repos/acted_keys must be [] not null: %+v", status)
+	}
+}
+
+func TestLastRunJSONDiedRun(t *testing.T) {
+	rs := synthesis.RunState{Status: "running", StartedAt: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)}
+	if lr := lastRunJSON(rs, false); lr.Error != "run died (no exit record)" {
+		t.Errorf("died run error = %q", lr.Error)
+	}
+	if lr := lastRunJSON(rs, true); lr.Error != "" {
+		t.Errorf("in-flight run must not report an error, got %q", lr.Error)
+	}
+	rs = synthesis.RunState{Status: "failed", Reason: "boom", StartedAt: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)}
+	if lr := lastRunJSON(rs, false); lr.Error != "boom" {
+		t.Errorf("failed run error = %q, want boom", lr.Error)
 	}
 }
 

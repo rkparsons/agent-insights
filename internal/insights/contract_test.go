@@ -14,7 +14,7 @@ import (
 
 func TestStatusJSONShape(t *testing.T) {
 	lastRun := &insights.LastRunJSON{StartedAt: "2026-08-01T00:00:00Z", FinishedAt: "2026-08-01T00:05:00Z"}
-	status := insights.BuildStatus("/store", "/store/logs/synthesize-2026-08-03.log", true, []string{"repo-a"}, []string{"key1"}, lastRun)
+	status := insights.BuildStatus("/store", "/store/logs/synthesize-2026-08-03.log", true, "", []string{"repo-a"}, []string{"key1"}, lastRun)
 	if status.SchemaVersion != insights.ContractVersion {
 		t.Fatalf("schema_version = %d, want %d", status.SchemaVersion, insights.ContractVersion)
 	}
@@ -34,7 +34,7 @@ func TestStatusJSONShape(t *testing.T) {
 // TestStatusJSONOmitsLastRunWhenNil guards the omitempty on last_run, and
 // that nil due_repos/acted_keys inputs still marshal as [] (never null).
 func TestStatusJSONOmitsLastRunWhenNil(t *testing.T) {
-	status := insights.BuildStatus("/store", "/store/logs/x.log", false, nil, nil, nil)
+	status := insights.BuildStatus("/store", "/store/logs/x.log", false, "", nil, nil, nil)
 	data, err := json.Marshal(status)
 	if err != nil {
 		t.Fatal(err)
@@ -49,6 +49,17 @@ func TestStatusJSONOmitsLastRunWhenNil(t *testing.T) {
 	assertKeySet(t, m, []string{"schema_version", "store_root", "log_path", "running", "due_repos", "acted_keys"})
 	if arr, ok := m["due_repos"].([]any); !ok || arr == nil {
 		t.Fatalf("due_repos should be an empty array, not null: %s", data)
+	}
+}
+
+func TestBuildStatusRunningOp(t *testing.T) {
+	s := insights.BuildStatus("root", "log", true, "analyze", nil, nil, nil)
+	if s.RunningOp != "analyze" {
+		t.Errorf("RunningOp = %q, want analyze", s.RunningOp)
+	}
+	s = insights.BuildStatus("root", "log", false, "analyze", nil, nil, nil)
+	if s.RunningOp != "" {
+		t.Errorf("RunningOp with running=false = %q, want empty", s.RunningOp)
 	}
 }
 

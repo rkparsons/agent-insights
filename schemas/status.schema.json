@@ -11,6 +11,7 @@
     "store_root": { "type": "string" },
     "log_path": { "type": "string" },
     "running": { "type": "boolean" },
+    "running_op": { "type": "string", "enum": ["analyze", "synthesize"] },
     "due_repos": { "type": "array", "items": { "type": "string" } },
     "acted_keys": { "type": "array", "items": { "type": "string" } },
     "last_run": { "$ref": "#/definitions/LastRun" }
