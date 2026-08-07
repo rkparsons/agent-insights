@@ -42,7 +42,7 @@ type RunSummary struct {
 // (explicit intent overrides the triviality cut) but honors incremental skip unless
 // Force.
 func RunSingle(ctx context.Context, sessionOrPath string, repo RepoResolver, newJudge JudgeFactory, opts Options) (RunSummary, error) {
-	lock, err := AcquireLock()
+	lock, err := AcquireLock("analyze")
 	if err != nil {
 		return RunSummary{}, err
 	}

@@ -82,7 +82,7 @@ func RunSynthesize(ctx context.Context, newSyn SynthesizerFactory, opts Options)
 		return sum, nil
 	}
 
-	lock, err := insights.AcquireLock()
+	lock, err := insights.AcquireLock("synthesize")
 	if err != nil {
 		return sum, err
 	}

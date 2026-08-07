@@ -16,7 +16,7 @@ import (
 // so a hit usage window doesn't grind through per-session timeouts. Lock-guarded against a
 // concurrent run.
 func RunBackfill(ctx context.Context, repo RepoResolver, newJudge JudgeFactory, opts Options) (RunSummary, error) {
-	lock, err := AcquireLock()
+	lock, err := AcquireLock("analyze")
 	if err != nil {
 		return RunSummary{}, err
 	}

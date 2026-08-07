@@ -1,6 +1,7 @@
 package insights
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,7 +17,7 @@ type RunLock struct{ f *os.File }
 
 // AcquireLock takes a non-blocking exclusive flock. If another insights run holds it,
 // it returns an error rather than blocking.
-func AcquireLock() (*RunLock, error) {
+func AcquireLock(op string) (*RunLock, error) {
 	if err := os.MkdirAll(InsightsDir(), 0o755); err != nil {
 		return nil, err
 	}
@@ -31,7 +32,7 @@ func AcquireLock() (*RunLock, error) {
 	// Body is human diagnostics only; the flock — not this content — is the lock.
 	f.Truncate(0)
 	f.Seek(0, 0)
-	fmt.Fprintf(f, "{\"pid\":%d,\"started\":%q}\n", os.Getpid(), time.Now().UTC().Format(time.RFC3339))
+	fmt.Fprintf(f, "{\"pid\":%d,\"started\":%q,\"op\":%q}\n", os.Getpid(), time.Now().UTC().Format(time.RFC3339), op)
 	return &RunLock{f: f}, nil
 }
 
@@ -89,4 +90,25 @@ func LockHeld() bool {
 	}
 	syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 	return false
+}
+
+// HeldOp returns the op recorded by the current lock holder ("analyze" or
+// "synthesize"), or "" when no run holds the lock or the body is unreadable.
+// A stale body with a free flock reports "" — the flock, not the body, is
+// the source of truth for "held".
+func HeldOp() string {
+	if !LockHeld() {
+		return ""
+	}
+	b, err := os.ReadFile(lockPath())
+	if err != nil {
+		return ""
+	}
+	var body struct {
+		Op string `json:"op"`
+	}
+	if err := json.Unmarshal(b, &body); err != nil {
+		return ""
+	}
+	return body.Op
 }
