@@ -24,9 +24,11 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["type", "statement", "evidence_ids", "theme_refs", "cited_quotes"],
+        "required": ["type", "title", "statement", "evidence_ids", "theme_refs", "cited_quotes"],
         "properties": {
           "type": {"type": "string", "enum": ["claude_md_rule", "new_skill", "hook", "setting", "habit"]},
+          "title": {"type": "string", "minLength": 1,
+            "description": "Imperative browsing handle, at most 40 characters, no trailing period, no numbers."},
           "statement": {"type": "string"},
           "evidence_ids": {"type": "array", "items": {"type": "string"}},
           "theme_refs": {"type": "array", "items": {"type": "integer"}},

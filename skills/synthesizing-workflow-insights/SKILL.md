@@ -29,6 +29,7 @@ inefficiency signals (`G*`), and context rollups. Produce a `RawSynthesis` JSON.
 
 ## Recommendations
 - `type` ∈ `claude_md_rule | new_skill | hook | setting | habit`.
+- Every recommendation carries a `title`: an imperative short handle for browsing (e.g. "Verify before claiming done") — at most 40 characters, no trailing period, no numbers or counts (Go computes all numbers; a bound that is part of the practice belongs in the statement, not the title), distinct from every other title in this output, and front-loaded so it stays meaningful truncated to ~30 characters. The title names the practice; every evidenced qualifier stays in `statement` (Statement fidelity applies there).
 - `claude_md_rule`: ground in `P*` (a stated standing preference) and/or `F*` (friction the rule would prevent). Cluster near-identical standing preferences across sessions into one rule, citing the cluster exhaustively — every `P*` that states the practice and every `F*` the rule would have prevented (`P*`/`F*` only in `evidence_ids` here); an undercited rule understates its real support. Every recurring standing-preference cluster surfaces as a recommendation — do not drop a recurring preference because friction themes loom larger.
 - `hook`/`setting`: when a friction item shows a defect that shipped or was committed and a mechanical guard would have blocked it, recommend the guard — a single incident is enough evidence; recurrence is not required for prevention.
 - Link each recommendation to its theme(s) via `theme_refs` (0-based index into `themes`).
