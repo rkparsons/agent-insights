@@ -26,9 +26,11 @@
       "recommendations": [
         {
           "type": "habit",
+          "title": "Run the smoke test first",
           "statement": "Run the smoke test before declaring a task done",
           "theme_refs": [1],
           "session_count": 4,
+          "last_seen": "2026-07-30",
           "quotes": ["\"builds pass but I never actually ran it\""],
           "already_adopted": "no",
           "audience": "user",

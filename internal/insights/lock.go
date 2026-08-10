@@ -92,8 +92,8 @@ func LockHeld() bool {
 	return false
 }
 
-// HeldOp returns the op recorded by the current lock holder ("analyze" or
-// "synthesize"), or "" when no run holds the lock or the body is unreadable.
+// HeldOp returns the op recorded by the current lock holder ("analyze",
+// "synthesize", or "enrich"), or "" when no run holds the lock or the body is unreadable.
 // A stale body with a free flock reports "" — the flock, not the body, is
 // the source of truth for "held".
 func HeldOp() string {

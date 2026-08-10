@@ -37,9 +37,11 @@ func synthesisToJSON(s RepoSynthesis) insights.SynthesisJSON {
 	for _, r := range s.Recommendations {
 		recs = append(recs, insights.RecommendationJSON{
 			Type:           r.Type,
+			Title:          r.Title,
 			Statement:      r.Statement,
 			ThemeRefs:      nonNil(r.ThemeRefs),
 			SessionCount:   r.SessionCount,
+			LastSeen:       r.LastSeen,
 			Quotes:         nonNil(r.Quotes),
 			AlreadyAdopted: r.AlreadyAdopted,
 			Audience:       r.Audience,

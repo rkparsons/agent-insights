@@ -14,7 +14,7 @@ type StatusJSON struct {
 	StoreRoot     string       `json:"store_root"`
 	LogPath       string       `json:"log_path"`
 	Running       bool         `json:"running"`
-	RunningOp     string       `json:"running_op,omitempty"` // "analyze" | "synthesize"; set only while running
+	RunningOp     string       `json:"running_op,omitempty"` // "analyze" | "synthesize" | "enrich"; set only while running
 	DueRepos      []string     `json:"due_repos"`
 	ActedKeys     []string     `json:"acted_keys"`
 	LastRun       *LastRunJSON `json:"last_run,omitempty"`
@@ -90,9 +90,11 @@ type ThemeJSON struct {
 // so the TUI (and any other consumer) never reimplements the hash.
 type RecommendationJSON struct {
 	Type           string   `json:"type"`
+	Title          string   `json:"title,omitempty"`
 	Statement      string   `json:"statement"`
 	ThemeRefs      []int    `json:"theme_refs"`
 	SessionCount   int      `json:"session_count"`
+	LastSeen       string   `json:"last_seen,omitempty"`
 	Quotes         []string `json:"quotes"`
 	AlreadyAdopted string   `json:"already_adopted"`
 	Audience       string   `json:"audience,omitempty"`

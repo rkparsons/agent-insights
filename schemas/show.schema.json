@@ -59,9 +59,11 @@
       "required": ["type", "statement", "theme_refs", "session_count", "quotes", "already_adopted", "acted_key"],
       "properties": {
         "type": { "type": "string" },
+        "title": { "type": "string" },
         "statement": { "type": "string" },
         "theme_refs": { "type": "array", "items": { "type": "integer" } },
         "session_count": { "type": "integer" },
+        "last_seen": { "type": "string" },
         "quotes": { "type": "array", "items": { "type": "string" } },
         "already_adopted": { "type": "string" },
         "audience": { "type": "string" },
