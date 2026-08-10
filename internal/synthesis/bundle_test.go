@@ -1,6 +1,8 @@
 package synthesis
 
 import (
+	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -181,5 +183,33 @@ func TestMechanicalFrictionSignalEmitted(t *testing.T) {
 	}
 	if found.Magnitude != 3 || len(found.MemberSessions) != 3 {
 		t.Errorf("signal = %+v, want magnitude 3", found)
+	}
+}
+
+func TestBuildBundleSessionDates(t *testing.T) {
+	group := []insights.AgentSessionAnalysis{
+		{Stats: insights.AgentSessionStats{SessionID: "00000000-0000-4000-8000-000000000001",
+			Start: time.Date(2026, 7, 3, 10, 0, 0, 0, time.UTC)}},
+		{Stats: insights.AgentSessionStats{SessionID: "00000000-0000-4000-8000-000000000002",
+			Start: time.Date(2026, 7, 9, 22, 30, 0, 0, time.UTC)}},
+	}
+	b := BuildBundle("r", group)
+	want := map[string]string{
+		"00000000-0000-4000-8000-000000000001": "2026-07-03",
+		"00000000-0000-4000-8000-000000000002": "2026-07-09",
+	}
+	if !reflect.DeepEqual(b.SessionDates, want) {
+		t.Errorf("SessionDates = %v, want %v", b.SessionDates, want)
+	}
+	data, err := json.Marshal(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rt EvidenceBundle
+	if err := json.Unmarshal(data, &rt); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(rt.SessionDates, want) {
+		t.Errorf("SessionDates lost in JSON round-trip: %v", rt.SessionDates)
 	}
 }

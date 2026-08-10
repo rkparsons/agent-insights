@@ -59,6 +59,7 @@ type EvidenceBundle struct {
 	Success       []SuccessItem  `json:"success"`
 	Signals       []OppSignal    `json:"signals"`
 	Context       ContextRollup  `json:"context"`
+	SessionDates  map[string]string `json:"session_dates,omitempty"`
 }
 
 // BuildBundle turns a repo's analyses into an EvidenceBundle: typed-id items sorted
@@ -77,8 +78,10 @@ func BuildBundle(repoKey string, group []insights.AgentSessionAnalysis) Evidence
 
 	b := EvidenceBundle{Repo: repoKey, AnalyzedCount: len(sorted), SessionCount: len(sorted)}
 	b.Context = ContextRollup{Skills: map[string]int{}, SessionTypes: map[string]int{}, ToolMix: map[string]int{}}
+	b.SessionDates = map[string]string{}
 
 	for _, a := range sorted {
+		b.SessionDates[a.Stats.SessionID] = a.Stats.Start.Format("2006-01-02")
 		for _, inc := range a.FrictionIncidents {
 			b.Friction = append(b.Friction, FrictionItem{
 				ID: fmt.Sprintf("F%d", len(b.Friction)+1), Type: inc.Type, OneLine: inc.OneLine,

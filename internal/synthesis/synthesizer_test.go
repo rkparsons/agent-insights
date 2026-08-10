@@ -95,3 +95,21 @@ func TestNewSynthesizeCommandRejectsEmptyWorkDir(t *testing.T) {
 		t.Fatal("expected the synthesizer to refuse to run without a workdir")
 	}
 }
+
+func TestSynthesizeStdinOmitsSessionDates(t *testing.T) {
+	var captured []byte
+	s := claudeSynthesizer{run: func(ctx context.Context, stdin []byte) ([]byte, error) {
+		captured = stdin
+		return []byte(`{"is_error":false,"result":"","structured_output":{"themes":[],"recommendations":[]}}`), nil
+	}}
+	b := EvidenceBundle{Repo: "r", SessionDates: map[string]string{"00000000-0000-4000-8000-000000000001": "2026-07-03"}}
+	if _, err := s.Synthesize(context.Background(), b); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(captured), "session_dates") {
+		t.Errorf("stdin payload leaked session_dates: %s", captured)
+	}
+	if strings.Contains(string(captured), "2026-07-03") {
+		t.Errorf("stdin payload leaked a session date: %s", captured)
+	}
+}
