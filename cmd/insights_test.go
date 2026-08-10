@@ -123,6 +123,22 @@ func TestParseSynthesizeArgsLog(t *testing.T) {
 	}
 }
 
+func TestParseEnrichArgs(t *testing.T) {
+	opts, err := parseEnrichArgs([]string{"--repo", "alpha", "--dry-run", "--timeout", "5m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.Repo != "alpha" || !opts.DryRun || opts.Timeout != 5*time.Minute {
+		t.Errorf("opts = %+v", opts)
+	}
+	if _, err := parseEnrichArgs([]string{"--bogus"}); err == nil {
+		t.Error("expected error for unknown flag")
+	}
+	if _, err := parseEnrichArgs([]string{"--timeout"}); err == nil {
+		t.Error("expected error for missing value")
+	}
+}
+
 // TestRunStatusJSON runs `insights status --json` end to end against a temp
 // store and checks the stdout payload parses as StatusJSON with the
 // contract's schema_version. No analyses/syntheses exist in the temp store,

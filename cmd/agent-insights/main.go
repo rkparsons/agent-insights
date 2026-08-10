@@ -10,7 +10,7 @@ import (
 	"github.com/rkparsons/agent-insights/cmd"
 )
 
-const usage = "usage: agent-insights backfill|analyze|synthesize|status|show|acted|unacted|eval ..."
+const usage = "usage: agent-insights backfill|analyze|synthesize|enrich|status|show|acted|unacted|eval ..."
 
 func main() {
 	if len(os.Args) < 2 {

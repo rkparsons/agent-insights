@@ -78,6 +78,7 @@ agent-insights status --json        # store root, due repos, acted keys, last ru
 | `backfill [--quiet-for 24h] [--timeout 10m] [--threshold N] [--force] [--dry-run]` | Layer 1 over all sessions; incremental via stamped transcript mtime, resumable, stops after consecutive failures |
 | `analyze <session-id\|path> [--force]` | Layer 1 for one session |
 | `synthesize [--repo K] [--min-sessions N] [--due] [--dry-run] [--log P]` | Layer 2 per repo |
+| `enrich [--repo K] [--dry-run] [--timeout 10m]` | Backfill `title` + `last_seen` onto stored syntheses (idempotent; one LLM call per snapshot with untitled recommendations) |
 | `status --json` / `show --json` | Stable JSON contracts — schemas in [`schemas/`](schemas/), goldens round-tripped in CI |
 | `acted <key>` / `unacted <key>` | Mark a recommendation adopted so it stops resurfacing |
 | `eval <freeze\|outcome\|score\|adjudicate\|probes\|statuses>` | The eval harness, below |
