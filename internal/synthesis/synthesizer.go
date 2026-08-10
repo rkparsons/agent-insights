@@ -64,7 +64,7 @@ type claudeEnvelope struct {
 
 func (s claudeSynthesizer) Synthesize(ctx context.Context, b EvidenceBundle) (RawSynthesis, error) {
 	stdinBundle := b
-	stdinBundle.SessionDates = nil
+	stdinBundle.SessionDates = nil // model must never see dates (it cannot emit numbers)
 	stdin, err := json.Marshal(stdinBundle)
 	if err != nil {
 		return RawSynthesis{}, err

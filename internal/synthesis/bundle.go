@@ -59,7 +59,11 @@ type EvidenceBundle struct {
 	Success       []SuccessItem  `json:"success"`
 	Signals       []OppSignal    `json:"signals"`
 	Context       ContextRollup  `json:"context"`
-	SessionDates  map[string]string `json:"session_dates,omitempty"`
+	// SessionDates maps session_id → start date ("2006-01-02"), formatted
+	// exactly as From/To below. It feeds Finalize's last_seen and must
+	// round-trip JSON (the eval bundle cache marshals the bundle); the LLM
+	// stdin marshal strips it — see claudeSynthesizer.Synthesize.
+	SessionDates map[string]string `json:"session_dates,omitempty"`
 }
 
 // BuildBundle turns a repo's analyses into an EvidenceBundle: typed-id items sorted
