@@ -201,3 +201,93 @@ func TestRunEnrichTitlerFailureStillFillsLastSeen(t *testing.T) {
 		t.Errorf("last_seen not written on titler failure: %+v", got.Recommendations[0])
 	}
 }
+
+// A corrupt/unreadable analyses pool must not be treated like a missing one:
+// filling last_seen from window.to would be permanent (enrich never
+// overwrites a non-empty field), so a re-run after the pool is repaired could
+// never heal a wrong date. Titles are independent of the pool and must still
+// fill.
+func TestRunEnrichCorruptAnalysesPoolSkipsLastSeen(t *testing.T) {
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
+	writeEnrichFixtures(t)
+	analysesDir := filepath.Join(insights.InsightsDir(), "analyses")
+	if err := os.WriteFile(filepath.Join(analysesDir, "corrupt.json"), []byte("{not valid json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	titler := func(ctx context.Context, reqs []TitleReq) (map[int]string, error) {
+		out := map[int]string{}
+		for _, r := range reqs {
+			out[r.Index] = "Title" + strconv.Itoa(r.Index)
+		}
+		return out, nil
+	}
+	sum, err := RunEnrich(context.Background(), titler, EnrichOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.TitlesFilled != 2 {
+		t.Errorf("titles filled = %d, want 2 (titling must proceed despite pool corruption)", sum.TitlesFilled)
+	}
+	if sum.LastSeenFilled != 0 {
+		t.Errorf("last_seen filled = %d, want 0 (pool unreadable this run)", sum.LastSeenFilled)
+	}
+	got, ok := newestInRepoDir(filepath.Join(synthesisDir(), "alpha"))
+	if !ok {
+		t.Fatal("snapshot unreadable after enrich")
+	}
+	if got.Recommendations[0].Title == "" {
+		t.Error("title not filled despite corrupt pool")
+	}
+	if got.Recommendations[0].LastSeen != "" || got.Recommendations[1].LastSeen != "" {
+		t.Errorf("last_seen filled despite corrupt pool: rec0=%+v rec1=%+v", got.Recommendations[0], got.Recommendations[1])
+	}
+}
+
+// A crash between Store's two atomic writes can leave a fully-enriched JSON
+// paired with a stale .md forever, since the skip-when-nothing-missing check
+// only reads the JSON. A second run must notice and heal the .md without
+// re-titling (no LLM spend on already-complete data).
+func TestRunEnrichHealsStaleMDWithoutTitling(t *testing.T) {
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
+	writeEnrichFixtures(t)
+	titler := func(ctx context.Context, reqs []TitleReq) (map[int]string, error) {
+		out := map[int]string{}
+		for _, r := range reqs {
+			out[r.Index] = "Title" + strconv.Itoa(r.Index)
+		}
+		return out, nil
+	}
+	if _, err := RunEnrich(context.Background(), titler, EnrichOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	mdFile := filepath.Join(synthesisDir(), "alpha", "2026-07-10.md")
+	if err := os.WriteFile(mdFile, []byte("stale content from a crashed run\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sum, err := RunEnrich(context.Background(),
+		func(ctx context.Context, reqs []TitleReq) (map[int]string, error) {
+			t.Errorf("titler called while healing a fully-enriched snapshot's stale md: %v", reqs)
+			return nil, nil
+		}, EnrichOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.TitlesFilled != 0 || sum.LastSeenFilled != 0 {
+		t.Errorf("summary = %+v, want only the md rewritten (no field changes)", sum)
+	}
+	if sum.Updated != 1 {
+		t.Errorf("Updated = %d, want 1 (md heal counts as an update)", sum.Updated)
+	}
+	got, ok := newestInRepoDir(filepath.Join(synthesisDir(), "alpha"))
+	if !ok {
+		t.Fatal("snapshot unreadable after enrich")
+	}
+	want := Render(got)
+	md, err := os.ReadFile(mdFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(md) != want {
+		t.Errorf("md not healed:\ngot:  %s\nwant: %s", md, want)
+	}
+}

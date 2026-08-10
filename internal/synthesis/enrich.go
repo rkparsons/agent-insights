@@ -55,7 +55,21 @@ func RunEnrich(ctx context.Context, titler Titler, opts EnrichOptions) (EnrichSu
 		defer lock.Release()
 	}
 
-	dates := analysisDates()
+	// A missing pool (fresh install) degrades to window.to fallbacks — legitimate.
+	// Any other read/parse error must not: it could mean the pool is merely
+	// mid-repair, and filling last_seen from window.to would be permanent (enrich
+	// never overwrites a non-empty field), baking in a wrong date forever.
+	dates, err := analysisDates()
+	skipLastSeen := false
+	if err != nil {
+		if os.IsNotExist(err) {
+			dates = map[string]string{}
+		} else {
+			fmt.Fprintf(os.Stderr, "enrich: analyses pool unreadable, skipping last_seen fill this run: %v\n", err)
+			dates = map[string]string{}
+			skipLastSeen = true
+		}
+	}
 
 	base := synthesisDir()
 	repoDirs, err := os.ReadDir(base)
@@ -82,7 +96,7 @@ func RunEnrich(ctx context.Context, titler Titler, opts EnrichOptions) (EnrichSu
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			if err := enrichSnapshot(ctx, filepath.Join(dir, name), dates, titler, opts, &sum); err != nil {
+			if err := enrichSnapshot(ctx, filepath.Join(dir, name), dates, skipLastSeen, titler, opts, &sum); err != nil {
 				return sum, err
 			}
 		}
@@ -90,21 +104,23 @@ func RunEnrich(ctx context.Context, titler Titler, opts EnrichOptions) (EnrichSu
 	return sum, nil
 }
 
-// analysisDates maps session_id → start date over the analyses pool. A
-// missing/empty pool degrades to window.to fallbacks, not an error.
-func analysisDates() map[string]string {
+// analysisDates maps session_id → start date over the analyses pool. Errors
+// are returned rather than swallowed so RunEnrich can tell a missing pool
+// (fresh install, fine to degrade) from an unreadable/corrupt one (must not
+// silently degrade — see RunEnrich).
+func analysisDates() (map[string]string, error) {
 	analyses, err := LoadAnalyses()
 	if err != nil {
-		return map[string]string{}
+		return nil, err
 	}
 	out := make(map[string]string, len(analyses))
 	for _, a := range analyses {
-		out[a.Stats.SessionID] = a.Stats.Start.Format("2006-01-02")
+		out[a.Stats.SessionID] = sessionDate(a.Stats.Start)
 	}
-	return out
+	return out, nil
 }
 
-func enrichSnapshot(ctx context.Context, path string, dates map[string]string, titler Titler, opts EnrichOptions, sum *EnrichSummary) error {
+func enrichSnapshot(ctx context.Context, path string, dates map[string]string, skipLastSeen bool, titler Titler, opts EnrichOptions, sum *EnrichSummary) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -127,7 +143,10 @@ func enrichSnapshot(ctx context.Context, path string, dates map[string]string, t
 		}
 	}
 	if missingSeen == 0 && missingTitle == 0 {
-		return nil
+		if opts.DryRun {
+			return nil
+		}
+		return healStaleMD(path, s, sum)
 	}
 	if opts.DryRun {
 		fmt.Fprintf(os.Stderr, "enrich (dry-run): %s · %d missing titles · %d missing last_seen\n", path, missingTitle, missingSeen)
@@ -135,28 +154,30 @@ func enrichSnapshot(ctx context.Context, path string, dates map[string]string, t
 	}
 
 	titles, lastSeens := 0, 0
-	for i := range s.Recommendations {
-		r := &s.Recommendations[i]
-		if r.LastSeen != "" {
-			continue
-		}
-		max := ""
-		for _, ref := range r.ThemeRefs {
-			if ref < 0 || ref >= len(s.Themes) {
+	if !skipLastSeen {
+		for i := range s.Recommendations {
+			r := &s.Recommendations[i]
+			if r.LastSeen != "" {
 				continue
 			}
-			for _, sid := range s.Themes[ref].SessionIDs {
-				if d := dates[sid]; d > max {
-					max = d
+			max := ""
+			for _, ref := range r.ThemeRefs {
+				if ref < 0 || ref >= len(s.Themes) {
+					continue
+				}
+				for _, sid := range s.Themes[ref].SessionIDs {
+					if d := dates[sid]; d > max {
+						max = d
+					}
 				}
 			}
-		}
-		if max == "" {
-			max = s.Window.To
-		}
-		if max != "" {
-			r.LastSeen = max
-			lastSeens++
+			if max == "" {
+				max = s.Window.To
+			}
+			if max != "" {
+				r.LastSeen = max
+				lastSeens++
+			}
 		}
 	}
 
@@ -204,12 +225,48 @@ func enrichSnapshot(ctx context.Context, path string, dates map[string]string, t
 		fmt.Fprintf(os.Stderr, "enrich: %s BLOCKED by privacy scan: %v\n", path, leaks)
 		return nil
 	}
-	date := strings.TrimSuffix(filepath.Base(path), ".json")
-	if err := Store(s, md, date); err != nil {
+	// Write back to the exact path that was read, not Store's dir re-derived
+	// from s.Repo — a mismatched repo field would otherwise fork the snapshot
+	// into a second location that gets re-titled (LLM spend) on every future run.
+	data, err = json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := atomicWrite(path, data); err != nil {
+		return err
+	}
+	if err := atomicWrite(mdPath(path), []byte(md)); err != nil {
 		return err
 	}
 	sum.Updated++
 	sum.TitlesFilled += titles
 	sum.LastSeenFilled += lastSeens
+	return nil
+}
+
+// mdPath derives a snapshot's sibling .md path from its .json path (Store
+// writes them as a pair under the same date stem).
+func mdPath(jsonPath string) string {
+	return strings.TrimSuffix(jsonPath, ".json") + ".md"
+}
+
+// healStaleMD re-renders an already-fully-enriched snapshot's markdown and
+// rewrites it if it drifted from the JSON — e.g. a crash between Store's two
+// atomic writes left a stale .md that the missing-field check above can never
+// notice (it only reads the JSON).
+func healStaleMD(path string, s RepoSynthesis, sum *EnrichSummary) error {
+	md := Render(s)
+	mp := mdPath(path)
+	if onDisk, err := os.ReadFile(mp); err == nil && string(onDisk) == md {
+		return nil
+	}
+	if leaks := scanReport(md); len(leaks) > 0 {
+		fmt.Fprintf(os.Stderr, "enrich: %s BLOCKED md heal by privacy scan: %v\n", path, leaks)
+		return nil
+	}
+	if err := atomicWrite(mp, []byte(md)); err != nil {
+		return err
+	}
+	sum.Updated++
 	return nil
 }

@@ -46,6 +46,15 @@ func TestSynthesizeEndToEnd(t *testing.T) {
 	if len(rs.Recommendations) != 1 || rs.Recommendations[0].AlreadyAdopted != "no" {
 		t.Errorf("recs = %+v", rs.Recommendations)
 	}
+	if rs.Recommendations[0].Title != "Investigate before coding" {
+		t.Errorf("title = %q, want %q", rs.Recommendations[0].Title, "Investigate before coding")
+	}
+	// s1 and s2 both start 2026-06-01 (see frictionAnalysis); the rec cites only
+	// F1 (s1), so last_seen must come from the bundle's session dates for s1,
+	// not s2 or the window bound — this closes the BuildBundle->Finalize join.
+	if rs.Recommendations[0].LastSeen != "2026-06-01" {
+		t.Errorf("last_seen = %q, want %q", rs.Recommendations[0].LastSeen, "2026-06-01")
+	}
 	if report.RawQuoteDropRate != 0 {
 		t.Errorf("drop rate = %v, want 0 (all quotes verbatim)", report.RawQuoteDropRate)
 	}

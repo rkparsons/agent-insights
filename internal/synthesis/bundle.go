@@ -4,9 +4,15 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/rkparsons/agent-insights/internal/insights"
 )
+
+// sessionDate is the single date format shared by BuildBundle's SessionDates/
+// From/To and enrich's analysisDates — the spec pins all three to this exact
+// call, so they must never drift apart.
+func sessionDate(t time.Time) string { return t.Format("2006-01-02") }
 
 const signalFloor = 3
 
@@ -85,7 +91,7 @@ func BuildBundle(repoKey string, group []insights.AgentSessionAnalysis) Evidence
 	b.SessionDates = map[string]string{}
 
 	for _, a := range sorted {
-		b.SessionDates[a.Stats.SessionID] = a.Stats.Start.Format("2006-01-02")
+		b.SessionDates[a.Stats.SessionID] = sessionDate(a.Stats.Start)
 		for _, inc := range a.FrictionIncidents {
 			b.Friction = append(b.Friction, FrictionItem{
 				ID: fmt.Sprintf("F%d", len(b.Friction)+1), Type: inc.Type, OneLine: inc.OneLine,
@@ -112,8 +118,8 @@ func BuildBundle(repoKey string, group []insights.AgentSessionAnalysis) Evidence
 		}
 	}
 	if len(sorted) > 0 {
-		b.From = sorted[0].Stats.Start.Format("2006-01-02")
-		b.To = sorted[len(sorted)-1].Stats.Start.Format("2006-01-02")
+		b.From = sessionDate(sorted[0].Stats.Start)
+		b.To = sessionDate(sorted[len(sorted)-1].Stats.Start)
 	}
 	b.Signals = computeSignals(sorted)
 	return b

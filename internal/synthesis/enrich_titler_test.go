@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -47,5 +48,78 @@ func TestTitlerFromRunnerErrors(t *testing.T) {
 		if _, err := titler(context.Background(), []TitleReq{{Index: 0, Statement: "s"}}); err == nil {
 			t.Errorf("%s: expected error", name)
 		}
+	}
+}
+
+// A model that answers with array positions instead of the requested indices
+// must never silently attach a title to the wrong recommendation.
+func TestTitlerFromRunnerRejectsIndexMismatch(t *testing.T) {
+	run := func(ctx context.Context, stdin []byte) ([]byte, error) {
+		return []byte(`{"is_error":false,"result":"","structured_output":{"titles":[{"index":0,"title":"a"},{"index":1,"title":"b"},{"index":2,"title":"c"}]}}`), nil
+	}
+	titler := titlerFromRunner(run)
+	_, err := titler(context.Background(), []TitleReq{
+		{Index: 1, Statement: "x"},
+		{Index: 3, Statement: "y"},
+		{Index: 5, Statement: "z"},
+	})
+	if err == nil {
+		t.Fatal("expected error on index-set mismatch (response used array positions 0,1,2, not requested indices 1,3,5)")
+	}
+}
+
+func TestTitlerFromRunnerRejectsDuplicateIndex(t *testing.T) {
+	run := func(ctx context.Context, stdin []byte) ([]byte, error) {
+		return []byte(`{"is_error":false,"result":"","structured_output":{"titles":[{"index":0,"title":"a"},{"index":0,"title":"b"}]}}`), nil
+	}
+	titler := titlerFromRunner(run)
+	if _, err := titler(context.Background(), []TitleReq{{Index: 0, Statement: "x"}}); err == nil {
+		t.Fatal("expected error on duplicate index")
+	}
+}
+
+func TestTitlerFromRunnerRejectsMissingIndex(t *testing.T) {
+	run := func(ctx context.Context, stdin []byte) ([]byte, error) {
+		return []byte(`{"is_error":false,"result":"","structured_output":{"titles":[{"index":0,"title":"a"}]}}`), nil
+	}
+	titler := titlerFromRunner(run)
+	if _, err := titler(context.Background(), []TitleReq{{Index: 0, Statement: "x"}, {Index: 1, Statement: "y"}}); err == nil {
+		t.Fatal("expected error on missing index (requested 0,1, got only 0)")
+	}
+}
+
+func TestNewTitleCommandPinsConfigDirAndCwd(t *testing.T) {
+	cmd, err := newTitleCommand(context.Background(), nil, "/tmp/cfg", "/tmp/work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cmd.Dir != "/tmp/work" {
+		t.Fatalf("Dir = %q", cmd.Dir)
+	}
+	if !slices.Contains(cmd.Env, "CLAUDE_CONFIG_DIR=/tmp/cfg") {
+		t.Fatal("env missing pinned CLAUDE_CONFIG_DIR")
+	}
+	// An unpinned config dir stays inherited (production); the workdir never can.
+	inherited, err := newTitleCommand(context.Background(), nil, "", "/tmp/work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kv := range inherited.Env {
+		if kv == "CLAUDE_CONFIG_DIR=" {
+			t.Fatal("unpinned command must not append an empty CLAUDE_CONFIG_DIR")
+		}
+	}
+}
+
+// The nested claude resolves project config from its cwd, so an empty workDir
+// is a wiring bug that must fail loudly rather than run against whatever
+// config is ambient in the caller's cwd.
+func TestNewTitleCommandRejectsEmptyWorkDir(t *testing.T) {
+	if _, err := newTitleCommand(context.Background(), nil, "/tmp/cfg", ""); err == nil {
+		t.Fatal("expected an error for an empty workDir")
+	}
+	titler := NewClaudeTitler("")
+	if _, err := titler(context.Background(), []TitleReq{{Index: 0, Statement: "s"}}); err == nil {
+		t.Fatal("expected the titler to refuse to run without a workdir")
 	}
 }
