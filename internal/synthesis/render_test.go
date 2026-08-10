@@ -92,3 +92,21 @@ func TestRenderAlreadyAdoptedBranch(t *testing.T) {
 		t.Error("fresh recommendation must not render under ## Already in place (reinforce?)")
 	}
 }
+
+func TestRenderRecommendationTitles(t *testing.T) {
+	s := RepoSynthesis{Repo: "r", Recommendations: []Recommendation{
+		{Type: "habit", Title: "Verify before claiming done", Statement: "Always verify.", SessionCount: 2},
+		{Type: "hook", Statement: "Untitled legacy rec", SessionCount: 1},
+		{Type: "habit", Title: "Adopted handle", Statement: "Adopted one.", AlreadyAdopted: "yes"},
+	}}
+	md := Render(s)
+	for _, want := range []string{
+		"- `[habit]` **Verify before claiming done** — Always verify. (evidence: 2 sessions)",
+		"- `[hook]` Untitled legacy rec (evidence: 1 sessions)",
+		"- `[habit]` **Adopted handle** — Adopted one.",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("render missing %q in:\n%s", want, md)
+		}
+	}
+}

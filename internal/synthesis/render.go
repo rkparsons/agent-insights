@@ -35,14 +35,22 @@ func Render(s RepoSynthesis) string {
 	if len(newRecs) > 0 {
 		b.WriteString("## Recommendations\n\n")
 		for _, r := range newRecs {
-			fmt.Fprintf(&b, "- `[%s]` %s (evidence: %d sessions)\n", r.Type, redactNumbers(r.Statement), r.SessionCount)
+			if r.Title != "" {
+				fmt.Fprintf(&b, "- `[%s]` **%s** — %s (evidence: %d sessions)\n", r.Type, redactNumbers(r.Title), redactNumbers(r.Statement), r.SessionCount)
+			} else {
+				fmt.Fprintf(&b, "- `[%s]` %s (evidence: %d sessions)\n", r.Type, redactNumbers(r.Statement), r.SessionCount)
+			}
 		}
 		b.WriteString("\n")
 	}
 	if len(adopted) > 0 {
 		b.WriteString("## Already in place (reinforce?)\n\n")
 		for _, r := range adopted {
-			fmt.Fprintf(&b, "- `[%s]` %s\n", r.Type, redactNumbers(r.Statement))
+			if r.Title != "" {
+				fmt.Fprintf(&b, "- `[%s]` **%s** — %s\n", r.Type, redactNumbers(r.Title), redactNumbers(r.Statement))
+			} else {
+				fmt.Fprintf(&b, "- `[%s]` %s\n", r.Type, redactNumbers(r.Statement))
+			}
 		}
 		b.WriteString("\n")
 	}
