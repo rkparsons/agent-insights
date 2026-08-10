@@ -17,9 +17,11 @@ type Theme struct {
 }
 type Recommendation struct {
 	Type           string   `json:"type"`
+	Title          string   `json:"title,omitempty"`
 	Statement      string   `json:"statement"`
 	ThemeRefs      []int    `json:"theme_refs"`
 	SessionCount   int      `json:"session_count"`
+	LastSeen       string   `json:"last_seen,omitempty"` // max evidence-session start date, "2006-01-02"
 	Quotes         []string `json:"quotes"`
 	AlreadyAdopted string   `json:"already_adopted"`
 	Audience       string   `json:"audience,omitempty"` // must survive the verify-cache round-trip

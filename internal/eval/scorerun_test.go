@@ -250,7 +250,7 @@ func TestScoreRefusesRecordWithSynthesisHardErrors(t *testing.T) {
 	_, opts := buildScoreFixture(t)
 	fs := &fakeSynth{raw: synthesis.RawSynthesis{
 		Themes: []synthesis.RawTheme{{Title: "T", Kind: "friction", Summary: "s", EvidenceIDs: []string{"F1"}}},
-		Recommendations: []synthesis.RawRec{{Type: "workflow_change",
+		Recommendations: []synthesis.RawRec{{Type: "workflow_change", Title: "Retry failed runs",
 			Statement: "retry failed runs 3 times", EvidenceIDs: []string{"F1"}}},
 	}}
 	opts.Synth = fs

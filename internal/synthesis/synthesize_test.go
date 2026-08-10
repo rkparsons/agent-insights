@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -27,7 +28,7 @@ func TestSynthesizeEndToEnd(t *testing.T) {
 	fake := fakeSynth{raw: RawSynthesis{
 		Themes: []RawTheme{{Title: "Investigate first", Kind: "friction", EvidenceIDs: []string{"F1", "F2"},
 			Summary: "asks what the codebase answers", CitedQuotes: []string{"investigate the existing pattern first"}}},
-		Recommendations: []RawRec{{Type: "claude_md_rule", Statement: "Investigate existing patterns before writing new code",
+		Recommendations: []RawRec{{Type: "claude_md_rule", Title: "Investigate before coding", Statement: "Investigate existing patterns before writing new code",
 			EvidenceIDs: []string{"F1"}, ThemeRefs: []int{0}, CitedQuotes: []string{"investigate the existing pattern first"}, Audience: "orchestrator"}},
 	}}
 	adopt := func(r Recommendation) string { return "no" }
@@ -84,7 +85,7 @@ func TestSynthesizeDropsNonPoolQuotes(t *testing.T) {
 func TestSynthesizeClaudeMdRuleRejectsSuccessOnlyEvidence(t *testing.T) {
 	group := []insights.AgentSessionAnalysis{frictionAnalysis("s1", "investigate the existing pattern first", "apps/api/a.ts")}
 	fake := fakeSynth{raw: RawSynthesis{
-		Recommendations: []RawRec{{Type: "claude_md_rule", Statement: "Always write tests first", EvidenceIDs: []string{"S1"}}},
+		Recommendations: []RawRec{{Type: "claude_md_rule", Title: "Write tests first", Statement: "Always write tests first", EvidenceIDs: []string{"S1"}}},
 	}}
 	adopt := func(r Recommendation) string { return "unknown" }
 
@@ -100,7 +101,7 @@ func TestSynthesizeClaudeMdRuleRejectsSuccessOnlyEvidence(t *testing.T) {
 func TestSynthesizeClaudeMdRuleAcceptsPrefEvidence(t *testing.T) {
 	group := []insights.AgentSessionAnalysis{prefAnalysis("s1", "no bloat", "please avoid bloat in this codebase")}
 	fake := fakeSynth{raw: RawSynthesis{
-		Recommendations: []RawRec{{Type: "claude_md_rule", Statement: "Avoid unnecessary bloat", EvidenceIDs: []string{"P1"}, Audience: "both"}},
+		Recommendations: []RawRec{{Type: "claude_md_rule", Title: "Avoid bloat", Statement: "Avoid unnecessary bloat", EvidenceIDs: []string{"P1"}, Audience: "both"}},
 	}}
 	adopt := func(r Recommendation) string { return "unknown" }
 
@@ -116,7 +117,7 @@ func TestSynthesizeClaudeMdRuleAcceptsPrefEvidence(t *testing.T) {
 func TestPrefCountDistinct(t *testing.T) {
 	group := []insights.AgentSessionAnalysis{prefAnalysis("s1", "no bloat", "please avoid bloat in this codebase")}
 	fake := fakeSynth{raw: RawSynthesis{
-		Recommendations: []RawRec{{Type: "claude_md_rule", Statement: "Avoid unnecessary bloat", EvidenceIDs: []string{"P1", "P1"}}},
+		Recommendations: []RawRec{{Type: "claude_md_rule", Title: "Skip the bloat", Statement: "Avoid unnecessary bloat", EvidenceIDs: []string{"P1", "P1"}}},
 	}}
 	adopt := func(r Recommendation) string { return "unknown" }
 
@@ -160,7 +161,7 @@ func TestRankThemesWithinKind(t *testing.T) {
 func TestSynthesizeQuantitativeClaimInRecommendation(t *testing.T) {
 	group := []insights.AgentSessionAnalysis{frictionAnalysis("s1", "investigate the existing pattern first", "apps/api/a.ts")}
 	fake := fakeSynth{raw: RawSynthesis{
-		Recommendations: []RawRec{{Type: "claude_md_rule", Statement: "Do this because it happened in 12 sessions", EvidenceIDs: []string{"F1"}}},
+		Recommendations: []RawRec{{Type: "claude_md_rule", Title: "Do this consistently", Statement: "Do this because it happened in 12 sessions", EvidenceIDs: []string{"F1"}}},
 	}}
 	adopt := func(r Recommendation) string { return "unknown" }
 
@@ -211,11 +212,11 @@ func TestAudienceValidation(t *testing.T) {
 		rec      RawRec
 		wantHard bool
 	}{
-		{"claude_md_rule with valid audience", RawRec{Type: "claude_md_rule", Statement: "s", EvidenceIDs: []string{"P1"}, Audience: "subagents"}, false},
-		{"claude_md_rule missing audience", RawRec{Type: "claude_md_rule", Statement: "s", EvidenceIDs: []string{"P1"}}, true},
-		{"invalid audience value", RawRec{Type: "habit", Statement: "s", Audience: "everyone"}, true},
-		{"non-rule without audience is fine", RawRec{Type: "habit", Statement: "s"}, false},
-		{"user audience valid", RawRec{Type: "new_skill", Statement: "s", Audience: "user"}, false},
+		{"claude_md_rule with valid audience", RawRec{Type: "claude_md_rule", Title: "Valid audience", Statement: "s", EvidenceIDs: []string{"P1"}, Audience: "subagents"}, false},
+		{"claude_md_rule missing audience", RawRec{Type: "claude_md_rule", Title: "Missing audience", Statement: "s", EvidenceIDs: []string{"P1"}}, true},
+		{"invalid audience value", RawRec{Type: "habit", Title: "Invalid audience", Statement: "s", Audience: "everyone"}, true},
+		{"non-rule without audience is fine", RawRec{Type: "habit", Title: "No audience needed", Statement: "s"}, false},
+		{"user audience valid", RawRec{Type: "new_skill", Title: "User audience", Statement: "s", Audience: "user"}, false},
 	}
 	for _, c := range cases {
 		rs, rep := Finalize("r", b, RawSynthesis{Recommendations: []RawRec{c.rec}}, adopt, time.Unix(0, 0).UTC())
@@ -260,5 +261,93 @@ func TestDetailExemplarsQuotable(t *testing.T) {
 	}
 	if len(rs.Themes[0].Quotes) != 1 {
 		t.Errorf("detail exemplar quote was dropped: %+v", rs.Themes[0])
+	}
+}
+
+func TestNormalizeTitle(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"Verify before claiming done.", "Verify before claiming done"},
+		{"  Verify   before\tclaiming done ", "Verify before claiming done"},
+		{"Trailing periods only once..", "Trailing periods only once."},
+		{"", ""},
+		{" . ", ""},
+	}
+	for _, c := range cases {
+		if got := normalizeTitle(c.in); got != c.want {
+			t.Errorf("normalizeTitle(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestFinalizeTitles(t *testing.T) {
+	b := EvidenceBundle{Repo: "r"}
+	raw := RawSynthesis{Recommendations: []RawRec{
+		{Type: "habit", Statement: "Do the thing", Title: "Do the thing first."},
+		{Type: "habit", Statement: "Another practice", Title: ""},
+		{Type: "habit", Statement: "Long one", Title: "This title is way over the forty character budget"},
+		{Type: "habit", Statement: "Dup A", Title: "Same handle"},
+		{Type: "habit", Statement: "Dup B", Title: "same handle"},
+	}}
+	rs, report := Finalize("r", b, raw, func(Recommendation) string { return "unknown" }, time.Now().UTC())
+
+	wantTitles := []string{"Do the thing first", "", "This title is way over the forty character budget", "Same handle", "same handle"}
+	for i, want := range wantTitles {
+		if got := rs.Recommendations[i].Title; got != want {
+			t.Errorf("rec %d title = %q, want %q", i, got, want)
+		}
+	}
+	if len(report.HardErrors) != 0 {
+		t.Errorf("title violations must be soft, got HardErrors %v", report.HardErrors)
+	}
+	wantWarnings := []string{
+		"recommendation missing title: Another practice",
+		"recommendation title over 40 chars: This title is way over the forty character budget",
+		"duplicate recommendation title: same handle",
+	}
+	for _, w := range wantWarnings {
+		if !slices.Contains(rs.Meta.ValidationErrors, w) {
+			t.Errorf("ValidationErrors missing %q; got %v", w, rs.Meta.ValidationErrors)
+		}
+	}
+}
+
+func TestFinalizeTitleQuantitativeClaim(t *testing.T) {
+	raw := RawSynthesis{Recommendations: []RawRec{
+		{Type: "habit", Statement: "s", Title: "Cut 5 sessions of rework"},
+	}}
+	rs, report := Finalize("r", EvidenceBundle{Repo: "r"}, raw, func(Recommendation) string { return "unknown" }, time.Now().UTC())
+	if rs.Recommendations[0].Title != "Cut 5 sessions of rework" {
+		t.Errorf("quantitative title must be kept, got %q", rs.Recommendations[0].Title)
+	}
+	if !slices.Contains(rs.Meta.ValidationErrors, "recommendation title has a quantitative claim: Cut 5 sessions of rework") {
+		t.Errorf("missing quantitative-claim warning; got %v", rs.Meta.ValidationErrors)
+	}
+	if len(report.HardErrors) != 0 {
+		t.Errorf("must be soft, got %v", report.HardErrors)
+	}
+}
+
+func TestFinalizeLastSeen(t *testing.T) {
+	b := EvidenceBundle{
+		Repo: "r",
+		Friction: []FrictionItem{
+			{ID: "F1", SessionID: "00000000-0000-4000-8000-000000000001"},
+			{ID: "F2", SessionID: "00000000-0000-4000-8000-000000000002"},
+		},
+		SessionDates: map[string]string{
+			"00000000-0000-4000-8000-000000000001": "2026-07-01",
+			"00000000-0000-4000-8000-000000000002": "2026-07-09",
+		},
+	}
+	raw := RawSynthesis{Recommendations: []RawRec{
+		{Type: "habit", Statement: "s", Title: "T one", EvidenceIDs: []string{"F1", "F2"}},
+		{Type: "habit", Statement: "s2", Title: "T two", EvidenceIDs: nil},
+	}}
+	rs, _ := Finalize("r", b, raw, func(Recommendation) string { return "unknown" }, time.Now().UTC())
+	if got := rs.Recommendations[0].LastSeen; got != "2026-07-09" {
+		t.Errorf("LastSeen = %q, want 2026-07-09", got)
+	}
+	if got := rs.Recommendations[1].LastSeen; got != "" {
+		t.Errorf("evidence-free rec LastSeen = %q, want empty", got)
 	}
 }

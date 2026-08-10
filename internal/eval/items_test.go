@@ -32,7 +32,7 @@ func scoredFixture() (VerifiedOutput, synthesis.EvidenceBundle) {
 		},
 		Raw: synthesis.RawSynthesis{
 			Themes:          []synthesis.RawTheme{{Title: "Detours"}},
-			Recommendations: []synthesis.RawRec{{Statement: "verify first", EvidenceIDs: []string{"F1", "P1", "G1", "F1", "F9"}}},
+			Recommendations: []synthesis.RawRec{{Title: "Verify first", Statement: "verify first", EvidenceIDs: []string{"F1", "P1", "G1", "F1", "F9"}}},
 		},
 	}
 	return vo, bundle

@@ -10,6 +10,7 @@ type RawTheme struct {
 }
 type RawRec struct {
 	Type        string   `json:"type"`
+	Title       string   `json:"title"`
 	Statement   string   `json:"statement"`
 	EvidenceIDs []string `json:"evidence_ids"`
 	ThemeRefs   []int    `json:"theme_refs"`

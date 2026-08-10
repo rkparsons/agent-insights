@@ -3,6 +3,7 @@ package synthesis
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/rkparsons/agent-insights/internal/insights"
@@ -61,6 +62,8 @@ func Finalize(repoKey string, b EvidenceBundle, raw RawSynthesis, adopt AdoptChe
 
 	var recs []Recommendation
 	prefCount := map[int]int{}
+	var soft []string
+	seenTitles := map[string]bool{}
 	for ri, rr := range raw.Recommendations {
 		if hasQuantitativeClaim(rr.Statement) {
 			hard = append(hard, "recommendation statement contains a number: "+rr.Statement)
@@ -78,11 +81,15 @@ func Finalize(repoKey string, b EvidenceBundle, raw RawSynthesis, adopt AdoptChe
 		if rr.Type == "claude_md_rule" && rr.Audience == "" {
 			hard = append(hard, "claude_md_rule missing audience: "+rr.Statement)
 		}
+		title := normalizeTitle(rr.Title)
+		soft = append(soft, titleWarnings(title, rr.Statement, seenTitles)...)
 		kept, dropped := qi.filter(rr.CitedQuotes)
 		rawCited += len(rr.CitedQuotes)
 		droppedCited += dropped
-		rec := Recommendation{Type: rr.Type, Statement: rr.Statement, ThemeRefs: rr.ThemeRefs, Quotes: kept, Audience: rr.Audience}
-		rec.SessionCount = distinctSessions(b, rr.EvidenceIDs)
+		rec := Recommendation{Type: rr.Type, Title: title, Statement: rr.Statement, ThemeRefs: rr.ThemeRefs, Quotes: kept, Audience: rr.Audience}
+		sessions := distinctSessionSet(b, rr.EvidenceIDs)
+		rec.SessionCount = len(sessions)
+		rec.LastSeen = maxSessionDate(b.SessionDates, sessions)
 		rec.AlreadyAdopted = adopt(rec)
 		recs = append(recs, rec)
 		prefCount[ri] = countP(b, rr.EvidenceIDs)
@@ -97,7 +104,8 @@ func Finalize(repoKey string, b EvidenceBundle, raw RawSynthesis, adopt AdoptChe
 		Window:          Window{From: b.From, To: b.To, SessionCount: b.SessionCount, AnalyzedCount: b.AnalyzedCount},
 		Themes:          themes,
 		Recommendations: recs,
-		Meta:            Meta{Model: synthesisModel, UnthemedFriction: unthemed, ValidationErrors: hard, PrefCountByRec: prefCount},
+		Meta: Meta{Model: synthesisModel, UnthemedFriction: unthemed,
+			ValidationErrors: append(append([]string(nil), hard...), soft...), PrefCountByRec: prefCount},
 	}
 	return rs, ValidationReport{RawQuoteDropRate: rate, HardErrors: hard}
 }
@@ -140,7 +148,7 @@ func isPorF(b EvidenceBundle, id string) bool {
 	return false
 }
 
-func distinctSessions(b EvidenceBundle, ids []string) int {
+func distinctSessionSet(b EvidenceBundle, ids []string) map[string]bool {
 	seen := map[string]bool{}
 	for _, id := range ids {
 		for _, f := range b.Friction {
@@ -159,7 +167,56 @@ func distinctSessions(b EvidenceBundle, ids []string) int {
 			}
 		}
 	}
-	return len(seen)
+	return seen
+}
+
+const maxTitleRunes = 40
+
+// normalizeTitle applies the deterministic half of the title rules: collapse
+// whitespace, strip one trailing period. Length/duplicates are recorded by
+// titleWarnings, never enforced — an imperfect title beats none.
+func normalizeTitle(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	return strings.TrimSuffix(s, ".")
+}
+
+// titleWarnings returns soft quality warnings for a normalized title. These
+// land in Meta.ValidationErrors only — never ValidationReport.HardErrors,
+// which would make `eval score` refuse the record over cosmetics. seen tracks
+// lowercased titles across the synthesis for duplicate detection.
+func titleWarnings(title, statement string, seen map[string]bool) []string {
+	if title == "" {
+		prefix := statement
+		if r := []rune(prefix); len(r) > 60 {
+			prefix = string(r[:60]) + "…"
+		}
+		return []string{"recommendation missing title: " + prefix}
+	}
+	var w []string
+	if len([]rune(title)) > maxTitleRunes {
+		w = append(w, "recommendation title over 40 chars: "+title)
+	}
+	if hasQuantitativeClaim(title) {
+		w = append(w, "recommendation title has a quantitative claim: "+title)
+	}
+	key := strings.ToLower(title)
+	if seen[key] {
+		w = append(w, "duplicate recommendation title: "+title)
+	}
+	seen[key] = true
+	return w
+}
+
+// maxSessionDate returns the lexically-max "2006-01-02" date among sessions,
+// or "" when none resolve. Lexical order == chronological for this format.
+func maxSessionDate(dates map[string]string, sessions map[string]bool) string {
+	max := ""
+	for sid := range sessions {
+		if d := dates[sid]; d > max {
+			max = d
+		}
+	}
+	return max
 }
 
 func countP(b EvidenceBundle, ids []string) int {
