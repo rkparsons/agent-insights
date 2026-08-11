@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -86,17 +85,10 @@ func RunEnrich(ctx context.Context, titler Titler, opts EnrichOptions) (EnrichSu
 			continue
 		}
 		dir := filepath.Join(base, rd.Name())
-		entries, err := os.ReadDir(dir)
+		names, err := snapshotJSONNames(dir)
 		if err != nil {
 			return sum, err
 		}
-		names := make([]string, 0, len(entries))
-		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") {
-				names = append(names, e.Name())
-			}
-		}
-		sort.Strings(names)
 		for _, name := range names {
 			if err := enrichSnapshot(ctx, filepath.Join(dir, name), dates, skipLastSeen, titler, opts, &sum); err != nil {
 				return sum, err

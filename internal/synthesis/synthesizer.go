@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rkparsons/agent-insights/internal/insights"
 	"github.com/rkparsons/agent-insights/skills"
 )
 
@@ -54,14 +55,6 @@ type claudeSynthesizer struct {
 	schema string
 }
 
-// claudeEnvelope is the `claude -p --output-format json` wrapper. structured_output
-// holds the schema object when --json-schema is used.
-type claudeEnvelope struct {
-	IsError          bool            `json:"is_error"`
-	Result           string          `json:"result"`
-	StructuredOutput json.RawMessage `json:"structured_output"`
-}
-
 func (s claudeSynthesizer) Synthesize(ctx context.Context, b EvidenceBundle) (RawSynthesis, error) {
 	stdinBundle := b
 	stdinBundle.SessionDates = nil // model must never see dates (it cannot emit numbers)
@@ -73,18 +66,12 @@ func (s claudeSynthesizer) Synthesize(ctx context.Context, b EvidenceBundle) (Ra
 	if err != nil {
 		return RawSynthesis{}, fmt.Errorf("synthesis command: %w", err)
 	}
-	var env claudeEnvelope
-	if err := json.Unmarshal(out, &env); err != nil {
-		return RawSynthesis{}, fmt.Errorf("malformed envelope: %w", err)
-	}
-	if env.IsError {
-		return RawSynthesis{}, fmt.Errorf("claude reported is_error: %s", env.Result)
-	}
-	if len(env.StructuredOutput) == 0 || string(env.StructuredOutput) == "null" {
-		return RawSynthesis{}, fmt.Errorf("null/missing structured_output")
+	payload, err := insights.ParseClaudeEnvelope(out)
+	if err != nil {
+		return RawSynthesis{}, err
 	}
 	var raw RawSynthesis
-	if err := json.Unmarshal(env.StructuredOutput, &raw); err != nil {
+	if err := json.Unmarshal(payload, &raw); err != nil {
 		return RawSynthesis{}, fmt.Errorf("structured_output parse: %w", err)
 	}
 	return raw, nil

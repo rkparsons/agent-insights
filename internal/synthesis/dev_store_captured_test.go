@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 type capturedSynthesizer struct{ raw RawSynthesis }
@@ -28,15 +30,12 @@ func TestDevStoreCapturedSynthesis(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var env claudeEnvelope
-	if err := json.Unmarshal(rawFile, &env); err != nil {
-		t.Fatal(err)
-	}
-	if env.IsError || len(env.StructuredOutput) == 0 {
-		t.Fatalf("captured envelope unusable: is_error=%v", env.IsError)
+	payload, err := insights.ParseClaudeEnvelope(rawFile)
+	if err != nil {
+		t.Fatalf("captured envelope unusable: %v", err)
 	}
 	var raw RawSynthesis
-	if err := json.Unmarshal(env.StructuredOutput, &raw); err != nil {
+	if err := json.Unmarshal(payload, &raw); err != nil {
 		t.Fatal(err)
 	}
 	sum, err := RunSynthesize(context.Background(), fixedSynth(capturedSynthesizer{raw: raw}), Options{Repo: repo})

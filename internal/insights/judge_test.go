@@ -95,6 +95,40 @@ func TestJudgeErrorBranches(t *testing.T) {
 	}
 }
 
+func TestParseClaudeEnvelope(t *testing.T) {
+	cases := []struct {
+		name      string
+		out       []byte
+		wantErr   string
+		wantPayld string
+	}{
+		{"empty output", nil, "claude returned empty output", ""},
+		{"whitespace-only output", []byte("   \n"), "claude returned empty output", ""},
+		{"malformed envelope", []byte("{not json"), "parse claude envelope:", ""},
+		{"is_error", []byte(`{"is_error":true,"result":"model failed"}`), "claude reported error: model failed", ""},
+		{"missing structured_output", []byte(`{"is_error":false,"result":"x"}`), "claude envelope missing structured_output", ""},
+		{"null structured_output", []byte(`{"is_error":false,"structured_output":null}`), "claude envelope missing structured_output", ""},
+		{"ok", []byte(`{"is_error":false,"result":"","structured_output":{"a":1}}`), "", `{"a":1}`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			payload, err := ParseClaudeEnvelope(c.out)
+			if c.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+					t.Fatalf("err = %v, want containing %q", err, c.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if string(payload) != c.wantPayld {
+				t.Errorf("payload = %q, want %q", payload, c.wantPayld)
+			}
+		})
+	}
+}
+
 func TestNewClaudeJudgeConfigured(t *testing.T) {
 	j, ok := NewClaudeJudge(t.TempDir()).(claudeJudge)
 	if !ok {

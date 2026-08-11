@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"sort"
 	"time"
+
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 const titlePrompt = `You are given a JSON array of workflow recommendations, each {"index","type","statement"}. Write a short browsing title for each statement: imperative form (e.g. "Verify before claiming done"), at most 40 characters, no trailing period, no numbers or counts, distinct from every other title you produce, front-loaded so it stays meaningful truncated to 30 characters. Return {"titles":[{"index":<same index>,"title":"<title>"}]} covering every input exactly once.`
@@ -86,15 +88,9 @@ func titlerFromRunner(run commandRunner) Titler {
 		if err != nil {
 			return nil, fmt.Errorf("titling command: %w", err)
 		}
-		var env claudeEnvelope
-		if err := json.Unmarshal(out, &env); err != nil {
-			return nil, fmt.Errorf("malformed envelope: %w", err)
-		}
-		if env.IsError {
-			return nil, fmt.Errorf("claude reported is_error: %s", env.Result)
-		}
-		if len(env.StructuredOutput) == 0 || string(env.StructuredOutput) == "null" {
-			return nil, fmt.Errorf("null/missing structured_output")
+		raw, err := insights.ParseClaudeEnvelope(out)
+		if err != nil {
+			return nil, err
 		}
 		var payload struct {
 			Titles []struct {
@@ -102,7 +98,7 @@ func titlerFromRunner(run commandRunner) Titler {
 				Title string `json:"title"`
 			} `json:"titles"`
 		}
-		if err := json.Unmarshal(env.StructuredOutput, &payload); err != nil {
+		if err := json.Unmarshal(raw, &payload); err != nil {
 			return nil, fmt.Errorf("structured_output parse: %w", err)
 		}
 		want := make(map[int]bool, len(reqs))

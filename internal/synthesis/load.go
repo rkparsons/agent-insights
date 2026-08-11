@@ -39,7 +39,7 @@ func LoadSyntheses() ([]RepoSynthesis, error) {
 // newestInRepoDir returns the newest parseable <date>.json in a repo dir.
 // Filenames are YYYY-MM-DD so lexical desc == chronological desc.
 func newestInRepoDir(dir string) (RepoSynthesis, bool) {
-	entries, err := os.ReadDir(dir)
+	names, err := snapshotJSONNames(dir)
 	if err != nil {
 		// A missing dir is a benign race (listed then removed); anything else
 		// (permissions, I/O) silently drops a repo's insights — warn instead.
@@ -48,15 +48,8 @@ func newestInRepoDir(dir string) (RepoSynthesis, bool) {
 		}
 		return RepoSynthesis{}, false
 	}
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") {
-			names = append(names, e.Name())
-		}
-	}
-	sort.Sort(sort.Reverse(sort.StringSlice(names)))
-	for _, name := range names { // newest first; skip malformed
-		data, err := os.ReadFile(filepath.Join(dir, name))
+	for i := len(names) - 1; i >= 0; i-- { // newest first; skip malformed
+		data, err := os.ReadFile(filepath.Join(dir, names[i]))
 		if err != nil {
 			continue
 		}
@@ -67,4 +60,21 @@ func newestInRepoDir(dir string) (RepoSynthesis, bool) {
 		return s, true
 	}
 	return RepoSynthesis{}, false
+}
+
+// snapshotJSONNames lists a repo dir's <date>.json snapshot filenames in
+// ascending (chronological) order. Filenames are YYYY-MM-DD so lexical == chronological.
+func snapshotJSONNames(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	return names, nil
 }

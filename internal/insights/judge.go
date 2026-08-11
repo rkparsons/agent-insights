@@ -96,25 +96,36 @@ func (j claudeJudge) Judge(ctx context.Context, in ReducedInput) (JudgedFields, 
 	if err != nil {
 		return JudgedFields{}, fmt.Errorf("claude run: %w", err)
 	}
-	if len(bytes.TrimSpace(out)) == 0 {
-		return JudgedFields{}, errors.New("claude returned empty output")
-	}
-	var env claudeEnvelope
-	if err := json.Unmarshal(out, &env); err != nil {
-		return JudgedFields{}, fmt.Errorf("parse claude envelope: %w", err)
-	}
-	if env.IsError {
-		return JudgedFields{}, fmt.Errorf("claude reported error: %s", env.Result)
-	}
-	trimmed := bytes.TrimSpace(env.StructuredOutput)
-	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		return JudgedFields{}, errors.New("claude envelope missing structured_output")
+	trimmed, err := ParseClaudeEnvelope(out)
+	if err != nil {
+		return JudgedFields{}, err
 	}
 	var jf JudgedFields
 	if err := json.Unmarshal(trimmed, &jf); err != nil {
 		return JudgedFields{}, fmt.Errorf("parse structured_output: %w", err)
 	}
 	return jf, nil
+}
+
+// ParseClaudeEnvelope decodes a `claude -p --output-format json` stdout
+// envelope and returns its trimmed structured_output payload. Errors on empty
+// output, a malformed envelope, is_error, or null/missing structured_output.
+func ParseClaudeEnvelope(out []byte) (json.RawMessage, error) {
+	if len(bytes.TrimSpace(out)) == 0 {
+		return nil, errors.New("claude returned empty output")
+	}
+	var env claudeEnvelope
+	if err := json.Unmarshal(out, &env); err != nil {
+		return nil, fmt.Errorf("parse claude envelope: %w", err)
+	}
+	if env.IsError {
+		return nil, fmt.Errorf("claude reported error: %s", env.Result)
+	}
+	trimmed := bytes.TrimSpace(env.StructuredOutput)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, errors.New("claude envelope missing structured_output")
+	}
+	return trimmed, nil
 }
 
 // JudgeFactory builds a run's Judge once the run has materialized the skills
