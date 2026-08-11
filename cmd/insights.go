@@ -89,19 +89,27 @@ func runEnrich(args []string) {
 		fmt.Fprintln(os.Stderr, "usage: agent-insights enrich [--repo <repo-key>] [--dry-run] [--timeout 10m]")
 		os.Exit(2)
 	}
-	workDir, err := os.MkdirTemp("", "agent-insights-enrich-*")
+	var sum synthesis.EnrichSummary
+	if opts.DryRun {
+		// A dry-run only reports counts — never spend on materializing the
+		// titler's scratch workdir for a run that makes no LLM calls.
+		sum, err = synthesis.RunEnrich(context.Background(), nil, opts)
+	} else {
+		var workDir string
+		workDir, err = os.MkdirTemp("", "agent-insights-enrich-*")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "agent-insights: enrich: %v\n", err)
+			os.Exit(1)
+		}
+		sum, err = synthesis.RunEnrich(context.Background(), synthesis.NewClaudeTitler(workDir), opts)
+		os.RemoveAll(workDir) // not deferred: os.Exit below would skip it
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent-insights: enrich: %v\n", err)
 		os.Exit(1)
 	}
-	sum, err := synthesis.RunEnrich(context.Background(), synthesis.NewClaudeTitler(workDir), opts)
-	os.RemoveAll(workDir) // not deferred: os.Exit below would skip it
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "agent-insights: enrich: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Fprintf(os.Stderr, "enrich: %d snapshots · %d updated · %d titles · %d last_seen · %d skipped\n",
-		sum.Snapshots, sum.Updated, sum.TitlesFilled, sum.LastSeenFilled, sum.Skipped)
+	fmt.Fprintf(os.Stderr, "enrich: %d snapshots · %d updated · %d titles · %d last_seen · %d malformed · %d leak-blocked\n",
+		sum.Snapshots, sum.Updated, sum.TitlesFilled, sum.LastSeenFilled, sum.Malformed, sum.LeakBlocked)
 }
 
 // runAnalyze handles `insights analyze <session-id|path> [--force]`.

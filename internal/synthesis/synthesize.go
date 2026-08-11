@@ -2,6 +2,7 @@ package synthesis
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -194,7 +195,7 @@ func titleWarnings(title, statement string, seen map[string]bool) []string {
 	}
 	var w []string
 	if len([]rune(title)) > maxTitleRunes {
-		w = append(w, "recommendation title over 40 chars: "+title)
+		w = append(w, fmt.Sprintf("recommendation title over %d chars: ", maxTitleRunes)+title)
 	}
 	if hasQuantitativeClaim(title) {
 		w = append(w, "recommendation title has a quantitative claim: "+title)

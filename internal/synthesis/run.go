@@ -126,7 +126,7 @@ func RunSynthesize(ctx context.Context, newSyn SynthesizerFactory, opts Options)
 		// eval pool slices ran 8–14 min. The old 10m/20m deadlines killed
 		// every call after burning spend.
 		rctx, cancel := context.WithTimeout(ctx, 90*time.Minute)
-		res, report, err := Synthesize(rctx, k, groups[k], syn, adopt)
+		res, _, err := Synthesize(rctx, k, groups[k], syn, adopt)
 		cancel()
 		if err != nil {
 			sum.Skipped++
@@ -141,8 +141,8 @@ func RunSynthesize(ctx context.Context, newSyn SynthesizerFactory, opts Options)
 			fmt.Fprintf(os.Stderr, "synthesis: %s BLOCKED by privacy scan: %v\n", k, leaks)
 			continue
 		}
-		if len(report.HardErrors) > 0 {
-			fmt.Fprintf(os.Stderr, "synthesis: %s has %d validation warnings (written, surfaced in report)\n", k, len(report.HardErrors))
+		if n := len(res.Meta.ValidationErrors); n > 0 {
+			fmt.Fprintf(os.Stderr, "synthesis: %s has %d validation warnings (written, surfaced in report)\n", k, n)
 		}
 		if err := Store(res, md, date); err != nil {
 			return sum, err

@@ -11,13 +11,28 @@ import (
 
 func lockPath() string { return filepath.Join(InsightsDir(), "insights.lock") }
 
+// LockOps are the ops a run may hold the insights lock under; status.schema.json's
+// running_op enum must match.
+var LockOps = []string{"analyze", "synthesize", "enrich"}
+
 // RunLock is an advisory whole-run lock held via flock on an open file descriptor.
 // It is released automatically when the process exits or dies (no stale-PID class).
 type RunLock struct{ f *os.File }
 
 // AcquireLock takes a non-blocking exclusive flock. If another insights run holds it,
-// it returns an error rather than blocking.
+// it returns an error rather than blocking. op must be one of LockOps — a typo'd
+// future op is rejected here rather than reaching status output.
 func AcquireLock(op string) (*RunLock, error) {
+	valid := false
+	for _, o := range LockOps {
+		if o == op {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		return nil, fmt.Errorf("acquire lock: unknown op %q (want one of %v)", op, LockOps)
+	}
 	if err := os.MkdirAll(InsightsDir(), 0o755); err != nil {
 		return nil, err
 	}

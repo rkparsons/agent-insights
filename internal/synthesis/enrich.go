@@ -19,11 +19,12 @@ type EnrichOptions struct {
 }
 
 type EnrichSummary struct {
-	Snapshots      int
-	Updated        int
+	Snapshots      int // parseable snapshots examined
+	Updated        int // snapshots rewritten
 	TitlesFilled   int
 	LastSeenFilled int
-	Skipped        int
+	Malformed      int
+	LeakBlocked    int
 }
 
 // TitleReq is one untitled recommendation sent to the titler.
@@ -80,10 +81,12 @@ func RunEnrich(ctx context.Context, titler Titler, opts EnrichOptions) (EnrichSu
 	if err != nil {
 		return sum, err
 	}
+	matched := false
 	for _, rd := range repoDirs {
 		if !rd.IsDir() || (opts.Repo != "" && rd.Name() != opts.Repo) {
 			continue
 		}
+		matched = true
 		dir := filepath.Join(base, rd.Name())
 		names, err := snapshotJSONNames(dir)
 		if err != nil {
@@ -94,6 +97,9 @@ func RunEnrich(ctx context.Context, titler Titler, opts EnrichOptions) (EnrichSu
 				return sum, err
 			}
 		}
+	}
+	if opts.Repo != "" && !matched {
+		fmt.Fprintf(os.Stderr, "enrich: no synthesis snapshots for repo %q\n", opts.Repo)
 	}
 	return sum, nil
 }
@@ -121,7 +127,7 @@ func enrichSnapshot(ctx context.Context, path string, dates map[string]string, s
 	}
 	var s RepoSynthesis
 	if err := json.Unmarshal(data, &s); err != nil {
-		sum.Skipped++
+		sum.Malformed++
 		fmt.Fprintf(os.Stderr, "enrich: %s skipped (malformed): %v\n", path, err)
 		return nil
 	}
@@ -213,7 +219,7 @@ func enrichSnapshot(ctx context.Context, path string, dates map[string]string, s
 	}
 	md := Render(s)
 	if leaks := scanReport(md); len(leaks) > 0 {
-		sum.Skipped++
+		sum.LeakBlocked++
 		fmt.Fprintf(os.Stderr, "enrich: %s BLOCKED by privacy scan: %v\n", path, leaks)
 		return nil
 	}

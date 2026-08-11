@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,6 +16,28 @@ import (
 
 	"github.com/rkparsons/agent-insights/internal/insights"
 )
+
+// captureStderr redirects os.Stderr for the duration of fn and returns what
+// it wrote.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stderr
+	os.Stderr = w
+	defer func() { os.Stderr = orig }()
+
+	fn()
+
+	w.Close()
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
+}
 
 func writeEnrichFixtures(t *testing.T) {
 	t.Helper()
@@ -168,7 +191,7 @@ func TestRunEnrichLeakBlocksSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sum.Updated != 0 || sum.Skipped != 1 {
+	if sum.Updated != 0 || sum.LeakBlocked != 1 {
 		t.Errorf("summary = %+v, want leak-blocked snapshot skipped", sum)
 	}
 	after, err := os.ReadFile(path)
@@ -289,5 +312,26 @@ func TestRunEnrichHealsStaleMDWithoutTitling(t *testing.T) {
 	}
 	if string(md) != want {
 		t.Errorf("md not healed:\ngot:  %s\nwant: %s", md, want)
+	}
+}
+
+// A typo'd --repo must not silently print all-zeros and exit 0 — it should
+// warn that no repo matched.
+func TestRunEnrichWarnsOnNoMatchingRepo(t *testing.T) {
+	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
+	writeEnrichFixtures(t)
+	var sum EnrichSummary
+	var err error
+	stderr := captureStderr(t, func() {
+		sum, err = RunEnrich(context.Background(), nil, EnrichOptions{Repo: "typo-repo", DryRun: true})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.Snapshots != 0 {
+		t.Errorf("Snapshots = %d, want 0 (no repo matched)", sum.Snapshots)
+	}
+	if !strings.Contains(stderr, `enrich: no synthesis snapshots for repo "typo-repo"`) {
+		t.Errorf("stderr = %q, want a no-matching-repo warning", stderr)
 	}
 }
