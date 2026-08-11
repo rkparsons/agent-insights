@@ -65,7 +65,7 @@ func TestRunEnrichFillsMissingFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sum.Updated != 1 || sum.TitlesFilled != 2 || sum.LastSeenFilled != 2 {
+	if sum.Updated != 1 || sum.TitlesFilled != 2 || sum.LastSeenFilled != 1 {
 		t.Errorf("summary = %+v", sum)
 	}
 	got, ok := newestInRepoDir(filepath.Join(synthesisDir(), "alpha"))
@@ -76,8 +76,8 @@ func TestRunEnrichFillsMissingFields(t *testing.T) {
 	if r[0].Title != "Title for 0" || r[0].LastSeen != "2026-07-09" {
 		t.Errorf("rec 0 = %+v (want normalized title, max theme session date)", r[0])
 	}
-	if r[1].LastSeen != "2026-07-10" {
-		t.Errorf("rec 1 LastSeen = %q, want window.to fallback", r[1].LastSeen)
+	if r[1].LastSeen != "" {
+		t.Errorf("rec 1 LastSeen = %q, want left empty (healable on a later run) rather than a window.to fallback", r[1].LastSeen)
 	}
 	if r[2].Title != "Already titled" || r[2].LastSeen != "2026-07-02" {
 		t.Errorf("rec 2 mutated: %+v", r[2])
@@ -190,7 +190,7 @@ func TestRunEnrichTitlerFailureStillFillsLastSeen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sum.LastSeenFilled != 2 || sum.TitlesFilled != 0 || sum.Updated != 1 {
+	if sum.LastSeenFilled != 1 || sum.TitlesFilled != 0 || sum.Updated != 1 {
 		t.Errorf("summary = %+v", sum)
 	}
 	got, _ := newestInRepoDir(filepath.Join(synthesisDir(), "alpha"))

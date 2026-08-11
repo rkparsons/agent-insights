@@ -40,8 +40,10 @@ type Titler func(ctx context.Context, reqs []TitleReq) (map[int]string, error)
 // RunEnrich backfills title and last_seen onto stored syntheses. Idempotent:
 // only missing fields are filled, and untouched snapshots are not rewritten.
 // last_seen is approximate here — stored recs carry no session ids, so it
-// derives from theme_refs' theme sessions, falling back to window.to; fresh
-// syntheses compute it exactly in Finalize.
+// derives from theme_refs' theme sessions; when nothing resolves it is left
+// empty rather than guessed, mirroring Finalize, so a later run can still
+// heal it once the data resolves. Fresh syntheses compute it exactly in
+// Finalize.
 func RunEnrich(ctx context.Context, titler Titler, opts EnrichOptions) (EnrichSummary, error) {
 	var sum EnrichSummary
 	if opts.Timeout == 0 {
@@ -142,13 +144,10 @@ func enrichSnapshot(ctx context.Context, path string, dates map[string]string, s
 			missingTitle++
 		}
 	}
-	if missingSeen == 0 && missingTitle == 0 {
-		if opts.DryRun {
+	if opts.DryRun {
+		if missingSeen == 0 && missingTitle == 0 {
 			return nil
 		}
-		return healStaleMD(path, s, sum)
-	}
-	if opts.DryRun {
 		fmt.Fprintf(os.Stderr, "enrich (dry-run): %s · %d missing titles · %d missing last_seen\n", path, missingTitle, missingSeen)
 		return nil
 	}
@@ -170,9 +169,6 @@ func enrichSnapshot(ctx context.Context, path string, dates map[string]string, s
 						max = d
 					}
 				}
-			}
-			if max == "" {
-				max = s.Window.To
 			}
 			if max != "" {
 				r.LastSeen = max
@@ -217,7 +213,11 @@ func enrichSnapshot(ctx context.Context, path string, dates map[string]string, s
 	}
 
 	if titles == 0 && lastSeens == 0 {
-		return nil
+		// Nothing resolved this run — either every field was already present,
+		// or what's left (e.g. permanently out-of-range theme_refs) never
+		// will. Either way the JSON is unchanged; only the sibling .md can
+		// still be stale (a crash between Store's two atomic writes).
+		return healStaleMD(path, s, sum)
 	}
 	md := Render(s)
 	if leaks := scanReport(md); len(leaks) > 0 {
