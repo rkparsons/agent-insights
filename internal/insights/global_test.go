@@ -18,7 +18,7 @@ func fullyPopulatedGlobalSynthesis() GlobalSynthesisJSON {
 		GeneratedAt:   time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC),
 		Window:        WindowBoundsJSON{From: "2026-07-27", To: "2026-08-10"},
 		Repos: []RepoStatsJSON{
-			{Key: "heyflow", Window: WindowBoundsJSON{From: "2026-07-27", To: "2026-08-10"}, SessionCount: 42, AnalyzedCount: 40},
+			{Key: "alpha", Window: WindowBoundsJSON{From: "2026-07-27", To: "2026-08-10"}, SessionCount: 42, AnalyzedCount: 40},
 		},
 		Findings: []FindingJSON{
 			{
@@ -28,22 +28,22 @@ func fullyPopulatedGlobalSynthesis() GlobalSynthesisJSON {
 				RankRationale: "Already documented but still violated after the rule shipped.",
 				Asset: AssetJSON{
 					Type:    "placement_fix",
-					Target:  "~/dev/heyflow/CLAUDE.md",
+					Target:  "~/dev/alpha/CLAUDE.md",
 					Content: "Open a draft PR before requesting review.",
 				},
 				Audience:    "user",
-				EvidenceIDs: []string{"heyflow/P5", "heyflow/F9"},
+				EvidenceIDs: []string{"alpha/P5", "alpha/F9"},
 				Quotes:      []string{"\"I keep opening these as ready for review\""},
 				AlreadyAdopted: AdoptedJSON{
 					Verdict:    "no",
-					SourcePath: "~/dev/heyflow/CLAUDE.md",
+					SourcePath: "~/dev/alpha/CLAUDE.md",
 					Excerpt:    "Prefer draft PRs while a change is still in review.",
 				},
 				EscalatedFrom: &EscalatedFromJSON{
-					SourcePath: "~/dev/heyflow/CLAUDE.md",
+					SourcePath: "~/dev/alpha/CLAUDE.md",
 					Excerpt:    "Prefer draft PRs while a change is still in review.",
 				},
-				Repos:        []string{"heyflow"},
+				Repos:        []string{"alpha"},
 				SessionCount: 4,
 				LastSeen:     "2026-08-06",
 				ActedKey:     "c3d4e5f6a7b8c9d0",
@@ -53,7 +53,7 @@ func fullyPopulatedGlobalSynthesis() GlobalSynthesisJSON {
 			{
 				Summary:     "Occasional editor lag while diffing large files",
 				Reason:      "Environmental, not an actionable practice change.",
-				EvidenceIDs: []string{"heyflow/G4"},
+				EvidenceIDs: []string{"alpha/G4"},
 			},
 		},
 		Meta: GlobalMetaJSON{

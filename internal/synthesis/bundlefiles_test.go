@@ -61,19 +61,19 @@ func writeFixture(t *testing.T, repo string) (path string, raw []byte, out Evide
 }
 
 func TestWriteBundleFilesNamespacesIDs(t *testing.T) {
-	_, _, out := writeFixture(t, "heyflow")
+	_, _, out := writeFixture(t, "alpha")
 
-	if out.Friction[0].ID != "heyflow/F1" {
-		t.Errorf("friction id = %q, want heyflow/F1", out.Friction[0].ID)
+	if out.Friction[0].ID != "alpha/F1" {
+		t.Errorf("friction id = %q, want alpha/F1", out.Friction[0].ID)
 	}
-	if out.Prefs[0].ID != "heyflow/P1" {
-		t.Errorf("pref id = %q, want heyflow/P1", out.Prefs[0].ID)
+	if out.Prefs[0].ID != "alpha/P1" {
+		t.Errorf("pref id = %q, want alpha/P1", out.Prefs[0].ID)
 	}
-	if out.Success[0].ID != "heyflow/S1" {
-		t.Errorf("success id = %q, want heyflow/S1", out.Success[0].ID)
+	if out.Success[0].ID != "alpha/S1" {
+		t.Errorf("success id = %q, want alpha/S1", out.Success[0].ID)
 	}
-	if out.Signals[0].ID != "heyflow/G1" {
-		t.Errorf("signal id = %q, want heyflow/G1", out.Signals[0].ID)
+	if out.Signals[0].ID != "alpha/G1" {
+		t.Errorf("signal id = %q, want alpha/G1", out.Signals[0].ID)
 	}
 	wantMembers := []string{"sess-a", "sess-b", "sess-c"}
 	if !reflect.DeepEqual(out.Signals[0].MemberSessions, wantMembers) {
@@ -82,7 +82,7 @@ func TestWriteBundleFilesNamespacesIDs(t *testing.T) {
 }
 
 func TestWriteBundleFilesStripsDates(t *testing.T) {
-	_, raw, _ := writeFixture(t, "heyflow")
+	_, raw, _ := writeFixture(t, "alpha")
 	s := string(raw)
 
 	if strings.Contains(s, "session_dates") {
@@ -96,7 +96,7 @@ func TestWriteBundleFilesStripsDates(t *testing.T) {
 }
 
 func TestWriteBundleFilesToolMixSurvives(t *testing.T) {
-	_, _, out := writeFixture(t, "heyflow")
+	_, _, out := writeFixture(t, "alpha")
 	if out.Context.ToolMix["Read"] != 12 || out.Context.ToolMix["Edit"] != 4 {
 		t.Errorf("tool_mix = %v, want Read:12 Edit:4", out.Context.ToolMix)
 	}
@@ -104,11 +104,11 @@ func TestWriteBundleFilesToolMixSurvives(t *testing.T) {
 
 func TestWriteBundleFilesDoesNotMutateInput(t *testing.T) {
 	dir := t.TempDir()
-	bundles := map[string]EvidenceBundle{"heyflow": fixtureBundle("heyflow")}
+	bundles := map[string]EvidenceBundle{"alpha": fixtureBundle("alpha")}
 	if _, err := WriteBundleFiles(dir, bundles); err != nil {
 		t.Fatalf("WriteBundleFiles: %v", err)
 	}
-	b := bundles["heyflow"]
+	b := bundles["alpha"]
 	if b.Friction[0].ID != "F1" {
 		t.Errorf("input bundle mutated: friction id = %q, want F1", b.Friction[0].ID)
 	}
@@ -122,9 +122,9 @@ func TestWriteBundleFilesDoesNotMutateInput(t *testing.T) {
 }
 
 func TestSplitNamespacedID(t *testing.T) {
-	repo, id, ok := SplitNamespacedID("heyflow/F3")
-	if !ok || repo != "heyflow" || id != "F3" {
-		t.Errorf("SplitNamespacedID(heyflow/F3) = (%q,%q,%v), want (heyflow,F3,true)", repo, id, ok)
+	repo, id, ok := SplitNamespacedID("alpha/F3")
+	if !ok || repo != "alpha" || id != "F3" {
+		t.Errorf("SplitNamespacedID(alpha/F3) = (%q,%q,%v), want (alpha,F3,true)", repo, id, ok)
 	}
 	if _, _, ok := SplitNamespacedID("F3"); ok {
 		t.Error("SplitNamespacedID(F3) ok = true, want false (no namespace separator)")
@@ -134,8 +134,8 @@ func TestSplitNamespacedID(t *testing.T) {
 func TestWriteBundleFilesMultipleRepos(t *testing.T) {
 	dir := t.TempDir()
 	bundles := map[string]EvidenceBundle{
-		"heyflow": fixtureBundle("heyflow"),
-		"alpha":   fixtureBundle("alpha"),
+		"alpha": fixtureBundle("alpha"),
+		"beta":  fixtureBundle("beta"),
 	}
 	paths, err := WriteBundleFiles(dir, bundles)
 	if err != nil {
@@ -144,7 +144,7 @@ func TestWriteBundleFilesMultipleRepos(t *testing.T) {
 	if len(paths) != 2 {
 		t.Fatalf("paths = %d, want 2", len(paths))
 	}
-	for _, repo := range []string{"heyflow", "alpha"} {
+	for _, repo := range []string{"alpha", "beta"} {
 		if _, err := os.Stat(filepath.Join(dir, repo+"-bundle.json")); err != nil {
 			t.Errorf("missing bundle file for %s: %v", repo, err)
 		}
