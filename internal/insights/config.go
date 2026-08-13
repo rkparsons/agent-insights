@@ -37,8 +37,9 @@ type Config struct {
 	MinSessions int               `yaml:"min_sessions"` // default synthesis.DefaultMinSessions
 
 	// SynthesisModel is the `claude` CLI model the global synthesis run invokes.
-	// No automatic fallback: an unavailable model fails the run closed rather
-	// than silently drift and invalidate eval comparisons.
+	// Defaulted when unset; at runtime an unavailable model fails the run
+	// closed rather than falling back to a different model, which would
+	// silently drift and invalidate eval comparisons.
 	SynthesisModel string `yaml:"synthesis_model"` // default defaultSynthesisModel
 
 	// DueNewSessions is the global-due threshold: total newly-analyzed sessions
