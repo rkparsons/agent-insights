@@ -1,84 +1,120 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/rkparsons/agent-insights/schemas/show.schema.json",
-  "title": "ShowJSON",
-  "description": "insights show --json stdout payload. Mirrors internal/insights.ShowJSON and its nested synthesis-derived types field-for-field.",
+  "title": "GlobalSynthesisJSON",
+  "description": "insights show --json stdout payload (schema_version 2). Mirrors internal/insights.GlobalSynthesisJSON and its nested types field-for-field.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "syntheses"],
+  "required": ["schema_version", "generated_at", "window", "repos", "findings", "dropped", "meta"],
   "properties": {
-    "schema_version": { "type": "integer", "const": 1 },
-    "syntheses": { "type": "array", "items": { "$ref": "#/definitions/Synthesis" } }
+    "schema_version": { "type": "integer", "const": 2 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "window": { "$ref": "#/definitions/WindowBounds" },
+    "repos": { "type": "array", "items": { "$ref": "#/definitions/RepoStats" } },
+    "findings": { "type": "array", "items": { "$ref": "#/definitions/Finding" } },
+    "dropped": { "type": "array", "items": { "$ref": "#/definitions/Dropped" } },
+    "meta": { "$ref": "#/definitions/GlobalMeta" }
   },
   "definitions": {
-    "Synthesis": {
+    "WindowBounds": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repo", "generated_at", "window", "themes", "recommendations", "meta"],
-      "properties": {
-        "repo": { "type": "string" },
-        "generated_at": { "type": "string", "format": "date-time" },
-        "window": { "$ref": "#/definitions/Window" },
-        "themes": { "type": "array", "items": { "$ref": "#/definitions/Theme" } },
-        "recommendations": { "type": "array", "items": { "$ref": "#/definitions/Recommendation" } },
-        "meta": { "$ref": "#/definitions/Meta" }
-      }
-    },
-    "Window": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["from", "to", "session_count", "analyzed_count"],
+      "required": ["from", "to"],
       "properties": {
         "from": { "type": "string" },
-        "to": { "type": "string" },
+        "to": { "type": "string" }
+      }
+    },
+    "RepoStats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "window", "session_count", "analyzed_count"],
+      "properties": {
+        "key": { "type": "string" },
+        "window": { "$ref": "#/definitions/WindowBounds" },
         "session_count": { "type": "integer" },
         "analyzed_count": { "type": "integer" }
       }
     },
-    "Theme": {
+    "Asset": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["title", "kind", "summary", "rank", "session_count", "quotes", "session_ids"],
-      "properties": {
-        "title": { "type": "string" },
-        "kind": { "type": "string" },
-        "summary": { "type": "string" },
-        "rank": { "type": "integer" },
-        "incident_count": { "type": "integer" },
-        "session_count": { "type": "integer" },
-        "type_breakdown": { "type": "object", "additionalProperties": { "type": "integer" } },
-        "quotes": { "type": "array", "items": { "type": "string" } },
-        "session_ids": { "type": "array", "items": { "type": "string" } },
-        "signal_refs": { "type": "array", "items": { "type": "string" } },
-        "over_generalized": { "type": "boolean" }
-      }
-    },
-    "Recommendation": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["type", "statement", "theme_refs", "session_count", "quotes", "already_adopted", "acted_key"],
+      "required": ["type"],
       "properties": {
         "type": { "type": "string" },
+        "target": { "type": "string" },
+        "content": { "type": "string" }
+      }
+    },
+    "Adopted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict"],
+      "properties": {
+        "verdict": { "type": "string" },
+        "source_path": { "type": "string" },
+        "excerpt": { "type": "string" }
+      }
+    },
+    "EscalatedFrom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_path", "excerpt"],
+      "properties": {
+        "source_path": { "type": "string" },
+        "excerpt": { "type": "string" }
+      }
+    },
+    "Finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rank",
+        "title",
+        "statement",
+        "rank_rationale",
+        "asset",
+        "evidence_ids",
+        "already_adopted",
+        "repos",
+        "session_count",
+        "last_seen",
+        "acted_key"
+      ],
+      "properties": {
+        "rank": { "type": "integer" },
         "title": { "type": "string" },
         "statement": { "type": "string" },
-        "theme_refs": { "type": "array", "items": { "type": "integer" } },
+        "rank_rationale": { "type": "string" },
+        "asset": { "$ref": "#/definitions/Asset" },
+        "audience": { "type": "string" },
+        "evidence_ids": { "type": "array", "items": { "type": "string" } },
+        "quotes": { "type": "array", "items": { "type": "string" } },
+        "already_adopted": { "$ref": "#/definitions/Adopted" },
+        "escalated_from": { "$ref": "#/definitions/EscalatedFrom" },
+        "repos": { "type": "array", "items": { "type": "string" } },
         "session_count": { "type": "integer" },
         "last_seen": { "type": "string" },
-        "quotes": { "type": "array", "items": { "type": "string" } },
-        "already_adopted": { "type": "string" },
-        "audience": { "type": "string" },
         "acted_key": { "type": "string" }
       }
     },
-    "Meta": {
+    "Dropped": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["model", "unthemed_friction"],
+      "required": ["summary", "reason", "evidence_ids"],
+      "properties": {
+        "summary": { "type": "string" },
+        "reason": { "type": "string" },
+        "evidence_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "GlobalMeta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model"],
       "properties": {
         "model": { "type": "string" },
-        "unthemed_friction": { "type": "integer" },
-        "validation_errors": { "type": "array", "items": { "type": "string" } },
-        "pref_count_by_rec": { "type": "object", "additionalProperties": { "type": "integer" } }
+        "validation_notes": { "type": "array", "items": { "type": "string" } }
       }
     }
   }

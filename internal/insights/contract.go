@@ -3,10 +3,10 @@ package insights
 import "time"
 
 // ContractVersion is the schema_version stamped on every CLI JSON output
-// (StatusJSON, ShowJSON). This is the cross-repo contract: a standalone
-// agent-insights binary will vendor these shapes, so field names and json
-// tags here are load-bearing. Bump on a breaking change.
-const ContractVersion = 1
+// (StatusJSON, ShowJSON, GlobalSynthesisJSON). This is the cross-repo
+// contract: a standalone agent-insights binary will vendor these shapes, so
+// field names and json tags here are load-bearing. Bump on a breaking change.
+const ContractVersion = 2
 
 // StatusJSON is `insights status --json`'s stdout payload.
 type StatusJSON struct {

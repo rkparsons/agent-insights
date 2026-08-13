@@ -1,0 +1,85 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-08-10T00:00:00Z",
+  "window": { "from": "2026-07-27", "to": "2026-08-10" },
+  "repos": [
+    {
+      "key": "heyflow",
+      "window": { "from": "2026-07-27", "to": "2026-08-10" },
+      "session_count": 42,
+      "analyzed_count": 40
+    },
+    {
+      "key": "tmux-ctrl",
+      "window": { "from": "2026-07-27", "to": "2026-08-10" },
+      "session_count": 18,
+      "analyzed_count": 18
+    }
+  ],
+  "findings": [
+    {
+      "rank": 1,
+      "title": "Run the smoke test before declaring done",
+      "statement": "Run the smoke test before declaring a task done.",
+      "rank_rationale": "Recurs across both repos and blocks shipped regressions.",
+      "asset": {
+        "type": "claude_md_rule",
+        "target": "~/.claude/CLAUDE.md",
+        "content": "Run the smoke test before declaring a task done."
+      },
+      "audience": "user",
+      "evidence_ids": ["heyflow/F3", "tmux-ctrl/F7"],
+      "quotes": ["\"builds pass but I never actually ran it\""],
+      "already_adopted": { "verdict": "no" },
+      "repos": ["heyflow", "tmux-ctrl"],
+      "session_count": 9,
+      "last_seen": "2026-08-08",
+      "acted_key": "a1b2c3d4e5f6a7b8"
+    },
+    {
+      "rank": 2,
+      "title": "Escalate the draft-PR habit into a repo rule",
+      "statement": "Open a draft PR before requesting review.",
+      "rank_rationale": "Already documented but still violated after the rule shipped.",
+      "asset": {
+        "type": "placement_fix",
+        "target": "~/dev/heyflow/CLAUDE.md",
+        "content": "Open a draft PR before requesting review."
+      },
+      "evidence_ids": ["heyflow/P5", "heyflow/F9"],
+      "already_adopted": { "verdict": "no" },
+      "escalated_from": {
+        "source_path": "~/dev/heyflow/CLAUDE.md",
+        "excerpt": "Prefer draft PRs while a change is still in review."
+      },
+      "repos": ["heyflow"],
+      "session_count": 4,
+      "last_seen": "2026-08-06",
+      "acted_key": "c3d4e5f6a7b8c9d0"
+    },
+    {
+      "rank": 3,
+      "title": "Rerun the full suite before merging",
+      "statement": "Rerun the full test suite locally before opening a merge request.",
+      "rank_rationale": "Low effort and catches late CI surprises early.",
+      "asset": { "type": "habit" },
+      "evidence_ids": ["tmux-ctrl/F2"],
+      "already_adopted": { "verdict": "unknown" },
+      "repos": ["tmux-ctrl"],
+      "session_count": 3,
+      "last_seen": "2026-08-05",
+      "acted_key": "f9e8d7c6b5a4f3e2"
+    }
+  ],
+  "dropped": [
+    {
+      "summary": "Occasional editor lag while diffing large files",
+      "reason": "Environmental, not an actionable practice change.",
+      "evidence_ids": ["heyflow/G4"]
+    }
+  ],
+  "meta": {
+    "model": "claude-fable-5",
+    "validation_notes": ["dropped a quote from the top-ranked finding: not found in the cited item's quote pool"]
+  }
+}

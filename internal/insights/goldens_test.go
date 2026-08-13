@@ -35,26 +35,8 @@ func TestGoldenStatusRoundTrips(t *testing.T) {
 	assertSchemaVersion(t, schema, status.SchemaVersion)
 }
 
-// TestGoldenShowRoundTrips is TestGoldenStatusRoundTrips's ShowJSON sibling.
-func TestGoldenShowRoundTrips(t *testing.T) {
-	golden := readGolden(t, "show.json")
-
-	var show ShowJSON
-	dec := json.NewDecoder(bytes.NewReader(golden))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&show); err != nil {
-		t.Fatalf("decode golden into ShowJSON: %v", err)
-	}
-
-	remarshaled, err := json.Marshal(show)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertCanonicallyEqual(t, golden, remarshaled)
-	schema := loadSchema(t, "show.schema.json")
-	assertSchemaMatchesStruct(t, schema, reflect.TypeOf(ShowJSON{}))
-	assertSchemaVersion(t, schema, show.SchemaVersion)
-}
+// show.schema.json describes GlobalSynthesisJSON (v2), not ShowJSON — see
+// TestGoldenShowV2RoundTrips in global_test.go.
 
 func readGolden(t *testing.T, name string) []byte {
 	t.Helper()
