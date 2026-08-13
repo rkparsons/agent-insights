@@ -33,3 +33,41 @@ func DueRepos(groups map[string][]insights.AgentSessionAnalysis, syntheses []Rep
 	sort.Strings(due)
 	return due
 }
+
+// GlobalDue reports whether a global run is due and which repos contribute new
+// sessions. "New" = store analyses whose analyzed-at postdates lastGenerated
+// (timestamp-based — never count deltas; see the v1 hazard comment on DueRepos
+// above: a meta-purge shrinking the store must never mask genuinely new
+// sessions). The store carries no separate "analyzed at" instant — WriteAnalysis
+// never calls time.Now() — so TranscriptMtime (stamped from the raw transcript's
+// mtime at decode time, insights.AgentSessionAnalysis's only per-analysis
+// timestamp) stands in for it here. Only repos meeting the min_sessions bundle
+// floor count: GroupByRepo already drops sub-floor buckets, so a repo absent
+// from groups contributes nothing even if every one of its sessions is fresh.
+// Zero-value lastGenerated (no snapshot yet) treats every qualifying session as
+// new, so due then depends on the threshold alone. contributing is sorted
+// ascending and, regardless of due, reflects every qualifying repo with at
+// least one fresh session (useful for --dry-run reasoning even when cadence
+// hasn't elapsed).
+func GlobalDue(analyses []insights.AgentSessionAnalysis, cfg insights.Config, lastGenerated time.Time, now time.Time) (due bool, contributing []string) {
+	groups := GroupByRepo(analyses, cfg.MinSessions, cfg)
+	total := 0
+	for repo, group := range groups {
+		fresh := 0
+		for _, a := range group {
+			if a.TranscriptMtime.After(lastGenerated) {
+				fresh++
+			}
+		}
+		if fresh > 0 {
+			contributing = append(contributing, repo)
+			total += fresh
+		}
+	}
+	sort.Strings(contributing)
+
+	cadence := time.Duration(cfg.CadenceDays) * 24 * time.Hour
+	cadenceElapsed := lastGenerated.IsZero() || now.Sub(lastGenerated) >= cadence
+	due = cadenceElapsed && total >= cfg.DueNewSessions
+	return due, contributing
+}

@@ -21,6 +21,12 @@ const defaultCadenceDays = 14
 // cannot import synthesis (which imports insights), so the value is duplicated.
 const defaultConfigMinSessions = 10
 
+// defaultSynthesisModel is the global-synthesis run's model when unset.
+const defaultSynthesisModel = "claude-fable-5"
+
+// defaultDueNewSessions is the global-due new-session threshold when unset.
+const defaultDueNewSessions = 10
+
 // Config is agent-insights' own pipeline config: the repos it knows about, their
 // aliases, and synthesis cadence/floor. The pipeline owns this file so it no
 // longer depends on the TUI's config package.
@@ -29,6 +35,21 @@ type Config struct {
 	Aliases     map[string]string `yaml:"aliases"`      // old-name -> canonical
 	CadenceDays int               `yaml:"cadence_days"` // default 14
 	MinSessions int               `yaml:"min_sessions"` // default synthesis.DefaultMinSessions
+
+	// SynthesisModel is the `claude` CLI model the global synthesis run invokes.
+	// No automatic fallback: an unavailable model fails the run closed rather
+	// than silently drift and invalidate eval comparisons.
+	SynthesisModel string `yaml:"synthesis_model"` // default defaultSynthesisModel
+
+	// DueNewSessions is the global-due threshold: total newly-analyzed sessions
+	// (summed across qualifying repos, timestamp-based) since the last global
+	// snapshot must reach this before a run is due.
+	DueNewSessions int `yaml:"due_new_sessions"` // default defaultDueNewSessions
+
+	// DotfilesRepo is the optional absolute path to the user's dotfiles repo,
+	// passed to the synthesis run's asset manifest so it can date CLAUDE.md
+	// rules via git history. Empty degrades gracefully to "rule exists now".
+	DotfilesRepo string `yaml:"dotfiles_repo"`
 }
 
 // LoadConfig reads ~/.config/agent-insights/config.yaml. AGENT_INSIGHTS_CONFIG,
@@ -49,7 +70,12 @@ func LoadConfig() (Config, error) {
 func loadConfigFromPath(path string) (Config, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return Config{CadenceDays: defaultCadenceDays, MinSessions: defaultConfigMinSessions}, nil
+		return Config{
+			CadenceDays:    defaultCadenceDays,
+			MinSessions:    defaultConfigMinSessions,
+			SynthesisModel: defaultSynthesisModel,
+			DueNewSessions: defaultDueNewSessions,
+		}, nil
 	}
 	if err != nil {
 		return Config{}, err
@@ -63,6 +89,12 @@ func loadConfigFromPath(path string) (Config, error) {
 	}
 	if c.MinSessions <= 0 {
 		c.MinSessions = defaultConfigMinSessions
+	}
+	if c.SynthesisModel == "" {
+		c.SynthesisModel = defaultSynthesisModel
+	}
+	if c.DueNewSessions <= 0 {
+		c.DueNewSessions = defaultDueNewSessions
 	}
 	return c, nil
 }

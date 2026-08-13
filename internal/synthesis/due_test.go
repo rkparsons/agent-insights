@@ -37,3 +37,108 @@ func TestDueRepos(t *testing.T) {
 		t.Fatalf("got %v want %v", got, want)
 	}
 }
+
+// mkFresh builds n analyses for repo, all stamped with mtime. Stats.Repo is set
+// directly so RepoKey resolves without cwd heuristics.
+func mkFresh(repo string, n int, mtime time.Time) []insights.AgentSessionAnalysis {
+	out := make([]insights.AgentSessionAnalysis, n)
+	for i := range out {
+		out[i].Stats.Repo = repo
+		out[i].TranscriptMtime = mtime
+	}
+	return out
+}
+
+func TestGlobalDue(t *testing.T) {
+	now := time.Date(2026, 8, 13, 0, 0, 0, 0, time.UTC)
+	cfg := insights.Config{CadenceDays: 14, MinSessions: 10, DueNewSessions: 10}
+
+	t.Run("sums across repos", func(t *testing.T) {
+		lastGenerated := now.Add(-30 * 24 * time.Hour)
+		fresh := now.Add(-1 * time.Hour)
+		stale := lastGenerated.Add(-1 * time.Hour)
+		var analyses []insights.AgentSessionAnalysis
+		// repo-a: 8 new + 2 old (meets the 10-session bundle floor).
+		analyses = append(analyses, mkFresh("repo-a", 8, fresh)...)
+		analyses = append(analyses, mkFresh("repo-a", 2, stale)...)
+		// repo-b: 7 new + 3 old (also meets the floor).
+		analyses = append(analyses, mkFresh("repo-b", 7, fresh)...)
+		analyses = append(analyses, mkFresh("repo-b", 3, stale)...)
+
+		due, contributing := GlobalDue(analyses, cfg, lastGenerated, now)
+		if !due {
+			t.Fatalf("due = false, want true (8+7=15 >= threshold 10)")
+		}
+		want := []string{"repo-a", "repo-b"}
+		if !reflect.DeepEqual(contributing, want) {
+			t.Fatalf("contributing = %v, want %v", contributing, want)
+		}
+	})
+
+	t.Run("sub-floor repo excluded", func(t *testing.T) {
+		lastGenerated := now.Add(-30 * 24 * time.Hour)
+		fresh := now.Add(-1 * time.Hour)
+		var analyses []insights.AgentSessionAnalysis
+		// alpha: 10 total (floor met), only 3 fresh.
+		analyses = append(analyses, mkFresh("alpha", 3, fresh)...)
+		analyses = append(analyses, mkFresh("alpha", 7, lastGenerated.Add(-time.Hour))...)
+		// beta: 8 total, all fresh — below the 10-session floor, so its 8 new
+		// sessions must never enter a bundle and must not count toward due.
+		analyses = append(analyses, mkFresh("beta", 8, fresh)...)
+
+		due, contributing := GlobalDue(analyses, cfg, lastGenerated, now)
+		if due {
+			t.Fatalf("due = true, want false (beta excluded leaves only alpha's 3 < threshold 10)")
+		}
+		want := []string{"alpha"}
+		if !reflect.DeepEqual(contributing, want) {
+			t.Fatalf("contributing = %v, want %v (beta must be excluded, sub-floor)", contributing, want)
+		}
+	})
+
+	t.Run("meta-purge simulation still due", func(t *testing.T) {
+		lastGenerated := now.Add(-30 * 24 * time.Hour)
+		fresh := now.Add(-1 * time.Hour)
+		stale := lastGenerated.Add(-1 * time.Hour)
+		// Only 12 analyses survive in the pool (as if a meta-purge shrank a
+		// once-larger store) — but correctness here never touches a prior
+		// count, only per-analysis timestamps, so 10 fresh ones are still due.
+		var analyses []insights.AgentSessionAnalysis
+		analyses = append(analyses, mkFresh("repo-a", 10, fresh)...)
+		analyses = append(analyses, mkFresh("repo-a", 2, stale)...)
+
+		due, contributing := GlobalDue(analyses, cfg, lastGenerated, now)
+		if !due {
+			t.Fatalf("due = false, want true (10 fresh timestamps >= threshold 10)")
+		}
+		want := []string{"repo-a"}
+		if !reflect.DeepEqual(contributing, want) {
+			t.Fatalf("contributing = %v, want %v", contributing, want)
+		}
+	})
+
+	t.Run("cadence not yet elapsed not due regardless", func(t *testing.T) {
+		lastGenerated := now.Add(-1 * 24 * time.Hour) // cadence is 14 days
+		fresh := now.Add(-1 * time.Hour)
+		analyses := mkFresh("repo-a", 20, fresh) // plenty fresh; floor and threshold both cleared
+
+		due, _ := GlobalDue(analyses, cfg, lastGenerated, now)
+		if due {
+			t.Fatalf("due = true, want false (cadence not elapsed: 1 day < 14 days)")
+		}
+	})
+
+	t.Run("zero-value lastGenerated due on threshold alone", func(t *testing.T) {
+		fresh := now.Add(-1 * time.Hour)
+		analyses := mkFresh("repo-a", 10, fresh)
+
+		due, contributing := GlobalDue(analyses, cfg, time.Time{}, now)
+		if !due {
+			t.Fatalf("due = false, want true (no prior snapshot, qualifying total 10 >= threshold 10)")
+		}
+		want := []string{"repo-a"}
+		if !reflect.DeepEqual(contributing, want) {
+			t.Fatalf("contributing = %v, want %v", contributing, want)
+		}
+	})
+}
