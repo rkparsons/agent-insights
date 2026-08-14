@@ -343,8 +343,9 @@ func excerptInFile(path, excerpt, home string) (bool, error) {
 }
 
 // expandHome turns a ~- or $HOME-relative path back into an absolute one for
-// reading. The model is told to emit ~-relative paths, and Go normalizes them
-// on the way out, so both forms reach the existence checks.
+// reading. The skill mandates ~-relative paths in every field (SKILL.md hard
+// rules) and Go normalizes the ones it stores, but a raw path can still arrive
+// absolute, so both forms must reach the existence checks.
 func expandHome(path, home string) string {
 	if home == "" {
 		return path
@@ -515,11 +516,16 @@ func (v *verifier) checkAsset(where string, asset insights.AssetJSON) {
 	if asset.Type == "habit" {
 		return
 	}
+	// asset.Type is still raw model text here — this check runs before
+	// checkGrounding has held it to the ladder's type table — so it reaches the
+	// reason through modelText like every other model-authored value. (The
+	// asset types named in checkGrounding's and checkAudience's reasons are
+	// table keys by then, so those need no bounding.)
 	if asset.Target == "" {
-		v.fail(fmt.Sprintf("%s asset type %s is missing target", where, asset.Type))
+		v.fail(fmt.Sprintf("%s asset type %s is missing target", where, v.modelText(asset.Type)))
 	}
 	if asset.Content == "" {
-		v.fail(fmt.Sprintf("%s asset type %s is missing content", where, asset.Type))
+		v.fail(fmt.Sprintf("%s asset type %s is missing content", where, v.modelText(asset.Type)))
 	}
 }
 

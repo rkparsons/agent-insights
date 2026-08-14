@@ -953,3 +953,31 @@ func TestVerify2_AssetCompleteness(t *testing.T) {
 		})
 	}
 }
+
+// checkAsset runs BEFORE the grounding table has held asset.type to the
+// ladder, so the type in its missing-target/-content reasons is still raw
+// model text: it must be bounded and home-path-rewritten like every other
+// model-authored value entering a fail-closed reason (those reasons land in
+// last_run.error, which no privacy scan sees — the run failed before anything
+// was stored).
+func TestVerify2_AssetCompletenessBoundsModelType(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		t.Skip("no home directory to rewrite")
+	}
+	f := v2Finding()
+	f.Asset.Type = "rule_under_" + home + "/" + strings.Repeat("x", 300)
+	f.Asset.Target = ""
+
+	_, verr := verifyFixture(t, v2Raw(f))
+	if verr == nil {
+		t.Fatal("an asset with no target must fail closed")
+	}
+	// Neither assertion echoes the reason: printing it would restate the leak.
+	if strings.Contains(verr.Error(), home) {
+		t.Error("the missing-target reason carries the real home path verbatim")
+	}
+	if strings.Contains(verr.Error(), strings.Repeat("x", 200)) {
+		t.Error("the missing-target reason carries unbounded model text")
+	}
+}

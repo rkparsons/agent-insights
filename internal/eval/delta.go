@@ -54,6 +54,14 @@ type Tier1Gates struct {
 	MembershipChurn        *float64 `json:"membership_churn"` // nil: <2 fresh samples (all-cached re-run)
 	FreshSamplePairs       int      `json:"fresh_sample_pairs"`
 	ReportPrivacyLeakCount int      `json:"report_privacy_leak_count"`
+	// The spec's two deterministic auto-signals (§Eval adaptation). Both count
+	// Go's corrections to RAW model output across every sample, which is what
+	// makes them non-tautological: they measure the model before the pipeline
+	// fixed it, so they stay informative on a run whose shipped snapshot is
+	// spotless. Calibration signals, not gates — no threshold hard-fails on
+	// them, they warn.
+	ValidationNoteCount   int `json:"validation_note_count"`
+	AdoptedDowngradeCount int `json:"adopted_downgrade_count"`
 }
 
 type PartASummary struct {

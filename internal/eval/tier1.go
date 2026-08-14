@@ -50,18 +50,27 @@ const (
 	churnMatchSimilarity  = 0.45 // inside the 0.40-0.50 band, every inspected pair of which restates one practice
 )
 
-// The dropped-suppression cards hang off a pseudo-target: they belong to the
-// trust gates, not to any rubric.
+// The tier-1 cards hang off a pseudo-target: they belong to the trust gates,
+// not to any rubric.
 const (
 	tier1CardTarget    = "tier1"
-	tier1CardStatement = "trust gate — evidence the model dropped instead of acting on: is the drop right, or is it laundering a recall miss?"
+	tier1CardStatement = "trust gate — evidence the model dropped instead of acting on, and findings that look like one practice split in two: is the model's judgment right?"
 	droppedSuppression = "dropped_suppression"
+	mergeQuality       = "merge_quality"
 )
 
 // quoteDropNote matches the verifier's quote-drop note. meta.validation_notes
 // is the specified source for the fabrication signal: it counts what the model
 // claimed and Go could not find, before any correction reached the snapshot.
-var quoteDropNote = regexp.MustCompile(`dropped (\d+) quote\(s\)`)
+//
+// adoptedDowngradeNote is the same arrangement for the adopted-verdict
+// downgrade signal. Both are coupled to prose the verifier authors
+// (verify2.go's filterQuotes and downgradeAdopted); tier1_drift_test.go runs
+// the real verifier and fails if either wording drifts out from under these.
+var (
+	quoteDropNote        = regexp.MustCompile(`dropped (\d+) quote\(s\)`)
+	adoptedDowngradeNote = regexp.MustCompile(`already_adopted downgraded to unknown`)
+)
 
 // recallProbe is one piece of bundle evidence the contract expects a finding to
 // engage with. ID is the committed identity (bundle ids or a repo key — never
@@ -107,7 +116,12 @@ type tier1Sample struct {
 	CheckableQuotes int
 	QuoteDrops      int
 	ProseLeaks      int
-	Items           []ScoredItem
+	// ValidationNotes and AdoptedDowngrades are the spec's deterministic
+	// auto-signals: how much Go had to correct in this sample's raw output, and
+	// how much of that was an unevidenced "already in place" claim.
+	ValidationNotes   int
+	AdoptedDowngrades int
+	Items             []ScoredItem
 }
 
 // ComputeTier1 embeds the trust-property gates in the verdict, recast for the
@@ -118,11 +132,14 @@ type tier1Sample struct {
 //     ladder, where zero claude_md_rule is a legal and often better answer;
 //   - membership churn over findings' Go-computed session sets, matched across
 //     runs by statement similarity;
-//   - the raw quote-drop rate from meta.validation_notes.
+//   - the raw quote-drop rate from meta.validation_notes, plus the two
+//     deterministic auto-signals over the same notes: their total count and the
+//     adopted-verdict downgrades.
 //
 // A dropped citation suppresses a recall probe (else legitimate drops flood the
-// gate with false misses) and cards the drop for a human ruling in exchange.
-// Returns gates, hard-fail reasons, warnings, and the dropped cards.
+// gate with false misses) and cards the drop for a human ruling in exchange;
+// findings that restate one practice card as the spec's merge-quality axis.
+// Returns gates, hard-fail reasons, warnings, and the cards.
 func ComputeTier1(record RunRecord, cache *Cache, adj map[string]Adjudication) (Tier1Gates, []string, []string, []PendingCard, error) {
 	t1 := Tier1Gates{HardErrorCount: len(record.VerifierRejections)}
 	var reasons, warnings []string
@@ -141,6 +158,7 @@ func ComputeTier1(record RunRecord, cache *Cache, adj map[string]Adjudication) (
 	suppressed := map[string]bool{}
 	var cards []PendingCard
 	seenCard := map[string]bool{}
+	droppedCards, mergeCards := 0, 0
 	for _, s := range samples {
 		if s.Empty {
 			reasons = append(reasons, fmt.Sprintf("sample %d: empty synthesis output (fail-closed)", s.Index))
@@ -151,6 +169,8 @@ func ComputeTier1(record RunRecord, cache *Cache, adj map[string]Adjudication) (
 			}
 		}
 		t1.ReportPrivacyLeakCount += s.ProseLeaks
+		t1.ValidationNoteCount += s.ValidationNotes
+		t1.AdoptedDowngradeCount += s.AdoptedDowngrades
 		floorsHeld := map[string][]string{} // drop key hash → the floors it is holding up
 		for _, p := range probes {
 			if citesAny(s.FindingCites, p.IDs) {
@@ -181,7 +201,12 @@ func ComputeTier1(record RunRecord, cache *Cache, adj map[string]Adjudication) (
 			}
 			if c, ok := droppedCard(d, held, adj, seenCard); ok {
 				cards = append(cards, c)
+				droppedCards++
 			}
+		}
+		for _, c := range mergeQualityCards(s.Items, adj, seenCard) {
+			cards = append(cards, c)
+			mergeCards++
 		}
 	}
 	t1.DroppedSuppressions = len(suppressed)
@@ -226,11 +251,77 @@ func ComputeTier1(record RunRecord, cache *Cache, adj map[string]Adjudication) (
 			"%d recall floor(s) suppressed by a dropped citation; an unjustified drop is a laundered miss",
 			t1.DroppedSuppressions))
 	}
-	if len(cards) > 0 {
+	if droppedCards > 0 {
 		warnings = append(warnings, fmt.Sprintf(
-			"%d dropped entr(ies) carded for a ruling — evidence the findings never engaged", len(cards)))
+			"%d dropped entr(ies) carded for a ruling — evidence the findings never engaged", droppedCards))
+	}
+	if mergeCards > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"%d finding pair(s) carded for a merge quality ruling — one practice may be split across findings", mergeCards))
+	}
+	if t1.ValidationNoteCount > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"%d validation note(s) across %d sample(s): raw output Go had to correct", t1.ValidationNoteCount, len(samples)))
+	}
+	if t1.AdoptedDowngradeCount > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"%d already_adopted verdict(s) downgraded to unknown — the model claimed an asset was in place without a verifiable excerpt", t1.AdoptedDowngradeCount))
 	}
 	return t1, reasons, warnings, cards, nil
+}
+
+// mergeQualityCards puts the spec's cross-repo merge-quality axis to the human:
+// two findings whose statements match at the same-practice bar are one practice
+// split in two, whether their evidence overlaps or is disjoint. Adjudication
+// only — no gate and no recall miss, because Go cannot tell a real split from
+// two genuinely separable practices about the same act, and only the human can.
+//
+// The pair is matched exactly as churn matches findings across runs (the
+// ScoredItem text, at churnMatchSimilarity), so one bar governs both "same
+// practice?" questions inside a run and across runs. Bounded by the contract:
+// the verifier caps findings at maxFindings, so the pair walk is a fixed
+// handful, and each pair cards at most once per run via the shared seen set.
+func mergeQualityCards(items []ScoredItem, adj map[string]Adjudication, seen map[string]bool) []PendingCard {
+	findings := shippedOnly(items)
+	tokens := make([]map[string]int, len(findings))
+	for i, f := range findings {
+		tokens[i] = practiceTokens(f.Text)
+	}
+	var out []PendingCard
+	for i := range findings {
+		for j := i + 1; j < len(findings); j++ {
+			if multisetJaccard(tokens[i], tokens[j]) < churnMatchSimilarity {
+				continue
+			}
+			if c, ok := mergeQualityCard(findings[i], findings[j], adj, seen); ok {
+				out = append(out, c)
+			}
+		}
+	}
+	return out
+}
+
+// mergeQualityCard renders one pair, keyed order-free (the two statements
+// sorted, over their combined session set) so the same pair ranked differently
+// in another sample is the same ruling.
+func mergeQualityCard(a, b ScoredItem, adj map[string]Adjudication, seen map[string]bool) (PendingCard, bool) {
+	statements := sortedSet([]string{normalizeStatement(a.Text), normalizeStatement(b.Text)})
+	k := AdjKey{TargetID: tier1CardTarget, Statement: strings.Join(statements, " | "),
+		IDSetHash: idSetHash(append(append([]string{}, a.SessionIDs...), b.SessionIDs...)),
+		Trigger:   mergeQuality}
+	h := k.Hash()
+	if seen[h] {
+		return PendingCard{}, false
+	}
+	seen[h] = true
+	if _, ruled := adj[h]; ruled {
+		return PendingCard{}, false
+	}
+	return PendingCard{TargetID: tier1CardTarget, Trigger: mergeQuality, Key: k,
+		Adjudicable: true, Ref: a.ID + "+" + b.ID,
+		ItemText: a.Text + "  ||  " + b.Text,
+		Note: "these two findings read as one practice — accept if they are genuinely separable practices, " +
+			"reject if one practice was split across findings"}, true
 }
 
 // tier1Bundles loads every bucket's bundle. A missing entry errors: an
@@ -301,13 +392,17 @@ func newTier1Sample(so SampleOutput, vo VerifiedOutput, bundles map[string]synth
 		s.Dropped = append(s.Dropped, e)
 		prose = append(prose, d.Summary, d.Reason)
 	}
-	// The quote-drop count is a soft correction Go recorded, so it is only ever
-	// on the snapshot; the denominator above is the raw claim.
+	// Every note is a soft correction Go recorded, so they are only ever on the
+	// snapshot; the fabrication denominator above is the raw claim.
+	s.ValidationNotes = len(vo.Snapshot.Meta.ValidationNotes)
 	for _, note := range vo.Snapshot.Meta.ValidationNotes {
 		if m := quoteDropNote.FindStringSubmatch(note); m != nil {
 			if count, err := strconv.Atoi(m[1]); err == nil {
 				s.QuoteDrops += count
 			}
+		}
+		if adoptedDowngradeNote.MatchString(note) {
+			s.AdoptedDowngrades++ // one note per downgraded finding
 		}
 	}
 	// Only the model's OWN prose is scanned, and with the eval scan's wider

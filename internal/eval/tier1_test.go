@@ -440,3 +440,153 @@ func TestComputeTier1MissingCacheEntriesFailClosed(t *testing.T) {
 		t.Fatal("a missing verified output must error")
 	}
 }
+
+// findingsSnapshot builds a sample carrying several shipped findings, raw and
+// snapshot alike, each citing its own evidence.
+func findingsSnapshot(findings ...insights.FindingJSON) VerifiedOutput {
+	vo := VerifiedOutput{
+		Snapshot: insights.GlobalSynthesisJSON{SchemaVersion: 2, Findings: findings},
+		Raw:      insights.RawGlobalSynthesis{SchemaVersion: 2},
+	}
+	for _, f := range findings {
+		vo.Raw.Findings = append(vo.Raw.Findings, insights.RawFinding{Rank: f.Rank, Title: f.Title,
+			Statement: f.Statement, EvidenceIDs: f.EvidenceIDs})
+	}
+	return vo
+}
+
+// The spec's two deterministic auto-signals (§Eval adaptation): the total
+// meta.validation_notes count and the adopted-verdict downgrades. Both measure
+// RAW model output before Go's correction, which is what makes them
+// non-tautological — and calibration signals, never hard gates.
+func TestComputeTier1ValidationNoteSignals(t *testing.T) {
+	b := synthesis.EvidenceBundle{Repo: "alpha",
+		Friction: []synthesis.FrictionItem{{ID: "F1", OneLine: "a", SessionID: "s1"}}}
+	first := findingSnapshot("alpha/F1")
+	first.Snapshot.Meta.ValidationNotes = []string{
+		`finding "T": already_adopted downgraded to unknown (cannot read ~/.claude/CLAUDE.md)`,
+		`finding "U": already_adopted downgraded to unknown (excerpt is not verbatim in ~/.claude/CLAUDE.md)`,
+		`finding "T": trimmed to 3 quotes`,
+	}
+	second := findingSnapshot("alpha/F1")
+	second.Snapshot.Meta.ValidationNotes = []string{
+		`finding "T": escalation removed, ~/.claude/CLAUDE.md changed after every cited session`,
+	}
+	rec, cache := tier1Case(t, map[string]synthesis.EvidenceBundle{"alpha": b},
+		[]VerifiedOutput{first, second}, 0)
+
+	t1, reasons, warnings, _, err := ComputeTier1(rec, cache, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if t1.ValidationNoteCount != 4 {
+		t.Fatalf("validation notes = %d, want every note across every sample", t1.ValidationNoteCount)
+	}
+	if t1.AdoptedDowngradeCount != 2 {
+		t.Fatalf("adopted downgrades = %d, want the two downgrade notes only", t1.AdoptedDowngradeCount)
+	}
+	if len(reasons) != 0 {
+		t.Fatalf("calibration signals warn, never hard-fail: %v", reasons)
+	}
+	if !hasWarning(warnings, "validation note") || !hasWarning(warnings, "already_adopted") {
+		t.Fatalf("both signals must reach the verdict as warnings: %v", warnings)
+	}
+
+	clean := findingSnapshot("alpha/F1")
+	cleanRec, cleanCache := tier1Case(t, map[string]synthesis.EvidenceBundle{"alpha": b},
+		[]VerifiedOutput{clean}, 0)
+	t1c, _, cleanWarnings, _, err := ComputeTier1(cleanRec, cleanCache, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if t1c.ValidationNoteCount != 0 || t1c.AdoptedDowngradeCount != 0 {
+		t.Fatalf("an uncorrected run scores zero on both: %+v", t1c)
+	}
+	if hasWarning(cleanWarnings, "validation note") || hasWarning(cleanWarnings, "already_adopted") {
+		t.Fatalf("no correction, no warning: %v", cleanWarnings)
+	}
+}
+
+// Cross-repo merge quality is the spec's adjudicated axis: one practice split
+// across two findings must reach the human recognition surface. It is a card,
+// never a gate and never a recall miss — and two findings stating genuinely
+// different practices produce none.
+func TestComputeTier1CardsSplitPractice(t *testing.T) {
+	b := synthesis.EvidenceBundle{Repo: "alpha",
+		Friction: []synthesis.FrictionItem{
+			{ID: "F1", OneLine: "a", SessionID: "s1"},
+			{ID: "F2", OneLine: "b", SessionID: "s2"},
+		}}
+	bundles := map[string]synthesis.EvidenceBundle{"alpha": b}
+	split := findingsSnapshot(
+		insights.FindingJSON{Rank: 1, Title: "Never restate the code",
+			Statement: "never add comments that restate the code", EvidenceIDs: []string{"alpha/F1"}},
+		insights.FindingJSON{Rank: 2, Title: "Never restate the code",
+			Statement: "never add comments which restate what the code does", EvidenceIDs: []string{"alpha/F2"}},
+	)
+	rec, cache := tier1Case(t, bundles, []VerifiedOutput{split}, 0)
+
+	t1, reasons, warnings, cards, err := ComputeTier1(rec, cache, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reasons) != 0 {
+		t.Fatalf("a split practice is adjudicated, never gated: %v", reasons)
+	}
+	if len(t1.OpportunityRecallMisses)+len(t1.PrefRecallMisses)+len(t1.FrictionRecallMisses) != 0 {
+		t.Fatalf("a split practice is not a recall miss: %+v", t1)
+	}
+	if len(cards) != 1 {
+		t.Fatalf("cards = %+v, want one merge-quality card for the pair", cards)
+	}
+	c := cards[0]
+	if !c.Adjudicable || c.TargetID != tier1CardTarget || c.Trigger != mergeQuality {
+		t.Fatalf("the pair must ride the tier-1 pseudo-target as an adjudicable card: %+v", c)
+	}
+	if !strings.Contains(c.ItemText, "restate the code") ||
+		!strings.Contains(c.ItemText, "restate what the code does") {
+		t.Fatalf("the card must show both statements: %q", c.ItemText)
+	}
+	if !hasWarning(warnings, "merge quality") {
+		t.Fatalf("the verdict must name the carded pair: %v", warnings)
+	}
+
+	// the same pair in a second sample is one ruling, not two
+	repeatRec, repeatCache := tier1Case(t, bundles, []VerifiedOutput{split, split}, 0)
+	_, _, _, repeatCards, err := ComputeTier1(repeatRec, repeatCache, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(repeatCards) != 1 {
+		t.Fatalf("a repeated pair cards once: %+v", repeatCards)
+	}
+
+	// an accepted ruling (they really are separable) retires the card
+	adj := map[string]Adjudication{c.Key.Hash(): {Key: c.Key, KeyHash: c.Key.Hash(), Decision: "accept"}}
+	_, _, _, ruledCards, err := ComputeTier1(rec, cache, adj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ruledCards) != 0 {
+		t.Fatalf("an adjudicated pair must not re-card: %+v", ruledCards)
+	}
+
+	// two findings stating different practices are not a split
+	distinct := findingsSnapshot(
+		insights.FindingJSON{Rank: 1, Title: "Never restate the code",
+			Statement: "never add comments that restate the code", EvidenceIDs: []string{"alpha/F1"}},
+		insights.FindingJSON{Rank: 2, Title: "Indent makefiles with tabs",
+			Statement: "prefer tabs over spaces in makefiles", EvidenceIDs: []string{"alpha/F2"}},
+	)
+	distinctRec, distinctCache := tier1Case(t, bundles, []VerifiedOutput{distinct}, 0)
+	_, _, distinctWarnings, distinctCards, err := ComputeTier1(distinctRec, distinctCache, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(distinctCards) != 0 {
+		t.Fatalf("separate practices are not a split: %+v", distinctCards)
+	}
+	if hasWarning(distinctWarnings, "merge quality") {
+		t.Fatalf("warnings: %v", distinctWarnings)
+	}
+}
