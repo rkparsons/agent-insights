@@ -84,6 +84,94 @@ func writeLiveGlobalSnapshot(t *testing.T, repos []insights.RepoStatsJSON, gener
 	return name
 }
 
+// addFixtureSession adds one more analyzed session (transcript + stamped pool
+// analysis) to the world buildFixtureWorld created, in its own repo.
+func addFixtureSession(t *testing.T, repo, id string, mtime time.Time) {
+	t.Helper()
+	proj := filepath.Join(os.Getenv("AGENT_INSIGHTS_PROJECTS_DIR"), "-Users-dev-Developer-"+repo)
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	transcript := filepath.Join(proj, id+".jsonl")
+	if err := os.WriteFile(transcript, []byte(`{"type":"user"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(transcript, mtime, mtime); err != nil {
+		t.Fatal(err)
+	}
+	if err := insights.WriteAnalysis(insights.AgentSessionAnalysis{
+		Stats: insights.AgentSessionStats{
+			SessionID: id, Repo: "/Users/dev/Developer/" + repo, Start: mtime.Add(-time.Hour),
+		},
+		TranscriptMtime: mtime,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The v2 cutover as a pre-cutover data repo actually presents it: a v1-shaped
+// benchmark AND an asset corpus that has moved since it was frozen. Both
+// refusals must surface in one message, neither may half-write, and following
+// the printed instructions must reach a freeze that completes — and stays
+// completable.
+func TestRunFreezeCutoverRitualCompletes(t *testing.T) {
+	data := buildFixtureWorld(t)
+	home := os.Getenv("HOME")
+	settings := filepath.Join(home, ".claude", "settings.json")
+	mustWriteFile(t, settings, `{"v":1}`)
+	mustWriteFile(t, filepath.Join(home, ".claude", "skills", "analyzing-agent-sessions", "SKILL.md"), "l1 v1")
+	if _, err := RunFreeze(data, insights.Config{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// v2 lands: the global run bundled a second repo, and the live corpus moved
+	addFixtureSession(t, "beta", "s2", time.Date(2026, 6, 26, 10, 0, 0, 0, time.UTC))
+	writeLiveGlobalSnapshot(t, []insights.RepoStatsJSON{
+		{Key: "myrepo", Window: insights.WindowBoundsJSON{From: "2026-06-25", To: "2026-06-25"}, AnalyzedCount: 1},
+		{Key: "beta", Window: insights.WindowBoundsJSON{From: "2026-06-26", To: "2026-06-26"}, AnalyzedCount: 1},
+	}, time.Date(2026, 7, 4, 9, 0, 0, 0, time.UTC))
+	mustWriteFile(t, settings, `{"v":2}`)
+
+	_, err := RunFreeze(data, insights.Config{})
+	if err == nil {
+		t.Fatal("a v1 benchmark plus a moved asset corpus must refuse the freeze")
+	}
+	msg := err.Error()
+	for _, want := range []string{"benchmark-v1.json", "config-snapshot-v1", "eval freeze", "settings.json"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("one message must carry both instructions, missing %q: %v", want, msg)
+		}
+	}
+	frozenSettings := filepath.Join(data, "config-snapshot", "global", "settings.json")
+	if got, err := os.ReadFile(frozenSettings); err != nil || string(got) != `{"v":1}` {
+		t.Fatalf("the refusal must not touch the frozen corpus: %q %v", got, err)
+	}
+
+	// the documented ritual, verbatim
+	if err := os.Rename(filepath.Join(data, "benchmark.json"), filepath.Join(data, "benchmark-v1.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(data, "config-snapshot"), filepath.Join(data, "config-snapshot-v1")); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := RunFreeze(data, insights.Config{})
+	if err != nil {
+		t.Fatalf("the documented ritual must complete the freeze: %v", err)
+	}
+	if !rep.Issues.Clean() {
+		t.Fatalf("post-ritual freeze issues: %+v", rep.Issues)
+	}
+	if len(rep.Benchmark.Buckets) != 2 || !rep.Benchmark.Buckets["beta"].Resolved {
+		t.Fatalf("buckets must rebuild from the v2 snapshot: %+v", rep.Benchmark.Buckets)
+	}
+	if got, err := os.ReadFile(frozenSettings); err != nil || string(got) != `{"v":2}` {
+		t.Fatalf("the current corpus must be frozen after the ritual: %q %v", got, err)
+	}
+	if _, err := RunFreeze(data, insights.Config{}); err != nil {
+		t.Fatalf("freezes after the ritual must stay clean: %v", err)
+	}
+}
+
 // The two ground-truth legs freeze independently: v2 snapshots land in the
 // subdir loadGlobalGroundTruth reads, the v1 per-repo reports beside them stay
 // out of it, and the snapshot dir never walks as a phantom repo bucket.

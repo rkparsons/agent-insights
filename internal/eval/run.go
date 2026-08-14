@@ -114,6 +114,13 @@ func RunFreeze(dataDir string, cfg insights.Config) (FreezeReport, error) {
 		return rep, fmt.Errorf("load existing benchmark: %w", err)
 	}
 	reuseBenchmark := hasBenchmark && len(existingBenchmark.Buckets) > 0 && allBucketsResolved(existingBenchmark)
+
+	// Cutover refusals are COLLECTED, not returned one at a time: both the
+	// benchmark and the config snapshot are canonical-once artifacts a v2
+	// cutover invalidates together, and an operator who is told about one,
+	// archives it, re-runs and is then told about the other cannot tell whether
+	// the ritual is converging. Both are decided before anything is written.
+	var refusals []string
 	if reuseBenchmark && hasGlobal {
 		if why := benchmarkCutoverMismatch(existingBenchmark, globalTruth); why != "" {
 			// Refuse rather than auto-rebuild: benchmark.json's populations are
@@ -121,8 +128,11 @@ func RunFreeze(dataDir string, cfg insights.Config) (FreezeReport, error) {
 			// bucket population feeds a cache key. Silently rewriting it would
 			// relabel history and re-buy L2 without the operator ever seeing a
 			// cutover happen. Archiving is a deliberate, one-line act.
-			return rep, fmt.Errorf("benchmark.json predates the v2 cutover (%s): reusing it would pin v1 buckets the frozen v2 ground truth does not describe — archive it (e.g. `mv %s %s`) and re-run `agent-insights eval freeze` to rebuild the buckets from the v2 snapshot",
-				why, filepath.Join(dataDir, "benchmark.json"), filepath.Join(dataDir, "benchmark-v1.json"))
+			refusals = append(refusals, fmt.Sprintf("benchmark.json predates the v2 cutover (%s): reusing it would pin v1 buckets the frozen v2 ground truth does not describe — archive it (`mv %s %s`) and re-run `agent-insights eval freeze` to rebuild the buckets from the v2 snapshot",
+				why, filepath.Join(dataDir, "benchmark.json"), filepath.Join(dataDir, "benchmark-v1.json")))
+			// Rebuild in memory anyway, so the config-snapshot check below reads
+			// the buckets the operator will actually end up with.
+			reuseBenchmark = false
 		}
 	}
 
@@ -131,6 +141,26 @@ func RunFreeze(dataDir string, cfg insights.Config) (FreezeReport, error) {
 		rep.Benchmark = existingBenchmark
 	} else {
 		rep.Benchmark, problems = BuildBenchmark(frozenAt, analyses, truths, global, cfg)
+	}
+
+	// The asset corpus is append-only too, and the v2 cutover is exactly when it
+	// moves (new skills, edited CLAUDE.mds, changed settings). Detecting the
+	// conflict here turns what would otherwise be a bare append-only violation
+	// from SnapshotConfig — thrown AFTER benchmark.json had been rewritten, and
+	// repeated on every subsequent freeze — into the same archive instruction
+	// the benchmark refusal gives.
+	conflicts, err := ConfigSnapshotConflicts(dataDir, rep.Benchmark.Buckets, cfg)
+	if err != nil {
+		return rep, fmt.Errorf("config snapshot: %w", err)
+	}
+	if len(conflicts) > 0 {
+		refusals = append(refusals, fmt.Sprintf("config-snapshot holds different bytes for %d frozen asset(s) (%s): the corpus the synthesis reads has moved since it was frozen, and fixtures are append-only — archive it (`mv %s %s`) and re-run `agent-insights eval freeze` to freeze the current corpus",
+			len(conflicts), summarizePaths(conflicts, 3),
+			filepath.Join(dataDir, "config-snapshot"), filepath.Join(dataDir, "config-snapshot-v1")))
+	}
+	if len(refusals) > 0 {
+		return rep, fmt.Errorf("%s\n\n(benchmark.json and config-snapshot are untouched; the corpus and ground-truth legs are append-only and unaffected)",
+			strings.Join(refusals, "\n\n"))
 	}
 
 	v1Dir := filepath.Join(dataDir, "baseline-pool", "v1")
@@ -198,6 +228,14 @@ func benchmarkCutoverMismatch(b Benchmark, global insights.GlobalSynthesisJSON) 
 		}
 	}
 	return ""
+}
+
+// summarizePaths renders at most max paths, naming how many were elided.
+func summarizePaths(paths []string, max int) string {
+	if len(paths) <= max {
+		return strings.Join(paths, ", ")
+	}
+	return fmt.Sprintf("%s, and %d more", strings.Join(paths[:max], ", "), len(paths)-max)
 }
 
 // dirExists reports whether path exists and is a directory.

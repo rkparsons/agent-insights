@@ -349,6 +349,59 @@ func TestSnapshotConfigPrefersConfiguredRepoRoot(t *testing.T) {
 	}
 }
 
+// A repo that simply has no CLAUDE.md and no .claude tree is not an
+// unavailable repo: the model must be able to look at that root and find
+// nothing, which is production's answer to the asset-ladder question. Only an
+// unresolvable root (no path, or a path that is not there) is omitted.
+func TestSnapshotConfigFreezesAssetlessRepoAsEmptyDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	data := t.TempDir()
+	assetless := filepath.Join(t.TempDir(), "alpha")
+	if err := os.MkdirAll(assetless, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(assetless, "main.go"), []byte("package main"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := SnapshotConfig(data, map[string]BucketPopulations{
+		"alpha": {RepoPath: assetless},
+		"beta":  {RepoPath: filepath.Join(t.TempDir(), "gone")}, // resolvable path, absent on disk
+	}, insights.Config{}); err != nil {
+		t.Fatal(err)
+	}
+	alphaDst := filepath.Join(data, "config-snapshot", "repos", "alpha")
+	if _, err := os.Stat(filepath.Join(alphaDst, frozenEmptyRepoMarker)); err != nil {
+		t.Fatalf("an assetless repo must freeze as a real (git-retainable) dir: %v", err)
+	}
+	entries, err := os.ReadDir(alphaDst)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("the marker must be the only thing in it: %v %v", entries, err)
+	}
+	if _, err := os.Stat(filepath.Join(data, "config-snapshot", "repos", "beta")); !os.IsNotExist(err) {
+		t.Fatalf("an absent repo root must freeze nothing: %v", err)
+	}
+
+	// the manifest consequence: alpha is a readable root, beta is unavailable
+	cfg, warnings := frozenAssetConfig(data, []string{"alpha", "beta"}, "claude-fable-5")
+	if len(cfg.Repos) != 1 || filepath.Base(cfg.Repos[0]) != "alpha" {
+		t.Fatalf("assetless-but-resolvable must render as a real root: %v", cfg.Repos)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "beta") {
+		t.Fatalf("only the unresolvable root warns: %v", warnings)
+	}
+
+	// re-freezing is a no-op, and a repo that GAINS assets later keeps the
+	// frozen (append-only) state rather than mixing a marker with content
+	if err := os.WriteFile(filepath.Join(assetless, "CLAUDE.md"), []byte("new rules"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SnapshotConfig(data, map[string]BucketPopulations{"alpha": {RepoPath: assetless}}, insights.Config{}); err != nil {
+		t.Fatalf("a repo that gained assets must not break the append-only freeze: %v", err)
+	}
+}
+
 func TestEnsureRepoScaffold(t *testing.T) {
 	data := t.TempDir()
 	if err := EnsureRepoScaffold(data); err != nil {

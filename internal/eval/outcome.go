@@ -366,6 +366,35 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 	return rec, nil
 }
 
+// skillSetHash identifies every skill the env pin overlaid into the config dir
+// the manifest points the model at — the synthesis skill it invokes AND every
+// other one sitting readable beside it.
+func skillSetHash(hashes map[string]string) string {
+	names := make([]string, 0, len(hashes))
+	for name := range hashes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	parts := []string{"skill-set"}
+	for _, name := range names {
+		parts = append(parts, name, hashes[name])
+	}
+	return cacheKey(parts...)
+}
+
+// assetRootsHash identifies which repo roots the manifest can name as readable
+// (frozenAssetConfig resolved them) versus which it renders "unavailable". Keyed
+// on bucket keys — the base names synthesis.repoRootsFor pairs on — so the hash
+// tracks the manifest's meaning rather than where the data repo happens to live.
+func assetRootsHash(cfg insights.Config) string {
+	roots := make([]string, 0, len(cfg.Repos))
+	for _, p := range cfg.Repos {
+		roots = append(roots, filepath.Base(p))
+	}
+	sort.Strings(roots)
+	return cacheKey(append([]string{"asset-roots"}, roots...)...)
+}
+
 // bundleSetHash identifies the exact evidence the model is shown: every repo's
 // key and bundle bytes. v2 synthesizes all of them in one call, so a change in
 // ANY bucket re-keys every sample — there is no per-bucket sample to key
@@ -408,16 +437,24 @@ func runGlobalSamples(ctx context.Context, rec *RunRecord, cache *Cache, synth s
 		return err
 	}
 	for s := 0; s < samples; s++ {
-		// The raw key carries the whole frozen asset corpus, not just the
-		// global half the env pin hashes: the v2 model READS the CLAUDE.mds,
-		// skills and settings the manifest names, so a raw result is only valid
-		// for the corpus it saw — v1's key would have served an answer written
-		// against a since-re-frozen corpus as a free cache hit. pin.L2EnvHash
-		// folds the configured synthesis model into the env identity (the model
-		// is not in EnvHash — see EnvPin), so a model switch re-keys L2 and
-		// nothing else.
-		rawKey := cacheKey("l2", setHash, pin.SkillHashes[skills.SynthesisSkill],
-			synthesis.SchemaHash(), rec.ConfigSnapshotHash, pin.L2EnvHash, strconv.Itoa(s))
+		// Everything the model can see has to be in this key:
+		//
+		//   - skillSetHash, not the synthesis skill alone: the pin overlays EVERY
+		//     live skill into the config dir and the manifest advertises that
+		//     whole skills/ directory as readable, so keying on one skill let an
+		//     edit to any other one be served a stale answer for free.
+		//   - the whole frozen asset corpus, not just the global half the env pin
+		//     hashes: the model READS the repo CLAUDE.mds the manifest names.
+		//   - assetRootsHash: WHICH repo roots the manifest could name. A root
+		//     that resolves and a root rendered "unavailable" are different
+		//     prompts. Bucket keys rather than paths, so relocating the data repo
+		//     does not re-key a corpus that has not changed.
+		//   - pin.L2EnvHash: CLI version, pristine snapshot, and the configured
+		//     synthesis model (deliberately absent from EnvHash — see EnvPin), so
+		//     a model switch re-keys L2 and nothing else.
+		rawKey := cacheKey("l2", setHash, skillSetHash(pin.SkillHashes),
+			synthesis.SchemaHash(), rec.ConfigSnapshotHash, assetRootsHash(cfg),
+			pin.L2EnvHash, strconv.Itoa(s))
 		var raw insights.RawGlobalSynthesis
 		hit, err := cache.Get("l2", rawKey, &raw)
 		if err != nil {

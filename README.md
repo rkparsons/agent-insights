@@ -154,15 +154,21 @@ not a smoke test.
   committed.
 
 **The v2 cutover re-baselines the gate.** Expectations re-freeze on the first v2 run:
-findings replace themes, so the v1 score line (0.62) is historical and is not a bar the
-first v2 run is measured against. Two things change mechanically at that cutover, both
-handled by `eval freeze`: the v2 cross-repo snapshot freezes into its own
-`ground-truth/global/` (write-once, like the v1 per-repo reports beside it, which stay
-readable for historical records), and a `benchmark.json` left over from the v1 era —
-reused verbatim while every bucket resolves — is refused rather than silently pinning v1
-buckets the v2 anchors never had. The refusal names the mismatch and asks for the file to
-be archived and the freeze re-run; nothing is rewritten under the operator, because those
-populations are what committed verdicts' benchmark hashes refer to.
+findings replace themes, so the v1 score line (0.62) is historical, not a bar the first v2
+run is measured against. `eval freeze` handles the mechanics — the v2 cross-repo snapshot
+freezes into its own `ground-truth/global/` (write-once, like the v1 per-repo reports
+beside it, which stay readable for historical records) — and refuses, in one message
+naming both, the two artifacts a cutover invalidates:
+
+```bash
+mv benchmark.json benchmark-v1.json      # v1 buckets the v2 anchors never had
+mv config-snapshot config-snapshot-v1    # the asset corpus moved since it was frozen
+agent-insights eval freeze               # rebuild both against today's v2 world
+```
+
+Neither is rewritten under the operator: those populations are what committed verdicts'
+benchmark hashes refer to, and fixtures are append-only, so a moved corpus is an archive
+decision rather than a silent replace.
 
 The eval targets themselves were derived by diffing this pipeline's output against two
 independent analyses of the same corpus — see

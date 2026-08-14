@@ -368,6 +368,54 @@ func TestRunOutcomeRawKeyTracksAssetCorpus(t *testing.T) {
 	}
 }
 
+// The env pin overlays EVERY live skill into the config dir the manifest
+// advertises as readable, so any skill edit — not just the synthesis skill's —
+// must re-key the raw L2 entry.
+func TestRunOutcomeRawKeyCoversEveryOverlaidSkill(t *testing.T) {
+	_, opts := buildOutcomeFixture(t)
+	fs := opts.Synth.(*fakeGlobalSynth)
+	rec, err := RunOutcome(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mustWriteFile(t, filepath.Join(opts.SkillDirs["analyzing-agent-sessions"], "SKILL.md"), "l1 skill v2")
+	edited, err := RunOutcome(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fs.calls != 6 {
+		t.Fatalf("an edit to a readable non-synthesis skill must re-buy all 3 samples, calls = %d", fs.calls)
+	}
+	for i, s := range edited.SampleOutputs {
+		if !s.Fresh || s.RawKey == rec.SampleOutputs[i].RawKey {
+			t.Fatalf("sample %d served a stale raw entry across a skill edit: %+v", i, s)
+		}
+	}
+	// and an untouched skill set keys identically
+	again, err := RunOutcome(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, s := range again.SampleOutputs {
+		if s.Fresh || s.RawKey != edited.SampleOutputs[i].RawKey {
+			t.Fatalf("unchanged skills re-keyed sample %d", i)
+		}
+	}
+}
+
+// Which repo roots the manifest can name is itself an input: a resolvable root
+// and an "unavailable" one are different prompts over identical corpus bytes.
+func TestAssetRootsHashTracksResolvedRoots(t *testing.T) {
+	both := assetRootsHash(insights.Config{Repos: []string{"/data/config-snapshot/repos/alpha", "/data/config-snapshot/repos/beta"}})
+	if both != assetRootsHash(insights.Config{Repos: []string{"/moved/config-snapshot/repos/alpha", "/moved/config-snapshot/repos/beta"}}) {
+		t.Fatal("relocating the data repo must not re-key an unchanged corpus")
+	}
+	if both == assetRootsHash(insights.Config{Repos: []string{"/data/config-snapshot/repos/alpha"}}) {
+		t.Fatal("a root the manifest can no longer name must re-key")
+	}
+}
+
 // The configured synthesis_model is the run's L2 identity: it reaches the
 // record, the verified snapshot's meta, and the raw cache key — a model switch
 // is a re-baseline event, never a cache hit.

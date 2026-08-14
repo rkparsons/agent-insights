@@ -53,8 +53,14 @@ func copyFileRaw(src, dst string) error {
 	return os.Rename(tmpName, dst)
 }
 
+// fileAction is what a tree walk does with one accepted (live, frozen) pair.
+// The freeze passes copyFileRaw; the pre-flight conflict check passes a
+// comparator that writes nothing — the same walk either way, so the check can
+// never disagree with what the freeze would actually do.
+type fileAction func(src, dst string) error
+
 // copyTreeVisited is the recursive implementation of copyTree with cycle detection.
-func copyTreeVisited(srcRoot, dstRoot string, keep func(string) bool, visited map[string]bool) (int, error) {
+func copyTreeVisited(srcRoot, dstRoot string, keep func(string) bool, apply fileAction, visited map[string]bool) (int, error) {
 	n := 0
 	err := filepath.WalkDir(srcRoot, func(p string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -87,7 +93,7 @@ func copyTreeVisited(srcRoot, dstRoot string, keep func(string) bool, visited ma
 				visited[target] = true
 				sub, subErr := copyTreeVisited(target, filepath.Join(dstRoot, rel), func(inner string) bool {
 					return keep(filepath.Join(rel, inner))
-				}, visited)
+				}, apply, visited)
 				if subErr != nil {
 					return subErr
 				}
@@ -99,7 +105,7 @@ func copyTreeVisited(srcRoot, dstRoot string, keep func(string) bool, visited ma
 		if !keep(rel) {
 			return nil
 		}
-		if err := copyFileRaw(p, filepath.Join(dstRoot, rel)); err != nil {
+		if err := apply(p, filepath.Join(dstRoot, rel)); err != nil {
 			return err
 		}
 		n++
@@ -127,6 +133,11 @@ func copyTreeVisited(srcRoot, dstRoot string, keep func(string) bool, visited ma
 // Cycles (symlink to self or ancestor) are detected via an EvalSymlinks-resolved
 // visited set, preventing unbounded recursion.
 func copyTree(srcRoot, dstRoot string, keep func(rel string) bool) (int, error) {
+	return copyTreeWith(srcRoot, dstRoot, keep, copyFileRaw)
+}
+
+// copyTreeWith is copyTree with the per-file action injected (see fileAction).
+func copyTreeWith(srcRoot, dstRoot string, keep func(rel string) bool, apply fileAction) (int, error) {
 	if _, err := os.Stat(srcRoot); err != nil {
 		if os.IsNotExist(err) {
 			return 0, nil
@@ -138,7 +149,7 @@ func copyTree(srcRoot, dstRoot string, keep func(rel string) bool) (int, error) 
 		resolved = evalPath
 	}
 	visited := map[string]bool{resolved: true}
-	return copyTreeVisited(resolved, dstRoot, keep, visited)
+	return copyTreeVisited(resolved, dstRoot, keep, apply, visited)
 }
 
 // CopyGroundTruth freezes the live v1 per-repo synthesis reports into
@@ -174,23 +185,78 @@ func CopyBaselinePool(dataDir string) (int, error) {
 	})
 }
 
+// frozenEmptyRepoMarker records a repo root that resolved but held no CLAUDE.md
+// and no .claude tree when the corpus was frozen. The directory has to exist in
+// the frozen corpus — the manifest names it as a readable root, so the model
+// asks production's asset-ladder question ("does this repo document this
+// already?") and gets production's answer, which is different from the answer
+// an unavailable root gives — and git does not track empty directories, so the
+// directory needs a file to survive a commit. A dot-file keeps it out of the
+// model's asset globs: an assetless repo must still look assetless.
+const frozenEmptyRepoMarker = ".no-assets"
+
+const frozenEmptyRepoBody = "This repo had no CLAUDE.md and no .claude/ when the eval corpus was frozen.\n"
+
 // SnapshotConfig freezes the config surface the synthesis manifest points the
 // model at and the env-pinning later composes from: the global ~/.claude surface (top-level
 // *.md, settings.json, statusline.mjs, the full skills and hooks trees, and
 // the plugin inventory — never the plugins cache) plus each bucket repo's
 // CLAUDE.md and .claude tree.
-//
-// A bucket's repo is taken from cfg.Repos when the config lists it, keyed the
-// way synthesis.repoRootsFor keys configured paths: that path is exactly what
-// the production manifest names, so the frozen copy is of the tree a live run
-// would have read. A bucket the config does not list falls back to the
-// benchmark's RepoPath (an observed session cwd), and a bucket with neither is
-// skipped — frozenAssetConfig warns about the resulting hole at run time.
 func SnapshotConfig(dataDir string, buckets map[string]BucketPopulations, cfg insights.Config) (int, error) {
+	return snapshotConfigWalk(dataDir, buckets, cfg, copyFileRaw, freezeEmptyRepoDir)
+}
+
+// ConfigSnapshotConflicts reports the frozen asset paths whose live counterpart
+// now holds different bytes — the append-only violations SnapshotConfig would
+// hit, found before anything is written. It walks exactly what the freeze walks
+// (snapshotConfigWalk) and writes nothing.
+func ConfigSnapshotConflicts(dataDir string, buckets map[string]BucketPopulations, cfg insights.Config) ([]string, error) {
+	var conflicts []string
+	_, err := snapshotConfigWalk(dataDir, buckets, cfg, func(src, dst string) error {
+		live, err := os.ReadFile(src)
+		if err != nil {
+			return err
+		}
+		frozen, err := os.ReadFile(dst)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil // a new file is an append, not a conflict
+		}
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(live, frozen) {
+			conflicts = append(conflicts, dst)
+		}
+		return nil
+	}, func(string) error { return nil })
+	sort.Strings(conflicts)
+	return conflicts, err
+}
+
+// snapshotConfigWalk is the one definition of what the config snapshot covers.
+// visit receives every (live, frozen) file pair; emptyRepo receives the frozen
+// directory of a repo root that resolved but carried no assets.
+//
+// A bucket's repo path is the configured checkout root when cfg lists one under
+// the bucket's key, else the benchmark's RepoPath (an observed session cwd).
+// The lookup maps each configured path's base name through cfg.Canonical, which
+// is what makes it match a BUCKET key (bucket keys come from synthesis.RepoKey,
+// which applies aliases). Production's synthesis.repoRootsFor does NOT do this
+// — it pairs manifest roots on the plain base name — and the divergence is
+// harmless here precisely because eval never hands it a live path: the roots it
+// pairs are the frozen directories this function writes, whose base name IS the
+// bucket key.
+//
+// A bucket whose path is empty or absent on disk freezes nothing at all: that
+// root is unresolvable, and frozenAssetConfig warns about it and lets the
+// manifest say "unavailable". A path that resolves but holds no assets is a
+// different case — see emptyRepo below.
+func snapshotConfigWalk(dataDir string, buckets map[string]BucketPopulations, cfg insights.Config,
+	visit fileAction, emptyRepo func(dst string) error) (int, error) {
 	home, _ := os.UserHomeDir()
 	total := 0
 	globalDst := filepath.Join(dataDir, "config-snapshot", "global")
-	n, err := copyTree(filepath.Join(home, ".claude"), globalDst, func(rel string) bool {
+	n, err := copyTreeWith(filepath.Join(home, ".claude"), globalDst, func(rel string) bool {
 		if strings.HasPrefix(rel, "skills"+string(filepath.Separator)) {
 			return true
 		}
@@ -204,7 +270,7 @@ func SnapshotConfig(dataDir string, buckets map[string]BucketPopulations, cfg in
 			return strings.HasSuffix(rel, ".md") || rel == "settings.json" || rel == "statusline.mjs"
 		}
 		return false
-	})
+	}, visit)
 	if err != nil {
 		return total, err
 	}
@@ -227,23 +293,52 @@ func SnapshotConfig(dataDir string, buckets map[string]BucketPopulations, cfg in
 		if repoPath == "" {
 			continue
 		}
+		if info, err := os.Stat(repoPath); err != nil || !info.IsDir() {
+			continue // unresolvable root: nothing to freeze, and nothing to claim
+		}
 		repoDst := filepath.Join(dataDir, "config-snapshot", "repos", k)
+		assets := 0
 		if _, err := os.Stat(filepath.Join(repoPath, "CLAUDE.md")); err == nil {
-			if err := copyFileRaw(filepath.Join(repoPath, "CLAUDE.md"), filepath.Join(repoDst, "CLAUDE.md")); err != nil {
+			if err := visit(filepath.Join(repoPath, "CLAUDE.md"), filepath.Join(repoDst, "CLAUDE.md")); err != nil {
 				return total, err
 			}
-			total++
+			assets++
 		}
-		n, err := copyTree(filepath.Join(repoPath, ".claude"), filepath.Join(repoDst, ".claude"), func(rel string) bool {
+		n, err := copyTreeWith(filepath.Join(repoPath, ".claude"), filepath.Join(repoDst, ".claude"), func(rel string) bool {
 			base := filepath.Base(rel)
 			return strings.HasSuffix(rel, ".md") || base == "settings.json" || base == "settings.local.json"
-		})
+		}, visit)
 		if err != nil {
 			return total, err
 		}
-		total += n
+		assets += n
+		total += assets
+		if assets == 0 {
+			// Resolvable but assetless is a real answer, not a hole: the model
+			// must be able to look and find nothing, exactly as it would in the
+			// live repo.
+			if err := emptyRepo(repoDst); err != nil {
+				return total, err
+			}
+		}
 	}
 	return total, nil
+}
+
+// freezeEmptyRepoDir materializes the frozen directory of an assetless repo
+// root. An already-frozen directory is left exactly as it is: the corpus is
+// append-only, so a repo that has since deleted its CLAUDE.md keeps the copy the
+// runs were scored against rather than gaining a marker that contradicts it.
+func freezeEmptyRepoDir(dst string) error {
+	if _, err := os.Stat(dst); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dst, frozenEmptyRepoMarker), []byte(frozenEmptyRepoBody), 0o644)
 }
 
 // frozenAssetConfig builds the pipeline config an eval run hands the global
