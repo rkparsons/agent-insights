@@ -268,7 +268,7 @@ func TestVerify2_GoOwnedOverwrite(t *testing.T) {
 	}
 }
 
-func TestVerify2_ActedKeyV2IsRepoFree(t *testing.T) {
+func TestVerify2_ActedKeyIsRepoFree(t *testing.T) {
 	statement := "Run the smoke test before calling a task done."
 	if ActedKey("hook", statement) == ActedKey("setting", statement) {
 		t.Error("acted key must vary with asset type")

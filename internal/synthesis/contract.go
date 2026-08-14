@@ -31,6 +31,9 @@ func BuildShowJSON(snap insights.GlobalSynthesisJSON, found bool) insights.Globa
 		snap.Findings[i].EvidenceIDs = nonNil(snap.Findings[i].EvidenceIDs)
 		snap.Findings[i].Repos = nonNil(snap.Findings[i].Repos)
 	}
+	for i := range snap.Dropped {
+		snap.Dropped[i].EvidenceIDs = nonNil(snap.Dropped[i].EvidenceIDs)
+	}
 	return snap
 }
 

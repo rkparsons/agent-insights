@@ -39,9 +39,11 @@ type Benchmark struct {
 
 // loadGroundTruth reads the newest RepoSynthesis per repo dir under
 // dataDir/ground-truth (filenames are YYYY-MM-DD.json, so lexical desc ==
-// chronological desc — same convention as synthesis.LoadSyntheses). A repo
-// dir whose every .json file is unreadable or malformed is an error naming
-// the dir, not a silently omitted bucket.
+// chronological desc). A repo dir whose every .json file is unreadable or
+// malformed is an error naming the dir, not a silently omitted bucket.
+//
+// Task 8-10: ground truth is still v1-shaped; plan Task 8 re-sources it from
+// the v2 global snapshot.
 func loadGroundTruth(dir string) (map[string]RepoSynthesis, error) {
 	repoDirs, err := os.ReadDir(dir)
 	if err != nil {

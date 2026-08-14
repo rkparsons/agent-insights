@@ -17,7 +17,7 @@ type RunState struct {
 	PID        int        `json:"pid"`
 	StartedAt  time.Time  `json:"started_at"`
 	FinishedAt *time.Time `json:"finished_at,omitempty"` // pointer: omitempty is a no-op on time.Time itself
-	Written    int        `json:"written"` // 0 or 1: a global run stores one snapshot or none
+	Written    int        `json:"written"`               // 0 or 1: a global run stores one snapshot or none
 	Reason     string     `json:"reason,omitempty"`
 	LogPath    string     `json:"log_path,omitempty"`
 }

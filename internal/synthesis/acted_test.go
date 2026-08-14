@@ -1,6 +1,7 @@
 package synthesis
 
 import (
+	"strings"
 	"sync"
 	"testing"
 )
@@ -22,13 +23,18 @@ func TestActedKey_TypeScoped(t *testing.T) {
 	}
 }
 
-// TestActedKey_RepoFree pins the v2 key's cross-repo shape: a finding merged
-// across repos has no source repo to key on, and two runs that cite different
-// repo sets for the same practice must not produce different keys.
-func TestActedKey_RepoFree(t *testing.T) {
-	statement := "Run the smoke test before calling a task done."
-	if ActedKey("hook", statement) != ActedKey("hook", statement) {
-		t.Error("the key must depend on nothing but asset type and statement")
+// TestActedKey_LengthAndCharset pins the stored key's shape: acted keys are
+// passed back in on the command line (`insights acted <key>`) and compared as
+// opaque strings by every consumer.
+func TestActedKey_LengthAndCharset(t *testing.T) {
+	k := ActedKey("hook", "Run the smoke test before calling a task done.")
+	if len(k) != 16 {
+		t.Fatalf("key %q, want 16 chars", k)
+	}
+	for _, r := range k {
+		if !strings.ContainsRune("0123456789abcdef", r) {
+			t.Fatalf("key %q must be lowercase hex", k)
+		}
 	}
 }
 

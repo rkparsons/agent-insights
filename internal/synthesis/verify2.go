@@ -192,7 +192,7 @@ func (v *verifier) finding(i int, rf insights.RawFinding) (f insights.FindingJSO
 	if !adoptedVerdicts[rf.AlreadyAdopted.Verdict] { // absorbed schema constraint
 		// A "Yes"/"adopted" variant would read as not-adopted to every
 		// consumer, silently un-filtering a finding the model marked done.
-		v.fail(fmt.Sprintf("%s has invalid already_adopted verdict %q", where, rf.AlreadyAdopted.Verdict))
+		v.fail(fmt.Sprintf("%s has invalid already_adopted verdict %q", where, v.modelText(rf.AlreadyAdopted.Verdict)))
 	}
 	v.checkAsset(where, rf.Asset)
 	v.checkCitations(where, rf.EvidenceIDs)
@@ -482,7 +482,7 @@ func (v *verifier) checkCitations(where string, ids []string) {
 	}
 	for _, id := range ids {
 		if _, ok := v.items[id]; !ok {
-			v.fail(fmt.Sprintf("%s cites unknown evidence id %q", where, id))
+			v.fail(fmt.Sprintf("%s cites unknown evidence id %q", where, v.modelText(id)))
 		}
 	}
 }
@@ -493,7 +493,7 @@ func (v *verifier) checkCitations(where string, ids []string) {
 func (v *verifier) checkGrounding(where, assetType string, ids []string) {
 	allowed, ok := groundingKinds[assetType]
 	if !ok {
-		v.fail(fmt.Sprintf("%s has unknown asset type %q", where, assetType))
+		v.fail(fmt.Sprintf("%s has unknown asset type %q", where, v.modelText(assetType)))
 		return
 	}
 	for _, id := range ids {
@@ -502,11 +502,11 @@ func (v *verifier) checkGrounding(where, assetType string, ids []string) {
 			continue
 		}
 		if !strings.ContainsRune(allowed, rune(item.kind)) {
-			v.fail(fmt.Sprintf("%s asset type %s cites out-of-kind evidence id %q", where, assetType, id))
+			v.fail(fmt.Sprintf("%s asset type %s cites out-of-kind evidence id %q", where, assetType, v.modelText(id)))
 			continue
 		}
 		if assetType == "new_skill" && item.kind == 'G' && !retypingSignalKinds[item.signalKind] {
-			v.fail(fmt.Sprintf("%s new_skill cites non-retyping signal %q (kind %s)", where, id, item.signalKind))
+			v.fail(fmt.Sprintf("%s new_skill cites non-retyping signal %q (kind %s)", where, v.modelText(id), item.signalKind))
 		}
 	}
 }
@@ -529,7 +529,7 @@ func (v *verifier) checkAsset(where string, asset insights.AssetJSON) {
 
 func (v *verifier) checkAudience(where, assetType, audience string) {
 	if audience != "" && !validAudiences[audience] {
-		v.fail(fmt.Sprintf("%s has invalid audience %q", where, audience))
+		v.fail(fmt.Sprintf("%s has invalid audience %q", where, v.modelText(audience)))
 	}
 	if audience == "" && audienceRequired[assetType] {
 		v.fail(fmt.Sprintf("%s asset type %s is missing audience", where, assetType))
@@ -575,6 +575,13 @@ func (v *verifier) checkNoLeaks(where string, fields map[string]string) {
 }
 
 func (v *verifier) fail(reason string) { v.hard = append(v.hard, reason) }
+
+// modelText bounds a model-authored string before it enters a fail-closed
+// reason. Those reasons are joined into the run state on disk and shown by the
+// TUI, so an unbounded or home-path-bearing value would land there unscanned —
+// the finding it came from never reaches the privacy scan, because the run
+// fails before anything is stored.
+func (v *verifier) modelText(s string) string { return truncRunes(v.tilde(s), 120) }
 
 // note records a soft correction. Notes are Go-authored, so the model can
 // never inject one: raw.Meta is discarded wholesale.

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -54,7 +55,13 @@ func StoreGlobal(s insights.GlobalSynthesisJSON) (string, error) {
 	if err := atomicWrite(path, data); err != nil {
 		return "", err
 	}
-	return path, pruneSnapshots(dir, globalRetention)
+	// Retention is housekeeping, not part of the write: the snapshot is on disk
+	// and readable, so a failed prune must not report the run as failed (which
+	// would leave the TUI showing an error over a perfectly good snapshot).
+	if err := pruneSnapshots(dir, globalRetention); err != nil {
+		log.Printf("synthesis: prune global snapshots: %v", err)
+	}
+	return path, nil
 }
 
 // preserveFailedSynthesis copies a failed run's model output out of the
@@ -78,7 +85,10 @@ func preserveFailedSynthesis(workDir string, at time.Time) (string, error) {
 	if err := atomicWrite(path, data); err != nil {
 		return "", err
 	}
-	return path, pruneSnapshots(dir, globalRetention)
+	if err := pruneSnapshots(dir, globalRetention); err != nil {
+		log.Printf("synthesis: prune diagnostics copies: %v", err)
+	}
+	return path, nil
 }
 
 // pruneSnapshots deletes all but the newest keep .json files in dir, by the

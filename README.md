@@ -14,7 +14,7 @@ The design stance is that deterministic Go brackets the LLM at every stage:
   evidence-id sets; a regex tripwire fails the run on any quantitative claim in LLM prose.
 - **Every quote is verified verbatim or dropped.** Substring-checked against the
   transcript (layer 1) and the analysis pool (layer 2), fail-closed.
-- **Empty is a valid answer.** Zero themes beats an invented one; the evals measure
+- **Empty is a valid answer.** Zero findings beats an invented one; the evals measure
   fabrication directly, on the *raw pre-guard* output so the metric can't go tautological.
 
 ```

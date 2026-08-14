@@ -363,6 +363,11 @@ func parseSynthesizeArgs(args []string) (synthesis.Options, error) {
 			if err != nil {
 				return o, fmt.Errorf("--min-sessions: %w", err)
 			}
+			if n < 0 {
+				// 0 means "use the config's floor"; a negative would silently
+				// read as that too rather than as the override it looks like.
+				return o, fmt.Errorf("--min-sessions must not be negative")
+			}
 			o.MinSessions = n
 		default:
 			return o, fmt.Errorf("unknown flag %q", args[i])
