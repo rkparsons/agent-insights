@@ -164,7 +164,11 @@ func aggregateRepeat(r Rubric, items map[string]ScoredItem, res MatchResult, anc
 		gran := m.Granularity
 		if len(m.ForbiddenFormsMatched) > 0 {
 			gran = "over_generalized"
-			forbidden = true
+			// Only SHIPPED items can over-generalize. A forbidden form the
+			// model declined to act on is not a claim it made, so it must
+			// never cap the target — dropped is a recall channel, never a
+			// precision liability.
+			forbidden = forbidden || !it.Dropped
 		}
 		if gran == "full" && !allTrue(m.NuanceResults) {
 			gran = "partial" // full requires every nuance; enforce even if the matcher slipped
@@ -317,14 +321,18 @@ func scoreTargetSample(ctx context.Context, cache *Cache, m Matcher, envHash str
 
 // scoreNegativeSample flags violations of one negative rubric on one sample:
 // a majority of repeats reporting any match is a violation (soft-fail —
-// surfaced in the verdict, never a hard fail). Negatives have no expected
-// bucket and no corroboration channel; the negative-recall probe guards this
-// path's detection power.
+// surfaced in the verdict, never a hard fail). Negatives have no corroboration
+// channel; the negative-recall probe guards this path's detection power.
+//
+// Dropped entries are excluded: a negative rubric asks "did the model
+// recommend this bad thing", and evidence it declined to act on is the
+// opposite of recommending it. Scoring drops here would punish the model for
+// the very judgement the contract asks it to make.
 func scoreNegativeSample(ctx context.Context, cache *Cache, m Matcher, envHash string, r Rubric, items []ScoredItem, repeats int) (bool, []string, error) {
 	if repeats < 1 {
 		return false, nil, fmt.Errorf("%s: repeats must be >= 1, got %d", r.ID, repeats)
 	}
-	payload := BuildMatchPayload(r, items)
+	payload := BuildMatchPayload(r, shippedOnly(items))
 	if len(payload.Items) == 0 {
 		return false, nil, nil
 	}
@@ -350,4 +358,15 @@ func scoreNegativeSample(ctx context.Context, cache *Cache, m Matcher, envHash s
 		return false, nil, nil
 	}
 	return true, refs, nil
+}
+
+// shippedOnly drops the dropped entries: the items the model actually produced.
+func shippedOnly(items []ScoredItem) []ScoredItem {
+	out := make([]ScoredItem, 0, len(items))
+	for _, it := range items {
+		if !it.Dropped {
+			out = append(out, it)
+		}
+	}
+	return out
 }

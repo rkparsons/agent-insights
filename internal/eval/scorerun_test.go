@@ -110,6 +110,38 @@ func TestScoreRunEndToEndFreshBaseline(t *testing.T) {
 	}
 }
 
+// Samples lost at synthesis time (LLM failure or a verifier rejection) shrink
+// the scoring denominator silently — the median is taken over survivors and
+// sample agreement is trivially 1.0. Until the pre-spend refusal channel is
+// re-sourced (Task 9), scoring must at least say so in the verdict.
+func TestScoreRunWarnsOnLostSamples(t *testing.T) {
+	_, opts := buildScoreFixture(t)
+	opts.Synth = &fakeGlobalSynth{raw: mergedRaw(), errs: []bool{true, true}} // only sample 2 lands
+	rec, err := RunOutcome(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.SampleOutputs) != 1 || rec.Samples != 3 {
+		t.Fatalf("fixture must lose 2 of 3 samples: %+v", rec.SampleOutputs)
+	}
+	v, _, err := ScoreRun(context.Background(), ScoreOptions{
+		DataDir: opts.DataDir, CacheDir: opts.CacheDir, ClaudeVersion: "1.0.0 (test)",
+		Matcher:  &scriptedMatcher{responses: map[string]MatchResult{"M1": m1Match()}},
+		ScoredAt: time.Date(2026, 7, 5, 10, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, w := range v.Warnings {
+		if strings.Contains(w, "1 of 3") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the verdict must name the lost samples: %v", v.Warnings)
+	}
+}
+
 func TestScoreRunSecondRunCachedWithBaseline(t *testing.T) {
 	opts, _ := runScoreFixture(t)
 	sm := &scriptedMatcher{responses: map[string]MatchResult{"M1": m1Match()}}

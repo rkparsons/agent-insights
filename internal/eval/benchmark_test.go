@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rkparsons/agent-insights/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/synthesis"
 )
 
 func analysisFor(id, repo, cwd string, start time.Time) insights.AgentSessionAnalysis {
@@ -234,10 +235,10 @@ func TestGroundTruthSeparatesGlobalFromRepoDirs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.MkdirAll(filepath.Join(dir, "global"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(dir, synthesis.GlobalDirName), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, "global", name), raw, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, synthesis.GlobalDirName, name), raw, 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}

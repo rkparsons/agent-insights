@@ -17,10 +17,16 @@ func synthesisDir() string { return filepath.Join(insights.InsightsDir(), "synth
 // Dir returns the synthesis artifacts root (exported for the eval freeze).
 func Dir() string { return synthesisDir() }
 
+// GlobalDirName names the cross-repo snapshot subdirectory of Dir(). Exported
+// because the eval freeze copies that whole tree and has to tell the snapshot
+// dir apart from the v1 per-repo dirs beside it — a rename here that eval did
+// not follow would silently reintroduce a phantom "global" ground-truth bucket.
+const GlobalDirName = "global"
+
 // globalDir holds the cross-repo snapshots, one per accepted run. The v1
 // per-repo directories sit beside it, untouched and unread — nothing migrates
 // them, and nothing loads them (spec §Verification).
-func globalDir() string { return filepath.Join(synthesisDir(), "global") }
+func globalDir() string { return filepath.Join(synthesisDir(), GlobalDirName) }
 
 // diagnosticsDir holds the model output of runs that never produced a snapshot
 // (see preserveFailedSynthesis). Deliberately a sibling of the synthesis dir,

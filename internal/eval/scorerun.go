@@ -191,6 +191,16 @@ func newScoreSession(ctx context.Context, opts ScoreOptions, scratchStamp time.T
 		return nil, nil, fmt.Errorf("record %s carries synthesis hard errors (%s) — scoring refused before any matcher spend; fix the pipeline and re-run `insights eval outcome`",
 			filepath.Base(s.recPath), strings.Join(s.hardErrors, "; "))
 	}
+	// A sample the run lost (LLM failure, or output the verifier rejected)
+	// silently shrinks the scoring denominator: medians are taken over the
+	// survivors and sample agreement goes trivially to 1.0. Task 9 re-sources
+	// the pre-spend refusal channel; until then the loss must at least reach
+	// the verdict rather than living only in the run record's warnings.
+	if got := len(s.rec.SampleOutputs); s.rec.Samples > 0 && got < s.rec.Samples {
+		s.warnings = append(s.warnings, fmt.Sprintf(
+			"record %s scored %d of %d requested samples — %d were lost at synthesis time (see the record's warnings); every median and sample-agreement figure below is over the survivors",
+			filepath.Base(s.recPath), got, s.rec.Samples, s.rec.Samples-got))
+	}
 	if s.rec.Population == "as_consumed" {
 		// the run-0 control scores against PRE-strip anchors from ground-truth/
 		if s.truths, err = loadGroundTruth(filepath.Join(opts.DataDir, "ground-truth")); err != nil {

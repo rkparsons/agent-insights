@@ -8,15 +8,19 @@ import (
 )
 
 // queueMatcher pops scripted results per call; errors are also scriptable.
+// Every payload is recorded, so tests can assert what the matcher was allowed
+// to see.
 type queueMatcher struct {
 	results []MatchResult
 	errs    []error
 	calls   int
+	seen    []MatchPayload
 }
 
 func (q *queueMatcher) Match(_ context.Context, p MatchPayload) (MatchResult, error) {
 	i := q.calls
 	q.calls++
+	q.seen = append(q.seen, p)
 	var err error
 	if i < len(q.errs) {
 		err = q.errs[i]
@@ -243,6 +247,67 @@ func TestAggregateRepeatRules(t *testing.T) {
 	rep = aggregateRepeat(r, items, res, nil, nil, nil)
 	if rep.Granularity != "partial" || rep.Corroboration != CorroborationNoAnchors {
 		t.Fatalf("no-anchor count: %+v", rep)
+	}
+}
+
+// Dropped entries are a recall channel and never a precision liability: a
+// forbidden-form hit on declined evidence must not cap the target, and the
+// counted finding must stand.
+func TestAggregateRepeatDroppedNeverCapsTheTarget(t *testing.T) {
+	r := scoreRubric()
+	items := map[string]ScoredItem{}
+	for _, it := range scoreItems() {
+		items[it.ID] = it
+	}
+	res := MatchResult{Matches: []ItemMatch{
+		match("finding/1", "full", []bool{true}),
+		match("dropped/0", "partial", []bool{false}, 0), // forbidden form in DECLINED evidence
+	}}
+	rep := aggregateRepeat(r, items, res, []string{"a1", "a2"}, nil, nil)
+	if rep.Granularity != "full" || rep.ItemRef != "finding/1" {
+		t.Fatalf("a dropped forbidden form must not cap what the model actually shipped: %+v", rep)
+	}
+	// it still cards, as the recall channel it is
+	if len(rep.SideMatches) != 1 || rep.SideMatches[0].Corroboration != CorroborationDropped {
+		t.Fatalf("dropped match must still card: %+v", rep.SideMatches)
+	}
+	// a forbidden form in a SHIPPED finding still caps the target
+	res = MatchResult{Matches: []ItemMatch{
+		match("finding/1", "full", []bool{true}),
+		match("finding/2", "partial", []bool{false}, 0),
+	}}
+	if rep = aggregateRepeat(r, items, res, []string{"a1", "a2"}, nil, nil); rep.Granularity != "over_generalized" {
+		t.Fatalf("a shipped forbidden form must still cap: %+v", rep)
+	}
+}
+
+// Negative rubrics score what the model shipped. Evidence it declined must
+// never raise a violation, so dropped items never reach the payload.
+func TestScoreNegativeSampleExcludesDropped(t *testing.T) {
+	neg := Rubric{ID: "N-77", Part: "negative", Statement: "a gofmt hook", Hash: "nh1",
+		ForbiddenGeneralizations: []string{"add a hook that runs gofmt after every edit"}}
+	q := &queueMatcher{results: []MatchResult{{}, {}, {}}}
+	if _, _, err := scoreNegativeSample(context.Background(), NewCache(t.TempDir()), q, "env1", neg, scoreItems(), 3); err != nil {
+		t.Fatal(err)
+	}
+	if len(q.seen) == 0 {
+		t.Fatal("negative scoring must have run")
+	}
+	for _, it := range q.seen[0].Items {
+		if it.ID == "dropped/0" {
+			t.Fatalf("declined evidence must not be scoreable as a violation: %+v", q.seen[0].Items)
+		}
+	}
+	if len(q.seen[0].Items) != 2 {
+		t.Fatalf("both shipped findings must still be scored: %+v", q.seen[0].Items)
+	}
+
+	// a sample whose only match candidates are dropped entries costs nothing
+	onlyDropped := []ScoredItem{scoreItems()[2]}
+	q2 := &queueMatcher{}
+	violated, _, err := scoreNegativeSample(context.Background(), NewCache(t.TempDir()), q2, "env1", neg, onlyDropped, 3)
+	if err != nil || violated || q2.calls != 0 {
+		t.Fatalf("dropped-only payload must be empty and free: violated=%v calls=%d err=%v", violated, q2.calls, err)
 	}
 }
 

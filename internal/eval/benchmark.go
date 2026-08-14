@@ -38,10 +38,11 @@ type Benchmark struct {
 }
 
 // globalGroundTruthDir is the subdirectory of ground-truth/ that holds v2
-// cross-repo snapshots (synthesis.Dir()'s own layout, frozen verbatim). It is
-// NOT a repo bucket, and the v1 loader must skip it or every v2 freeze would
-// card a phantom "global" repo.
-const globalGroundTruthDir = "global"
+// cross-repo snapshots. The freeze copies synthesis.Dir() verbatim, so the name
+// is taken from the store rather than restated here: it is NOT a repo bucket,
+// and a rename on the store side that this did not follow would silently
+// reintroduce a phantom "global" bucket.
+const globalGroundTruthDir = synthesis.GlobalDirName
 
 // loadGroundTruth reads the newest RepoSynthesis per repo dir under
 // dataDir/ground-truth (filenames are YYYY-MM-DD.json, so lexical desc ==
