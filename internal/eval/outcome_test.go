@@ -4,23 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/rkparsons/agent-insights/internal/synthesis"
 	"github.com/rkparsons/agent-insights/skills"
 )
-
-type fakeSynth struct {
-	raw   synthesis.RawSynthesis
-	calls int
-}
-
-func (f *fakeSynth) Synthesize(ctx context.Context, b synthesis.EvidenceBundle) (synthesis.RawSynthesis, error) {
-	f.calls++
-	return f.raw, nil
-}
 
 // buildOutcomeFixture: corpus fixture (s1,s2) + pool + benchmark + minimal
 // config-snapshot, returning (dataDir, opts) ready for RunOutcome.
@@ -97,134 +85,34 @@ func TestDefaultSkillDirsAreTheEmbeddedSkills(t *testing.T) {
 	}
 }
 
+// Task 8-10: this asserted the v1 L2 stage (per-repo synthesizer + Finalize),
+// which plan Task 7 removed from the pipeline; the global-carding replacement (raw/verify cache keys, per-sample records) lands
+// in plan Task 8.
 func TestRunOutcomeL2CachesAndRecords(t *testing.T) {
-	_, opts := buildOutcomeFixture(t)
-	fs := &fakeSynth{raw: synthesis.RawSynthesis{
-		Themes: []synthesis.RawTheme{{Title: "T", Kind: "friction", Summary: "s", EvidenceIDs: []string{"F1"}}},
-	}}
-	opts.Synth = fs
-
-	rec, err := RunOutcome(context.Background(), opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fs.calls != 3 { // default k=3 samples, distinct cache keys
-		t.Fatalf("synth calls = %d", fs.calls)
-	}
-	if len(rec.Buckets) != 1 || len(rec.Buckets[0].Samples) != 3 {
-		t.Fatalf("buckets: %+v", rec.Buckets)
-	}
-	for _, s := range rec.Buckets[0].Samples {
-		if !s.Fresh {
-			t.Fatal("first run must be fresh")
-		}
-	}
-	for _, field := range []string{rec.ManifestHash, rec.BenchmarkHash, rec.RubricSetHash,
-		rec.EnvHash, rec.ConfigSnapshotHash, rec.Models["l2"], rec.SchemaHashes["l2"],
-		rec.CodeVersions["facts"], rec.CodeVersions["synthesis"]} {
-		if field == "" {
-			t.Fatalf("reproducibility record incomplete: %+v", rec)
-		}
-	}
-	// verified output is retrievable and byte-stable (frozen GeneratedAt)
-	cache := NewCache(opts.CacheDir)
-	var vo VerifiedOutput
-	hit, err := cache.Get("verify", rec.Buckets[0].Samples[0].VerifiedKey, &vo)
-	if err != nil || !hit {
-		t.Fatalf("verified output missing: hit=%v err=%v", hit, err)
-	}
-	if !vo.Synthesis.GeneratedAt.Equal(time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)) {
-		t.Fatalf("GeneratedAt not frozen: %v", vo.Synthesis.GeneratedAt)
-	}
-	if len(vo.Raw.Themes) != 1 || vo.Synthesis.Repo != "myrepo" {
-		t.Fatalf("verified output: %+v", vo)
-	}
-
-	rec2, err := RunOutcome(context.Background(), opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fs.calls != 3 {
-		t.Fatalf("second run must be fully cached, calls = %d", fs.calls)
-	}
-	for i, s := range rec2.Buckets[0].Samples {
-		if s.Fresh {
-			t.Fatal("cached samples must not be fresh")
-		}
-		if s.RawKey != rec.Buckets[0].Samples[i].RawKey {
-			t.Fatal("keys must be stable")
-		}
-	}
+	t.Skip("L2 eval stage rebuilt in plan Tasks 8-10")
 }
 
+// Task 8-10: this asserted the v1 L2 stage (per-repo synthesizer + Finalize),
+// which plan Task 7 removed from the pipeline; the skill-hash re-keying it pins moves to the v2 raw key (plus the asset-corpus
+// hash) in plan Task 10.
 func TestRunOutcomeSkillEditReKeysL2Only(t *testing.T) {
-	_, opts := buildOutcomeFixture(t)
-	fs := &fakeSynth{}
-	opts.Synth = fs
-	rec1, err := RunOutcome(context.Background(), opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mustWriteFile(t, filepath.Join(opts.SkillDirs["synthesizing-workflow-insights"], "SKILL.md"), "l2 skill v2")
-	rec2, err := RunOutcome(context.Background(), opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fs.calls != 6 {
-		t.Fatalf("skill edit must re-run all samples: calls = %d", fs.calls)
-	}
-	if rec2.Buckets[0].BundleHash != rec1.Buckets[0].BundleHash {
-		t.Fatal("bundle stage must be untouched by a skill edit")
-	}
-	if rec2.Buckets[0].Samples[0].RawKey == rec1.Buckets[0].Samples[0].RawKey {
-		t.Fatal("L2 keys must change with the skill hash")
-	}
+	t.Skip("L2 eval stage rebuilt in plan Tasks 8-10")
 }
 
+// TestRunOutcomePopulationRejectsUnknown keeps the fail-closed population
+// check. Task 8-10: the consecutive-LLM-failure park it also covered belongs
+// to the L2 stage and is re-asserted with the global run in plan Task 8.
 func TestRunOutcomePopulationAndFailurePolicy(t *testing.T) {
 	_, opts := buildOutcomeFixture(t)
 	opts.Population = "nonsense"
 	if _, err := RunOutcome(context.Background(), opts); err == nil {
 		t.Fatal("unknown population must error")
 	}
-	opts.Population = ""
-	opts.Synth = failingSynth{}
-	rec, err := RunOutcome(context.Background(), opts)
-	if err == nil {
-		t.Fatal("3 consecutive LLM failures must park the run")
-	}
-	// parked run must preserve the in-flight bucket with partial state
-	if len(rec.Buckets) != 1 {
-		t.Fatalf("parked bucket missing: got %d buckets", len(rec.Buckets))
-	}
-	if rec.Buckets[0].Bucket != "myrepo" {
-		t.Fatalf("bucket name mismatch: got %q", rec.Buckets[0].Bucket)
-	}
-	if rec.Buckets[0].PoolSliceHash == "" {
-		t.Fatal("partial bucket missing PoolSliceHash")
-	}
 }
 
-type failingSynth struct{}
-
-func (failingSynth) Synthesize(context.Context, synthesis.EvidenceBundle) (synthesis.RawSynthesis, error) {
-	return synthesis.RawSynthesis{}, context.DeadlineExceeded
-}
-
-type flakySynth struct {
-	calls int
-}
-
-func (f *flakySynth) Synthesize(ctx context.Context, b synthesis.EvidenceBundle) (synthesis.RawSynthesis, error) {
-	f.calls++
-	if f.calls <= 2 {
-		return synthesis.RawSynthesis{}, context.DeadlineExceeded
-	}
-	return synthesis.RawSynthesis{
-		Themes: []synthesis.RawTheme{{Title: "T", Kind: "friction", Summary: "s", EvidenceIDs: []string{"F1"}}},
-	}, nil
-}
-
+// TestRunOutcomeSweepsStaleScratchDirs: an interrupted run's scratch dir holds
+// a materialized credential, so the sweep must happen on every run — including
+// one that fails at the L2 stage.
 func TestRunOutcomeSweepsStaleScratchDirs(t *testing.T) {
 	_, opts := buildOutcomeFixture(t)
 	stale := filepath.Join(opts.CacheDir, "scratch", "stale", "config", ".credentials.json")
@@ -234,46 +122,18 @@ func TestRunOutcomeSweepsStaleScratchDirs(t *testing.T) {
 	if err := os.WriteFile(stale, []byte(`{"leaked":"credential"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	fs := &fakeSynth{raw: synthesis.RawSynthesis{
-		Themes: []synthesis.RawTheme{{Title: "T", Kind: "friction", Summary: "s", EvidenceIDs: []string{"F1"}}},
-	}}
-	opts.Synth = fs
 
-	if _, err := RunOutcome(context.Background(), opts); err != nil {
-		t.Fatal(err)
+	if _, err := RunOutcome(context.Background(), opts); err == nil {
+		t.Fatal("Task 8-10: the L2 stage must fail closed until the v2 rework")
 	}
 	scratchRoot := filepath.Join(opts.CacheDir, "scratch")
 	if _, err := os.Stat(scratchRoot); !os.IsNotExist(err) {
-		t.Fatalf("scratch root must not survive a completed run (stale dir swept, own dir deferred-removed): stat err = %v", err)
+		t.Fatalf("scratch root must not survive a run (stale dir swept, own dir deferred-removed): stat err = %v", err)
 	}
 }
 
+// Task 8-10: this asserted the v1 L2 stage (per-repo synthesizer + Finalize),
+// which plan Task 7 removed from the pipeline; per-sample LLM failure counting is re-derived with the global run in plan Task 8.
 func TestRunOutcomeConsecutiveFailureReset(t *testing.T) {
-	_, opts := buildOutcomeFixture(t)
-	fs := &flakySynth{}
-	opts.Synth = fs
-	// With 3 samples default, each sample is one call:
-	// call 1 (sample 0) fails, warn
-	// call 2 (sample 1) fails, warn
-	// call 3 (sample 2) succeeds → record has 1 sample, no park
-	rec, err := RunOutcome(context.Background(), opts)
-	if err != nil {
-		t.Fatalf("flaky synth should recover after 2 failures: %v", err)
-	}
-	if len(rec.Buckets) != 1 {
-		t.Fatalf("expected 1 bucket, got %d", len(rec.Buckets))
-	}
-	if len(rec.Buckets[0].Samples) != 1 {
-		t.Fatalf("expected 1 sample after recovery, got %d", len(rec.Buckets[0].Samples))
-	}
-	// Verify warnings mention "L2 failed" for the two failures
-	l2FailedCount := 0
-	for _, w := range rec.Warnings {
-		if strings.Contains(w, "L2 failed") {
-			l2FailedCount++
-		}
-	}
-	if l2FailedCount < 2 {
-		t.Fatalf("expected at least 2 warnings with 'L2 failed', got %d (warnings: %v)", l2FailedCount, rec.Warnings)
-	}
+	t.Skip("L2 eval stage rebuilt in plan Tasks 8-10")
 }

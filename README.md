@@ -3,8 +3,9 @@
 Eval-gated LLM pipeline that mines your Claude Code sessions for workflow insights.
 
 It reads the transcripts Claude Code already writes to `~/.claude/projects/`, distills
-each session into a typed analysis, and synthesizes them **per repo** into ranked
-friction themes and concrete recommendations — CLAUDE.md rules, skills, hooks, settings.
+each session into a typed analysis, and synthesizes every repo's evidence in **one
+cross-repo pass** into ranked findings, each carrying the cheapest asset that would
+fix it — a CLAUDE.md rule, a repo doc, a skill, a hook, a setting, or a habit.
 Improvement only: no praise, no token dashboard.
 
 The design stance is that deterministic Go brackets the LLM at every stage:
@@ -23,11 +24,13 @@ The design stance is that deterministic Go brackets the LLM at every stage:
    │  [Go]  verbatim quote validation
    ▼
 analysis pool (~/.config/agent-insights/analyses) — outlives the ~30d transcript pruning
-   │  [Go]  group by repo root (worktree fold, rename aliases) → EvidenceBundle w/ typed ids
-   │  [LLM] synthesizing-workflow-insights → themes + typed recommendations
-   │  [Go]  id/partition verification → quote guard → count → rank → already-adopted check
+   │  [Go]  group by repo root (worktree fold, rename aliases) → one EvidenceBundle
+   │        per repo, written to a scratch workdir with repo-namespaced ids
+   │  [LLM] synthesizing-workflow-insights → one cross-repo GlobalSynthesis
+   │  [Go]  citation + grounding verification → quote guard → recount → rank →
+   │        adopted/escalation checks → path normalization → privacy scan
    ▼
-RepoSynthesis snapshot (JSON source of truth; markdown render derived)
+GlobalSynthesis snapshot (schema_version 2; one JSON source of truth per run)
 ```
 
 Full design write-up: [`evals/insights-pipeline-strategy.md`](evals/insights-pipeline-strategy.md).
@@ -57,9 +60,27 @@ repos:
   - /Users/dev/Developer/tmux-ctrl
 aliases:
   old-project-name: my-app               # fold pre-rename sessions onto the current key
-cadence_days: 14                         # how often a repo becomes due for synthesis
-min_sessions: 10                         # volume floor — thinner buckets aren't synthesized
+cadence_days: 14                         # minimum gap between global synthesis runs
+min_sessions: 10                         # volume floor — thinner buckets aren't bundled
+due_new_sessions: 10                     # newly-analyzed sessions (summed across repos) a run needs
+synthesis_model: claude-fable-5          # the model the global run invokes
+dotfiles_repo: /Users/dev/Developer/dotfiles   # optional: dates existing rules from git history
 ```
+
+**Due** is one global decision, not a per-repo one: a run is due when the last
+snapshot is older than `cadence_days` **and** at least `due_new_sessions` analyses have
+been written since it, summed across every repo that clears `min_sessions`. Counting
+timestamps rather than deltas means a purge of the analysis pool can neither mask new
+sessions nor drive the count negative. `status --json`'s `due_repos` names the repos
+contributing those sessions, and is empty whenever no run is due.
+
+`synthesis_model` is not a fallback chain: an unavailable model fails the run rather
+than silently substituting another, because model drift invalidates every eval
+comparison. `claude-opus-5` is the documented alternative — untested under the v2
+contract (only opus-4-8 has v1 history), and switching is an explicit config edit plus
+an eval re-baseline. `dotfiles_repo` is optional: without it, the verifier skips the
+git-dated recency arbitration that decides whether an existing rule has had a chance to
+work, and everything else behaves the same.
 
 Repos are matched by path prefix at component boundaries. Sessions outside every
 configured repo fall back to a `~/Developer/<project>` path heuristic, so the config
@@ -68,8 +89,8 @@ is what makes grouping exact.
 ```bash
 agent-insights backfill --dry-run   # cost preview: to-process / done / gated / meta / quiet
 agent-insights backfill             # analyze every substantial session (resumable)
-agent-insights synthesize --due     # per-repo synthesis for repos past cadence_days
-agent-insights show --json          # every repo's latest synthesis
+agent-insights synthesize --due     # one cross-repo synthesis, if the global gate says due
+agent-insights show --json          # the latest global synthesis
 agent-insights status --json        # store root, due repos, acted keys, last run
 ```
 
@@ -77,10 +98,9 @@ agent-insights status --json        # store root, due repos, acted keys, last ru
 |---|---|
 | `backfill [--quiet-for 24h] [--timeout 10m] [--threshold N] [--force] [--dry-run]` | Layer 1 over all sessions; incremental via stamped transcript mtime, resumable, stops after consecutive failures |
 | `analyze <session-id\|path> [--force]` | Layer 1 for one session |
-| `synthesize [--repo K] [--min-sessions N] [--due] [--dry-run] [--log P]` | Layer 2 per repo |
-| `enrich [--repo K] [--dry-run] [--timeout 10m]` | Backfill `title` + `last_seen` onto stored syntheses (idempotent; one LLM call per snapshot with untitled recommendations) |
+| `synthesize [--min-sessions N] [--due] [--dry-run] [--timeout 90m] [--log P]` | Layer 2: one cross-repo run. `--dry-run` prints bundle sizes and the due reasoning without spending; `--timeout` bounds the single model call (default 90m) |
 | `status --json` / `show --json` | Stable JSON contracts — schemas in [`schemas/`](schemas/), goldens round-tripped in CI |
-| `acted <key>` / `unacted <key>` | Mark a recommendation adopted so it stops resurfacing |
+| `acted <key>` / `unacted <key>` | Mark a finding adopted so it stops resurfacing |
 | `eval <freeze\|outcome\|score\|adjudicate\|probes\|statuses>` | The eval harness, below |
 
 State lives under `~/.config/agent-insights/` (`AGENT_INSIGHTS_DIR` overrides;
@@ -148,8 +168,9 @@ agent-insights status --json | jq -r '.due_repos[]'
   hard-fail a session) with a canary counter so drift surfaces loudly.
 - **Developed and tested on macOS.** Nothing is knowingly macOS-specific, but Linux
   is untested.
-- **Both LLM stages call Opus** (`claude-opus-4-8`), chosen by A/B eval. Backfilling a
-  large history costs real tokens — `backfill --dry-run` prints the split first.
+- **Layer 1 calls Opus** (`claude-opus-4-8`), chosen by A/B eval; layer 2's model is the
+  `synthesis_model` config key (default `claude-fable-5`). Backfilling a large history
+  costs real tokens — `backfill --dry-run` prints the split first.
 - **Work inside subagent transcripts is invisible**; the judge correctly returns
   `unclear` for subagent-heavy sessions.
 - **Skills are embedded in the binary**, materialized per run into a scratch working

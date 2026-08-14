@@ -7,63 +7,42 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
-// LoadSyntheses reads the newest-dated RepoSynthesis for every repo directory
-// under synthesis/. Malformed or unreadable files are skipped (a bad file must
-// not blank the section); a missing synthesis dir returns (nil, nil). Result is
-// sorted by Repo ascending for deterministic downstream ordering.
-func LoadSyntheses() ([]RepoSynthesis, error) {
-	base := synthesisDir()
-	repoDirs, err := os.ReadDir(base)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var out []RepoSynthesis
-	for _, rd := range repoDirs {
-		if !rd.IsDir() {
-			continue
-		}
-		s, ok := newestInRepoDir(filepath.Join(base, rd.Name()))
-		if ok {
-			out = append(out, s)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Repo < out[j].Repo })
-	return out, nil
-}
-
-// newestInRepoDir returns the newest parseable <date>.json in a repo dir.
-// Filenames are YYYY-MM-DD so lexical desc == chronological desc.
-func newestInRepoDir(dir string) (RepoSynthesis, bool) {
+// LoadLatestGlobal returns the newest stored global synthesis, newest-wins by
+// filename (snapshotTimeLayout makes lexical order chronological). A malformed
+// file is skipped rather than fatal — one bad snapshot must not blank the
+// section — so the result is the newest PARSEABLE snapshot. ok is false when
+// the store holds none (never run), which is a valid empty state, not an error.
+func LoadLatestGlobal() (insights.GlobalSynthesisJSON, bool, error) {
+	dir := globalDir()
 	names, err := snapshotJSONNames(dir)
-	if err != nil {
-		// A missing dir is a benign race (listed then removed); anything else
-		// (permissions, I/O) silently drops a repo's insights — warn instead.
-		if !os.IsNotExist(err) {
-			log.Printf("synthesis: read repo dir %q: %v", dir, err)
-		}
-		return RepoSynthesis{}, false
+	if os.IsNotExist(err) {
+		return insights.GlobalSynthesisJSON{}, false, nil
 	}
-	for i := len(names) - 1; i >= 0; i-- { // newest first; skip malformed
+	if err != nil {
+		return insights.GlobalSynthesisJSON{}, false, err
+	}
+	for i := len(names) - 1; i >= 0; i-- {
 		data, err := os.ReadFile(filepath.Join(dir, names[i]))
 		if err != nil {
+			log.Printf("synthesis: read global snapshot %q: %v", names[i], err)
 			continue
 		}
-		var s RepoSynthesis
+		var s insights.GlobalSynthesisJSON
 		if err := json.Unmarshal(data, &s); err != nil {
+			log.Printf("synthesis: skipping malformed global snapshot %q: %v", names[i], err)
 			continue
 		}
-		return s, true
+		return s, true, nil
 	}
-	return RepoSynthesis{}, false
+	return insights.GlobalSynthesisJSON{}, false, nil
 }
 
-// snapshotJSONNames lists a repo dir's <date>.json snapshot filenames in
-// ascending (chronological) order. Filenames are YYYY-MM-DD so lexical == chronological.
+// snapshotJSONNames lists a snapshot dir's .json filenames in ascending
+// (chronological) order — see snapshotTimeLayout.
 func snapshotJSONNames(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

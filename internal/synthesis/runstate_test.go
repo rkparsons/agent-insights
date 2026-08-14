@@ -3,28 +3,21 @@ package synthesis
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
 
-type errSynthesizer struct{}
-
-func (errSynthesizer) Synthesize(ctx context.Context, b EvidenceBundle) (RawSynthesis, error) {
-	return RawSynthesis{}, errors.New("boom")
-}
-
 func TestRunStateLifecycle(t *testing.T) {
 	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
+	t.Setenv("AGENT_INSIGHTS_CONFIG", "/nonexistent/agent-insights.yaml")
 	if _, ok := ReadRunState(); ok {
 		t.Fatal("no file: want ok=false")
 	}
-	// Empty store: RunSynthesize finds no groups, spends nothing, and must
-	// still record a final ok state. A nil Synthesizer proves no call happens.
-	if _, err := RunSynthesize(context.Background(), fixedSynth(nil), Options{LogPath: "/tmp/x.log"}); err != nil {
+	// Empty store: RunSynthesize finds nothing to bundle, spends nothing, and
+	// must still record a final ok state. A nil factory proves no call happens.
+	if _, err := RunSynthesize(context.Background(), nil, Options{LogPath: "/tmp/x.log"}); err != nil {
 		t.Fatal(err)
 	}
 	rs, ok := ReadRunState()
@@ -50,27 +43,24 @@ func TestRunStateRunningOmitsFinishedAt(t *testing.T) {
 	}
 }
 
-func TestRunStateFailed(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("AGENT_INSIGHTS_DIR", dir)
-	adir := filepath.Join(dir, "analyses")
-	if err := os.MkdirAll(adir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeAnalysisFixture(t, adir, "s1", "repo1")
-	_, err := RunSynthesize(context.Background(), fixedSynth(errSynthesizer{}), Options{MinSessions: 1})
-	if err != nil {
-		t.Fatal(err) // per-repo failures skip, they don't error the run
+// TestRunStateMissingFactory: a run that reaches the model stage with no
+// synthesizer factory is a wiring bug, and must be recorded as a failure
+// rather than reported as a clean empty run.
+func TestRunStateMissingFactory(t *testing.T) {
+	seedStore(t, "alpha", 12)
+	if _, err := RunSynthesize(context.Background(), nil, Options{MinSessions: 10}); err == nil {
+		t.Fatal("expected an error with no synthesizer factory")
 	}
 	rs, ok := ReadRunState()
-	if !ok || rs.Status != "failed" || rs.Skipped != 1 || rs.Reason == "" {
+	if !ok || rs.Status != "failed" || rs.Reason == "" {
 		t.Fatalf("got %+v ok=%v", rs, ok)
 	}
 }
 
 func TestRunStateDryRunWritesNothing(t *testing.T) {
 	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
-	if _, err := RunSynthesize(context.Background(), fixedSynth(nil), Options{DryRun: true}); err != nil {
+	t.Setenv("AGENT_INSIGHTS_CONFIG", "/nonexistent/agent-insights.yaml")
+	if _, err := RunSynthesize(context.Background(), nil, Options{DryRun: true}); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := ReadRunState(); ok {

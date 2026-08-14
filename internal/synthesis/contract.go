@@ -2,78 +2,40 @@ package synthesis
 
 import "github.com/rkparsons/agent-insights/internal/insights"
 
-// BuildShowJSON converts RepoSynthesis records into insights.ShowJSON, the
-// `insights show --json` payload. This lives in synthesis (not
-// insights/contract.go, where the type definitions live) because insights
-// cannot import synthesis — synthesis already imports insights, and Go
-// forbids the cycle — while synthesis importing insights is the existing,
-// legal direction.
-func BuildShowJSON(syntheses []RepoSynthesis) insights.ShowJSON {
-	out := make([]insights.SynthesisJSON, 0, len(syntheses))
-	for _, s := range syntheses {
-		out = append(out, synthesisToJSON(s))
+// BuildShowJSON returns `insights show --json`'s stdout payload: the stored
+// global snapshot itself, with the contract's required arrays normalized so
+// the payload never carries `null` where a consumer expects a list. found is
+// false when no run has stored a snapshot yet, which yields an empty envelope
+// stamped with the current contract version rather than an error.
+//
+// A stored snapshot keeps its own schema_version — never restamped — so a
+// consumer reading a snapshot written by a different binary can name the skew
+// instead of mis-rendering it as current.
+//
+// This lives in synthesis (not insights/contract.go, where the type
+// definitions live) because insights cannot import synthesis — synthesis
+// already imports insights, and Go forbids the cycle.
+func BuildShowJSON(snap insights.GlobalSynthesisJSON, found bool) insights.GlobalSynthesisJSON {
+	if !found {
+		return insights.GlobalSynthesisJSON{
+			SchemaVersion: insights.ContractVersion,
+			Repos:         []insights.RepoStatsJSON{},
+			Findings:      []insights.FindingJSON{},
+			Dropped:       []insights.DroppedJSON{},
+		}
 	}
-	return insights.ShowJSON{SchemaVersion: insights.ContractVersion, Syntheses: out}
+	snap.Repos = nonNil(snap.Repos)
+	snap.Findings = nonNil(snap.Findings)
+	snap.Dropped = nonNil(snap.Dropped)
+	for i := range snap.Findings {
+		snap.Findings[i].EvidenceIDs = nonNil(snap.Findings[i].EvidenceIDs)
+		snap.Findings[i].Repos = nonNil(snap.Findings[i].Repos)
+	}
+	return snap
 }
 
-func synthesisToJSON(s RepoSynthesis) insights.SynthesisJSON {
-	themes := make([]insights.ThemeJSON, 0, len(s.Themes))
-	for _, t := range s.Themes {
-		themes = append(themes, insights.ThemeJSON{
-			Title:           t.Title,
-			Kind:            t.Kind,
-			Summary:         t.Summary,
-			Rank:            t.Rank,
-			IncidentCount:   t.IncidentCount,
-			SessionCount:    t.SessionCount,
-			TypeBreakdown:   t.TypeBreakdown,
-			Quotes:          nonNil(t.Quotes),
-			SessionIDs:      nonNil(t.SessionIDs),
-			SignalRefs:      t.SignalRefs,
-			OverGeneralized: t.OverGeneralized,
-		})
-	}
-	recs := make([]insights.RecommendationJSON, 0, len(s.Recommendations))
-	for _, r := range s.Recommendations {
-		recs = append(recs, insights.RecommendationJSON{
-			Type:           r.Type,
-			Title:          r.Title,
-			Statement:      r.Statement,
-			ThemeRefs:      nonNil(r.ThemeRefs),
-			SessionCount:   r.SessionCount,
-			LastSeen:       r.LastSeen,
-			Quotes:         nonNil(r.Quotes),
-			AlreadyAdopted: r.AlreadyAdopted,
-			Audience:       r.Audience,
-			ActedKey:       ActedKey(r, s.Repo),
-		})
-	}
-	return insights.SynthesisJSON{
-		Repo:        s.Repo,
-		GeneratedAt: s.GeneratedAt,
-		Window: insights.WindowJSON{
-			From:          s.Window.From,
-			To:            s.Window.To,
-			SessionCount:  s.Window.SessionCount,
-			AnalyzedCount: s.Window.AnalyzedCount,
-		},
-		Themes:          themes,
-		Recommendations: recs,
-		Meta: insights.MetaJSON{
-			Model:            s.Meta.Model,
-			UnthemedFriction: s.Meta.UnthemedFriction,
-			ValidationErrors: s.Meta.ValidationErrors,
-			PrefCountByRec:   s.Meta.PrefCountByRec,
-		},
-	}
-}
-
-// nonNil normalizes a nil slice to empty. The contract's array fields
-// (quotes, session_ids, theme_refs) are always-required arrays, never
-// null — Theme.Quotes/SessionIDs and Recommendation.Quotes/ThemeRefs can be
-// nil zero values (e.g. every cited quote got filtered, or an evidence-free
-// recommendation), so this is the JSON-boundary normalization point,
-// mirroring insights.BuildStatus's due_repos/acted_keys nil handling.
+// nonNil normalizes a nil slice to empty: the contract's array fields are
+// always-required arrays, never null.
 func nonNil[T any](s []T) []T {
 	if s == nil {
 		return []T{}

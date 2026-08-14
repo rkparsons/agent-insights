@@ -21,8 +21,10 @@ const defaultCadenceDays = 14
 // cannot import synthesis (which imports insights), so the value is duplicated.
 const defaultConfigMinSessions = 10
 
-// defaultSynthesisModel is the global-synthesis run's model when unset.
-const defaultSynthesisModel = "claude-fable-5"
+// DefaultSynthesisModel is the global-synthesis run's model when unset.
+// Exported because the eval harness records the L2 model identity in its
+// reproducibility record and cache keys.
+const DefaultSynthesisModel = "claude-fable-5"
 
 // defaultDueNewSessions is the global-due new-session threshold when unset.
 const defaultDueNewSessions = 10
@@ -40,7 +42,7 @@ type Config struct {
 	// Defaulted when unset; at runtime an unavailable model fails the run
 	// closed rather than falling back to a different model, which would
 	// silently drift and invalidate eval comparisons.
-	SynthesisModel string `yaml:"synthesis_model"` // default defaultSynthesisModel
+	SynthesisModel string `yaml:"synthesis_model"` // default DefaultSynthesisModel
 
 	// DueNewSessions is the global-due threshold: total newly-analyzed sessions
 	// (summed across qualifying repos, timestamp-based) since the last global
@@ -74,7 +76,7 @@ func loadConfigFromPath(path string) (Config, error) {
 		return Config{
 			CadenceDays:    defaultCadenceDays,
 			MinSessions:    defaultConfigMinSessions,
-			SynthesisModel: defaultSynthesisModel,
+			SynthesisModel: DefaultSynthesisModel,
 			DueNewSessions: defaultDueNewSessions,
 		}, nil
 	}
@@ -92,7 +94,7 @@ func loadConfigFromPath(path string) (Config, error) {
 		c.MinSessions = defaultConfigMinSessions
 	}
 	if c.SynthesisModel == "" {
-		c.SynthesisModel = defaultSynthesisModel
+		c.SynthesisModel = DefaultSynthesisModel
 	}
 	if c.DueNewSessions <= 0 {
 		c.DueNewSessions = defaultDueNewSessions

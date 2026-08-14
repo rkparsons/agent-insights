@@ -1,49 +1,53 @@
 package synthesis
 
-// Recovery seam: feeds a captured claude synthesis envelope through the full
-// RunSynthesize pipeline — verification, privacy scan, store — via an
-// injected Synthesizer, at zero re-spend. For runs where claude finished but
-// the Go side died (timeout, 429 park, crash) and the envelope was captured.
+// Recovery seam: feeds a captured synthesis.json — the model output a global
+// run wrote, from a live workdir or from the diagnostics copy a failed run
+// preserved — through verification and the store, at zero re-spend. For runs
+// where claude finished but the Go side failed (a verifier fix, a crash, a
+// timeout after the file landed).
 
 import (
 	"context"
 	"encoding/json"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
-type capturedSynthesizer struct{ raw RawSynthesis }
-
-func (c capturedSynthesizer) Synthesize(ctx context.Context, b EvidenceBundle) (RawSynthesis, error) {
-	return c.raw, nil
-}
-
 func TestDevStoreCapturedSynthesis(t *testing.T) {
 	path := os.Getenv("CAPTURED_SYNTH")
-	repo := os.Getenv("CAPTURED_REPO")
-	if path == "" || repo == "" {
-		t.Skip("set CAPTURED_SYNTH=<envelope json> and CAPTURED_REPO=<repo key>")
+	if path == "" {
+		t.Skip("set CAPTURED_SYNTH=<synthesis.json> to re-verify and store a captured global run")
 	}
-	rawFile, err := os.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload, err := insights.ParseClaudeEnvelope(rawFile)
-	if err != nil {
-		t.Fatalf("captured envelope unusable: %v", err)
+	var raw insights.RawGlobalSynthesis
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("captured output unusable: %v", err)
 	}
-	var raw RawSynthesis
-	if err := json.Unmarshal(payload, &raw); err != nil {
-		t.Fatal(err)
-	}
-	sum, err := RunSynthesize(context.Background(), fixedSynth(capturedSynthesizer{raw: raw}), Options{Repo: repo})
+	cfg, err := insights.LoadConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sum.Written != 1 || sum.Skipped != 0 {
-		t.Fatalf("want Written=1 Skipped=0 for %s, got %+v", repo, sum)
+	analyses, err := LoadAnalyses()
+	if err != nil {
+		t.Fatal(err)
 	}
-	t.Logf("stored captured synthesis for %s", repo)
+	// The bundles must be the ones the capture was produced from: same store,
+	// same floor, same aliases. A changed pool re-verifies against evidence the
+	// model never saw and fails closed on ids it legitimately cited.
+	bundles := buildBundles(GroupByRepo(analyses, cfg.MinSessions, cfg))
+	snapshot, err := VerifyGlobal(context.Background(), raw, bundles, cfg, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("verification: %v", err)
+	}
+	stored, err := StoreGlobal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("stored captured synthesis: %s (%d findings, %d notes)", stored, len(snapshot.Findings), len(snapshot.Meta.ValidationNotes))
 }

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/rkparsons/agent-insights/internal/insights"
-	"github.com/rkparsons/agent-insights/internal/synthesis"
 )
 
 // buildFixtureWorld fabricates a projects tree, an insights pool, and a live
@@ -45,10 +44,10 @@ func buildFixtureWorld(t *testing.T) string {
 		t.Fatal(err)
 	}
 
-	truth := synthesis.RepoSynthesis{
+	truth := RepoSynthesis{
 		Repo:        "myrepo",
 		GeneratedAt: time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC),
-		Window:      synthesis.Window{From: "2026-06-25", To: "2026-06-25", AnalyzedCount: 1},
+		Window:      Window{From: "2026-06-25", To: "2026-06-25", AnalyzedCount: 1},
 	}
 	raw, err := json.Marshal(truth)
 	if err != nil {
@@ -140,10 +139,10 @@ func TestRunFreezeGapRecordedNotBlocking(t *testing.T) {
 		t.Fatal(err)
 	}
 	insightsDir := os.Getenv("AGENT_INSIGHTS_DIR")
-	truth := synthesis.RepoSynthesis{
+	truth := RepoSynthesis{
 		Repo:        "myrepo",
 		GeneratedAt: time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC),
-		Window:      synthesis.Window{From: "2026-06-25", To: "2026-06-26", AnalyzedCount: 2},
+		Window:      Window{From: "2026-06-25", To: "2026-06-26", AnalyzedCount: 2},
 	}
 	raw, err := json.Marshal(truth)
 	if err != nil {

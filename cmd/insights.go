@@ -13,7 +13,9 @@ import (
 	"github.com/rkparsons/agent-insights/internal/synthesis"
 )
 
-const insightsUsage = "usage: agent-insights backfill [--quiet-for 24h] [--timeout 10m] [--threshold N] [--force] [--dry-run] | analyze <session-id|path> [--force] | synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run] [--log <path>] | enrich [--repo <repo-key>] [--dry-run] [--timeout 10m] | status --json | show --json | acted <key> | unacted <key> | eval <freeze|outcome|score|adjudicate|probes|statuses> ..."
+const insightsUsage = "usage: agent-insights backfill [--quiet-for 24h] [--timeout 10m] [--threshold N] [--force] [--dry-run] | analyze <session-id|path> [--force] | synthesize [--min-sessions N] [--due] [--dry-run] [--timeout 90m] [--log <path>] | status --json | show --json | acted <key> | unacted <key> | eval <freeze|outcome|score|adjudicate|probes|statuses> ..."
+
+const synthesizeUsage = "usage: agent-insights synthesize [--min-sessions N] [--due] [--dry-run] [--timeout 90m] [--log <path>]"
 
 // RunInsights dispatches `agent-insights ...`. Mirrors RunHookHandler /
 // RunStatusExplain: a thin os.Args branch over the insights/synthesis packages.
@@ -41,8 +43,6 @@ func RunInsights(args []string) {
 	switch args[0] {
 	case "synthesize":
 		runSynthesize(icfg, args[1:])
-	case "enrich":
-		runEnrich(args[1:])
 	case "status":
 		runStatus(icfg, args[1:])
 	case "show":
@@ -62,54 +62,21 @@ func RunInsights(args []string) {
 	}
 }
 
+// runSynthesize handles `insights synthesize [--min-sessions N] [--due]
+// [--dry-run] [--timeout D] [--log <path>]` — one global, cross-repo run.
 func runSynthesize(icfg insights.Config, args []string) {
 	sopts, serr := parseSynthesizeArgs(args)
 	if serr != nil {
 		fmt.Fprintf(os.Stderr, "agent-insights: %v\n", serr)
-		fmt.Fprintln(os.Stderr, "usage: agent-insights synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run] [--log <path>]")
+		fmt.Fprintln(os.Stderr, synthesizeUsage)
 		os.Exit(2)
 	}
-	if sopts.Due {
-		sopts.Cadence = time.Duration(icfg.CadenceDays) * 24 * time.Hour
-	}
-	sum, err := synthesis.RunSynthesize(context.Background(), synthesis.NewClaudeSynthesizer, sopts)
+	sum, err := synthesis.RunSynthesize(context.Background(), synthesis.NewClaudeGlobalSynthesizer(icfg), sopts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "insights synthesize: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Fprintf(os.Stderr, "synthesis: %d repos · %d written · %d skipped\n", sum.Repos, sum.Written, sum.Skipped)
-}
-
-// runEnrich handles `insights enrich [--repo K] [--dry-run] [--timeout D]` —
-// backfills title/last_seen onto stored syntheses (idempotent).
-func runEnrich(args []string) {
-	opts, err := parseEnrichArgs(args)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "agent-insights: %v\n", err)
-		fmt.Fprintln(os.Stderr, "usage: agent-insights enrich [--repo <repo-key>] [--dry-run] [--timeout 10m]")
-		os.Exit(2)
-	}
-	var sum synthesis.EnrichSummary
-	if opts.DryRun {
-		// A dry-run only reports counts — never spend on materializing the
-		// titler's scratch workdir for a run that makes no LLM calls.
-		sum, err = synthesis.RunEnrich(context.Background(), nil, opts)
-	} else {
-		var workDir string
-		workDir, err = os.MkdirTemp("", "agent-insights-enrich-*")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "agent-insights: enrich: %v\n", err)
-			os.Exit(1)
-		}
-		sum, err = synthesis.RunEnrich(context.Background(), synthesis.NewClaudeTitler(workDir), opts)
-		os.RemoveAll(workDir) // not deferred: os.Exit below would skip it
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "agent-insights: enrich: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Fprintf(os.Stderr, "enrich: %d snapshots · %d updated · %d titles · %d last_seen · %d malformed · %d leak-blocked\n",
-		sum.Snapshots, sum.Updated, sum.TitlesFilled, sum.LastSeenFilled, sum.Malformed, sum.LeakBlocked)
+	fmt.Fprintf(os.Stderr, "synthesis: %d repos bundled · %d snapshot(s) written\n", sum.Repos, sum.Written)
 }
 
 // runAnalyze handles `insights analyze <session-id|path> [--force]`.
@@ -190,22 +157,27 @@ func isJSONFlag(args []string) bool {
 	return len(args) == 1 && args[0] == "--json"
 }
 
-// buildStatusJSON gathers status --json's sources: DueRepos reuses the same
-// GroupByRepo/DueRepos pipeline functions synthesize --due runs on, rather
-// than reimplementing due-ness here.
+// buildStatusJSON gathers status --json's sources. due_repos reuses the same
+// GlobalDue gate `synthesize --due` runs on rather than reimplementing
+// due-ness, and reports the repos contributing new sessions to that run — so
+// it is empty whenever a run would not start.
 func buildStatusJSON(icfg insights.Config) (insights.StatusJSON, error) {
 	analyses, err := synthesis.LoadAnalyses()
 	if err != nil && !os.IsNotExist(err) {
 		return insights.StatusJSON{}, err
 	}
-	groups := synthesis.GroupByRepo(analyses, icfg.MinSessions, icfg)
-	syntheses, err := synthesis.LoadSyntheses()
+	latest, hasLatest, err := synthesis.LoadLatestGlobal()
 	if err != nil {
 		return insights.StatusJSON{}, err
 	}
-	cadence := time.Duration(icfg.CadenceDays) * 24 * time.Hour
-	due := synthesis.DueRepos(groups, syntheses, cadence, time.Now())
-	sort.Strings(due)
+	var lastGenerated time.Time
+	if hasLatest {
+		lastGenerated = latest.GeneratedAt
+	}
+	var due []string
+	if isDue, contributing := synthesis.GlobalDue(analyses, icfg, lastGenerated, time.Now()); isDue {
+		due = contributing
+	}
 
 	actedMap, err := synthesis.LoadActedKeys()
 	if err != nil {
@@ -249,12 +221,12 @@ func runShow(args []string) {
 		fmt.Fprintln(os.Stderr, "usage: agent-insights show --json")
 		os.Exit(2)
 	}
-	syntheses, err := synthesis.LoadSyntheses()
+	snapshot, found, err := synthesis.LoadLatestGlobal()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent-insights: show: %v\n", err)
 		os.Exit(1)
 	}
-	show := synthesis.BuildShowJSON(syntheses)
+	show := synthesis.BuildShowJSON(snapshot, found)
 	if err := json.NewEncoder(os.Stdout).Encode(show); err != nil {
 		fmt.Fprintf(os.Stderr, "agent-insights: show: %v\n", err)
 		os.Exit(1)
@@ -357,7 +329,7 @@ func parseBackfillArgs(args []string) (insights.Options, error) {
 	return opts, nil
 }
 
-// parseSynthesizeArgs parses `synthesize [--repo <repo-key>] [--min-sessions N] [--due] [--dry-run] [--log <path>]`.
+// parseSynthesizeArgs parses `synthesize [--min-sessions N] [--due] [--dry-run] [--timeout D] [--log <path>]`.
 func parseSynthesizeArgs(args []string) (synthesis.Options, error) {
 	var o synthesis.Options
 	for i := 0; i < len(args); i++ {
@@ -372,42 +344,6 @@ func parseSynthesizeArgs(args []string) (synthesis.Options, error) {
 				return o, fmt.Errorf("--log needs a value")
 			}
 			o.LogPath = args[i]
-		case "--repo":
-			i++
-			if i >= len(args) {
-				return o, fmt.Errorf("--repo needs a value")
-			}
-			o.Repo = args[i]
-		case "--min-sessions":
-			i++
-			if i >= len(args) {
-				return o, fmt.Errorf("--min-sessions needs a value")
-			}
-			n, err := strconv.Atoi(args[i])
-			if err != nil {
-				return o, fmt.Errorf("--min-sessions: %w", err)
-			}
-			o.MinSessions = n
-		default:
-			return o, fmt.Errorf("unknown flag %q", args[i])
-		}
-	}
-	return o, nil
-}
-
-// parseEnrichArgs parses `enrich [--repo <repo-key>] [--dry-run] [--timeout D]`.
-func parseEnrichArgs(args []string) (synthesis.EnrichOptions, error) {
-	var o synthesis.EnrichOptions
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--dry-run":
-			o.DryRun = true
-		case "--repo":
-			i++
-			if i >= len(args) {
-				return o, fmt.Errorf("--repo needs a value")
-			}
-			o.Repo = args[i]
 		case "--timeout":
 			i++
 			if i >= len(args) {
@@ -418,6 +354,16 @@ func parseEnrichArgs(args []string) (synthesis.EnrichOptions, error) {
 				return o, fmt.Errorf("--timeout: %w", err)
 			}
 			o.Timeout = d
+		case "--min-sessions":
+			i++
+			if i >= len(args) {
+				return o, fmt.Errorf("--min-sessions needs a value")
+			}
+			n, err := strconv.Atoi(args[i])
+			if err != nil {
+				return o, fmt.Errorf("--min-sessions: %w", err)
+			}
+			o.MinSessions = n
 		default:
 			return o, fmt.Errorf("unknown flag %q", args[i])
 		}

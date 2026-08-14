@@ -5,22 +5,30 @@ import (
 	"testing"
 )
 
-func TestActedKey_StableAndRepoScoped(t *testing.T) {
-	a := Recommendation{Statement: "Verify claims  before  asserting"}
-	b := Recommendation{Statement: "verify claims before asserting"} // case/space-normalized same
-	if ActedKey(a, "alpha") != ActedKey(b, "alpha") {
+func TestActedKey_NormalizesStatement(t *testing.T) {
+	a := ActedKey("habit", "Verify claims  before  asserting")
+	b := ActedKey("habit", "verify claims before asserting") // case/space-normalized same
+	if a != b {
 		t.Error("normalization: differently-spaced/cased identical statements must share a key")
 	}
-	if ActedKey(a, "alpha") == ActedKey(a, "tmux-ctrl") {
-		t.Error("source repo must scope the key")
+	if len(a) != 16 {
+		t.Errorf("key %q, want a 16-char digest", a)
 	}
 }
 
 func TestActedKey_TypeScoped(t *testing.T) {
-	skill := Recommendation{Type: "new_skill", Statement: "address the foo friction"}
-	hook := Recommendation{Type: "hook", Statement: "address the foo friction"}
-	if ActedKey(skill, "alpha") == ActedKey(hook, "alpha") {
-		t.Error("recommendation type must scope the key: same normalized statement, different type must not collide")
+	if ActedKey("new_skill", "address the foo friction") == ActedKey("hook", "address the foo friction") {
+		t.Error("asset type must scope the key: same normalized statement, different type must not collide")
+	}
+}
+
+// TestActedKey_RepoFree pins the v2 key's cross-repo shape: a finding merged
+// across repos has no source repo to key on, and two runs that cite different
+// repo sets for the same practice must not produce different keys.
+func TestActedKey_RepoFree(t *testing.T) {
+	statement := "Run the smoke test before calling a task done."
+	if ActedKey("hook", statement) != ActedKey("hook", statement) {
+		t.Error("the key must depend on nothing but asset type and statement")
 	}
 }
 
@@ -30,7 +38,7 @@ func TestActedRoundTrip(t *testing.T) {
 	if err != nil || len(m) != 0 {
 		t.Fatalf("empty load = (%v,%v), want ({},nil)", m, err)
 	}
-	k := ActedKey(Recommendation{Statement: "do the thing"}, "alpha")
+	k := ActedKey("habit", "do the thing")
 	if err := MarkActed(k); err != nil {
 		t.Fatalf("MarkActed: %v", err)
 	}
@@ -42,8 +50,8 @@ func TestActedRoundTrip(t *testing.T) {
 
 func TestUnmarkActed_RemovesKeyPreservingOthers(t *testing.T) {
 	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
-	keep := ActedKey(Recommendation{Statement: "keep me"}, "alpha")
-	drop := ActedKey(Recommendation{Statement: "roll me back"}, "alpha")
+	keep := ActedKey("habit", "keep me")
+	drop := ActedKey("habit", "roll me back")
 	if err := MarkActed(keep); err != nil {
 		t.Fatalf("MarkActed keep: %v", err)
 	}
@@ -66,7 +74,7 @@ func TestUnmarkActed_RemovesKeyPreservingOthers(t *testing.T) {
 
 func TestUnmarkActed_AbsentKeyIsNoop(t *testing.T) {
 	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
-	if err := UnmarkActed(ActedKey(Recommendation{Statement: "never marked"}, "alpha")); err != nil {
+	if err := UnmarkActed(ActedKey("habit", "never marked")); err != nil {
 		t.Errorf("UnmarkActed on absent key = %v, want nil (no-op)", err)
 	}
 }
@@ -78,8 +86,8 @@ func TestUnmarkActed_AbsentKeyIsNoop(t *testing.T) {
 // so both land.
 func TestMarkActed_ConcurrentWritesBothLand(t *testing.T) {
 	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
-	k1 := ActedKey(Recommendation{Statement: "concurrent one"}, "alpha")
-	k2 := ActedKey(Recommendation{Statement: "concurrent two"}, "alpha")
+	k1 := ActedKey("habit", "concurrent one")
+	k2 := ActedKey("habit", "concurrent two")
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)

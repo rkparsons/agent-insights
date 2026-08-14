@@ -171,7 +171,7 @@ type scoreSession struct {
 	probes     []ProbeResult
 	buckets    map[string]bucketData
 	oneLines   map[string]map[string]string
-	truths     map[string]synthesis.RepoSynthesis
+	truths     map[string]RepoSynthesis
 	repeats    int
 	warnings   []string
 	hardErrors []string // per-sample synthesis hard-error tallies, gate input

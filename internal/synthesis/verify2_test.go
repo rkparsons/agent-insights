@@ -1,6 +1,7 @@
 package synthesis
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -262,20 +263,20 @@ func TestVerify2_GoOwnedOverwrite(t *testing.T) {
 	if got.LastSeen != "2026-06-11" {
 		t.Errorf("last_seen = %q, want 2026-06-11 (max cited session date)", got.LastSeen)
 	}
-	if want := ActedKeyV2("hook", f.Statement); got.ActedKey != want {
+	if want := ActedKey("hook", f.Statement); got.ActedKey != want {
 		t.Errorf("acted_key = %q, want %q", got.ActedKey, want)
 	}
 }
 
 func TestVerify2_ActedKeyV2IsRepoFree(t *testing.T) {
 	statement := "Run the smoke test before calling a task done."
-	if ActedKeyV2("hook", statement) == ActedKeyV2("setting", statement) {
+	if ActedKey("hook", statement) == ActedKey("setting", statement) {
 		t.Error("acted key must vary with asset type")
 	}
-	if k := ActedKeyV2("hook", statement); k != ActedKeyV2("hook", "  RUN the smoke  test before calling a task done. ") {
+	if k := ActedKey("hook", statement); k != ActedKey("hook", "  RUN the smoke  test before calling a task done. ") {
 		t.Errorf("acted key must normalize whitespace and case, got %q", k)
 	}
-	if k := ActedKeyV2("hook", statement); len(k) != 16 {
+	if k := ActedKey("hook", statement); len(k) != 16 {
 		t.Errorf("acted key = %q, want 16 hex chars", k)
 	}
 }
@@ -641,7 +642,7 @@ func TestVerify2_GitRuleDate(t *testing.T) {
 	git("add", "CLAUDE.md")
 	git("commit", "-m", "add rule")
 
-	lookup := gitRuleDate(repo)
+	lookup := gitRuleDate(context.Background(), repo)
 	got, ok := lookup(filepath.Join(repo, "CLAUDE.md"))
 	if !ok {
 		t.Fatal("want a date for a tracked rule file")
@@ -654,6 +655,14 @@ func TestVerify2_GitRuleDate(t *testing.T) {
 	}
 	if _, ok := lookup("/etc/hosts"); ok {
 		t.Error("want ok=false for a path outside the dotfiles repo")
+	}
+
+	// A cancelled context must degrade to "undatable", never to a wrong date:
+	// the escalation survives, and Go simply skips the recency arbitration.
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, ok := gitRuleDate(cancelled, repo)(filepath.Join(repo, "CLAUDE.md")); ok {
+		t.Error("want ok=false once the run's context is done")
 	}
 }
 

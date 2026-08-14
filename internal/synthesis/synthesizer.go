@@ -19,64 +19,19 @@ import (
 	"github.com/rkparsons/agent-insights/skills"
 )
 
-// synthesisSchema is the JSON schema passed to `claude -p --json-schema`,
-// single-sourced from the embedded synthesizing-workflow-insights skill so the
-// schema and the prompt that documents it cannot drift apart.
+// synthesisSchema is the embedded synthesizing-workflow-insights raw contract:
+// the shape the skill writes its output file in, and the shape VerifyGlobal
+// re-checks. Kept here so the eval cache keys hash the same bytes the run
+// ships.
 var synthesisSchema = string(skills.SynthesisSchema())
 
-const (
-	synthesisModel        = "claude-opus-4-8"
-	synthesisSkillCommand = "/synthesizing-workflow-insights"
-)
-
-// SynthesisModel is the pinned L2 model id, exported for eval cache keys and
-// reproducibility records.
-const SynthesisModel = synthesisModel
+const synthesisSkillCommand = "/synthesizing-workflow-insights"
 
 // SchemaHash returns the sha256 (hex) of the embedded L2 schema, for eval
 // cache keys and reproducibility records.
 func SchemaHash() string {
 	sum := sha256.Sum256([]byte(synthesisSchema))
 	return hex.EncodeToString(sum[:])
-}
-
-// Synthesizer produces the qualitative themes/recommendations half of a repo's
-// insights from its EvidenceBundle. Injected so the merge/ranking logic is
-// testable with a fake and no real LLM.
-type Synthesizer interface {
-	Synthesize(ctx context.Context, b EvidenceBundle) (RawSynthesis, error)
-}
-
-// commandRunner runs the prepared claude command, feeding stdin and returning
-// stdout. Injected so the envelope parsing + error handling are unit-testable.
-type commandRunner func(ctx context.Context, stdin []byte) (stdout []byte, err error)
-
-type claudeSynthesizer struct {
-	run    commandRunner
-	model  string
-	schema string
-}
-
-func (s claudeSynthesizer) Synthesize(ctx context.Context, b EvidenceBundle) (RawSynthesis, error) {
-	stdinBundle := b
-	stdinBundle.SessionDates = nil // model must never see dates (it cannot emit numbers)
-	stdin, err := json.Marshal(stdinBundle)
-	if err != nil {
-		return RawSynthesis{}, err
-	}
-	out, err := s.run(ctx, stdin)
-	if err != nil {
-		return RawSynthesis{}, fmt.Errorf("synthesis command: %w", err)
-	}
-	payload, err := insights.ParseClaudeEnvelope(out)
-	if err != nil {
-		return RawSynthesis{}, err
-	}
-	var raw RawSynthesis
-	if err := json.Unmarshal(payload, &raw); err != nil {
-		return RawSynthesis{}, fmt.Errorf("structured_output parse: %w", err)
-	}
-	return raw, nil
 }
 
 // scrubbedEnv returns the current environment with the API-key vars removed so the
@@ -92,74 +47,6 @@ func scrubbedEnv() []string {
 		out = append(out, kv)
 	}
 	return out
-}
-
-// newSynthesizeCommand builds the claude invocation that runs the synthesis skill with
-// structured output. The bundle is fed on stdin (argv is never used for it — bundles
-// can exceed the macOS argv cap). workDir is required, not optional: the nested claude
-// resolves /synthesizing-workflow-insights from its cwd, where the run materialized the
-// skills package — an empty workDir would silently fall back to the caller's cwd and
-// whatever skills happen to be ambient there.
-func newSynthesizeCommand(ctx context.Context, model, schema string, stdin []byte, configDir, workDir string) (*exec.Cmd, error) {
-	if workDir == "" {
-		return nil, errors.New("synthesis workDir is empty: the run must materialize the skills into a scratch cwd (skills.TempWorkdir)")
-	}
-	cmd := exec.CommandContext(ctx, "claude", "-p", synthesisSkillCommand,
-		"--output-format", "json",
-		"--json-schema", schema,
-		"--model", model,
-		// Nested synthesis calls must NOT persist their own session transcripts —
-		// otherwise a backfill re-run litters ~/.claude/projects with synthesizer
-		// exhaust that then re-enters the scan as gated noise. The synthesis still
-		// returns structured output on stdout; only the on-disk session record is
-		// suppressed.
-		"--no-session-persistence")
-	cmd.Stdin = bytes.NewReader(stdin)
-	// A context kill only signals the direct child; claude's own subprocesses
-	// inherit the stdout pipe and can strand Output() long past the deadline
-	// (observed: a 20m kill draining for hours). WaitDelay forcibly closes.
-	cmd.WaitDelay = 30 * time.Second
-	cmd.Env = scrubbedEnv()
-	// Appended last so it wins over any inherited CLAUDE_CONFIG_DIR (os/exec
-	// keeps the last duplicate). Pinning both knobs keeps a nested claude from
-	// reading live global config or a project CLAUDE.md from the caller's cwd.
-	if configDir != "" {
-		cmd.Env = append(cmd.Env, "CLAUDE_CONFIG_DIR="+configDir)
-	}
-	cmd.Dir = workDir
-	return cmd, nil
-}
-
-// SynthesizerFactory builds a run's Synthesizer once the run has materialized
-// the skills package into workDir — the nested claude's cwd. The seam is a
-// factory rather than a Synthesizer because only the run owns that directory's
-// lifetime; tests pass a factory that ignores workDir and returns a fake.
-type SynthesizerFactory func(workDir string) Synthesizer
-
-// NewClaudeSynthesizer returns a Synthesizer that shells out to `claude -p` under
-// subscription auth (Opus 4.8, embedded schema), running in workDir. The caller's
-// ctx governs the subprocess timeout; a context with no deadline means no timeout.
-func NewClaudeSynthesizer(workDir string) Synthesizer {
-	return NewClaudeSynthesizerPinned("", workDir)
-}
-
-// NewClaudeSynthesizerPinned is NewClaudeSynthesizer with the nested claude's
-// config dir pinned too (see NewClaudeJudgePinned). An empty configDir leaves
-// that knob inherited; workDir is always required.
-func NewClaudeSynthesizerPinned(configDir, workDir string) Synthesizer {
-	s := claudeSynthesizer{model: synthesisModel, schema: synthesisSchema}
-	s.run = func(ctx context.Context, stdin []byte) ([]byte, error) {
-		cmd, err := newSynthesizeCommand(ctx, s.model, s.schema, stdin, configDir, workDir)
-		if err != nil {
-			return nil, err
-		}
-		out, err := cmd.Output()
-		if err != nil {
-			return out, wrapClaudeExit(out, err)
-		}
-		return out, nil
-	}
-	return s
 }
 
 // wrapClaudeExit formats a claude subprocess failure. claude -p reports many
@@ -290,6 +177,14 @@ func (s claudeGlobalSynthesizer) SynthesizeGlobal(ctx context.Context, bundles m
 	if len(bundles) == 0 {
 		return raw, errors.New("global synthesis has no bundles")
 	}
+	// The nested claude resolves /synthesizing-workflow-insights from its cwd,
+	// so a workdir without the materialized skill runs the model with no
+	// contract at all — a bare prompt over a directory of JSON — and burns the
+	// whole deadline before anything downstream notices.
+	skillDir := filepath.Join(s.workDir, ".claude", "skills", skills.SynthesisSkill)
+	if _, err := os.Stat(skillDir); err != nil {
+		return raw, fmt.Errorf("global synthesis workdir has no materialized %s skill: %w", skills.SynthesisSkill, err)
+	}
 	if _, err := WriteBundleFiles(s.workDir, bundles); err != nil {
 		return raw, err
 	}
@@ -312,6 +207,13 @@ func (s claudeGlobalSynthesizer) SynthesizeGlobal(ctx context.Context, bundles m
 	out, err := s.run(ctx)
 	if err != nil {
 		return raw, fmt.Errorf("global synthesis command: %w", err)
+	}
+	// A zero exit with is_error set is how the CLI reports a refusal or an
+	// aborted turn; without this check a stale-free workdir would only surface
+	// it as "wrote no synthesis.json", and a run that DID write a partial file
+	// would be accepted outright.
+	if err := checkGlobalEnvelope(out); err != nil {
+		return raw, err
 	}
 	data, err := os.ReadFile(outPath)
 	if err != nil {
@@ -404,7 +306,9 @@ func buildGlobalManifest(globalRoot string, cfg insights.Config, bundles map[str
 
 // repoRootsFor pairs each synthesized repo key with its configured checkout
 // root, keying configured paths the way RepoKey does. A repo the config does
-// not list simply has no root to read: the manifest names what exists.
+// not list is named as unavailable rather than omitted: the model is told to
+// cite every repo it draws evidence from, and a silently missing key reads as
+// "this repo has no assets" instead of "its assets cannot be read here".
 func repoRootsFor(cfg insights.Config, keys []string) string {
 	roots := make(map[string]string, len(cfg.Repos))
 	for _, p := range cfg.Repos {
@@ -412,9 +316,7 @@ func repoRootsFor(cfg insights.Config, keys []string) string {
 	}
 	pairs := make([]string, 0, len(keys))
 	for _, k := range keys {
-		if p, ok := roots[k]; ok {
-			pairs = append(pairs, k+": "+p)
-		}
+		pairs = append(pairs, k+": "+orDefault(roots[k], "unavailable"))
 	}
 	if len(pairs) == 0 {
 		return "none configured"
@@ -429,6 +331,24 @@ func orDefault(s, fallback string) string {
 		return fallback
 	}
 	return s
+}
+
+// checkGlobalEnvelope fails the run when the CLI's own envelope reports an
+// error, even on a zero exit. Only is_error is read: the v2 payload is the
+// file the skill wrote, not structured_output, so an unparseable envelope is
+// not itself fatal here — the output file check that follows is the real gate.
+func checkGlobalEnvelope(out []byte) error {
+	var env struct {
+		IsError bool   `json:"is_error"`
+		Result  string `json:"result"`
+	}
+	if err := json.Unmarshal(out, &env); err != nil {
+		return nil
+	}
+	if env.IsError {
+		return fmt.Errorf("claude reported error: %s", truncRunes(strings.TrimSpace(env.Result), 500))
+	}
+	return nil
 }
 
 // claudeResultText pulls the CLI's own report out of an --output-format json

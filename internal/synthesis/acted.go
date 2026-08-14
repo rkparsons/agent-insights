@@ -14,9 +14,13 @@ import (
 
 func actedPath() string { return filepath.Join(insights.InsightsDir(), "insights-acted.json") }
 
-func ActedKey(rec Recommendation, sourceRepo string) string {
-	norm := strings.Join(strings.Fields(strings.ToLower(rec.Statement)), " ")
-	sum := sha256.Sum256([]byte(sourceRepo + "\x00" + rec.Type + "\x00" + norm))
+// ActedKey is the acted-store key for a finding: a hash over its asset type
+// and normalized statement, with no source repo — a cross-repo finding has
+// none. Reworded findings get a new key and resurface; that is the accepted
+// limitation, unchanged from v1.
+func ActedKey(assetType, statement string) string {
+	norm := strings.Join(strings.Fields(strings.ToLower(statement)), " ")
+	sum := sha256.Sum256([]byte(assetType + "\x00" + norm))
 	return hex.EncodeToString(sum[:])[:16]
 }
 

@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/rkparsons/agent-insights/internal/synthesis"
 )
 
 // testdataDir is the loader's dataDir for the synthetic testdata/rubrics
@@ -218,8 +216,8 @@ func TestRubricSourceThemeValidation(t *testing.T) {
 }
 
 func TestPreStripAnchorsFromGroundTruth(t *testing.T) {
-	truths := map[string]synthesis.RepoSynthesis{
-		"alpha": {Themes: []synthesis.Theme{
+	truths := map[string]RepoSynthesis{
+		"alpha": {Themes: []Theme{
 			{}, {SessionIDs: []string{"m1", "a1", "a2", "a1"}},
 		}},
 	}

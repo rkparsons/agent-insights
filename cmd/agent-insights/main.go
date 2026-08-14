@@ -1,6 +1,6 @@
 // Command agent-insights is the standalone CLI for the agent-insights
-// pipeline: analyze Claude Code sessions, synthesize repo-level insight
-// documents, and score the pipeline itself via the eval subcommand.
+// pipeline: analyze Claude Code sessions, synthesize one cross-repo insight
+// document, and score the pipeline itself via the eval subcommand.
 package main
 
 import (
@@ -10,7 +10,7 @@ import (
 	"github.com/rkparsons/agent-insights/cmd"
 )
 
-const usage = "usage: agent-insights backfill|analyze|synthesize|enrich|status|show|acted|unacted|eval ..."
+const usage = "usage: agent-insights backfill|analyze|synthesize|status|show|acted|unacted|eval ..."
 
 func main() {
 	if len(os.Args) < 2 {

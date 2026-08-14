@@ -25,15 +25,14 @@ const l2SynthesisTimeout = 20 * time.Minute
 
 type OutcomeOptions struct {
 	DataDir, CacheDir string
-	Scope             string                // "l2" (default) | "full"
-	Population        string                // "scoring" (default) | "as_consumed"
-	Samples           int                   // default 3
-	L1Sample          bool                  // Task 11
-	PoolVersion       string                // default "v1"
-	ClaudeVersion     string                // injected; CLI fills via claudeVersionString()
-	SkillDirs         map[string]string     // nil → defaultSkillDirs()
-	Judge             insights.Judge        // nil → NewClaudeJudgePinned(pin) — Task 11/12
-	Synth             synthesis.Synthesizer // nil → NewClaudeSynthesizerPinned(pin) — Task 12
+	Scope             string            // "l2" (default) | "full"
+	Population        string            // "scoring" (default) | "as_consumed"
+	Samples           int               // default 3
+	L1Sample          bool              // Task 11
+	PoolVersion       string            // default "v1"
+	ClaudeVersion     string            // injected; CLI fills via claudeVersionString()
+	SkillDirs         map[string]string // nil → defaultSkillDirs()
+	Judge             insights.Judge    // nil → NewClaudeJudgePinned(pin) — Task 11/12
 }
 
 type SampleOutput struct {
@@ -85,9 +84,9 @@ type RunRecord struct { // the spec's reproducibility record
 }
 
 type VerifiedOutput struct {
-	Synthesis synthesis.RepoSynthesis    `json:"synthesis"`
-	Raw       synthesis.RawSynthesis     `json:"raw"` // spec enabler 1: RawSynthesis next to RepoSynthesis
-	Report    synthesis.ValidationReport `json:"report"`
+	Synthesis RepoSynthesis    `json:"synthesis"`
+	Raw       RawSynthesis     `json:"raw"` // spec enabler 1: RawSynthesis next to RepoSynthesis
+	Report    ValidationReport `json:"report"`
 }
 
 // defaultSkillDirs materializes the in-repo skills package to a scratch dir and
@@ -115,16 +114,6 @@ func defaultSkillDirs() (map[string]string, func(), error) {
 		dirs[name] = filepath.Join(root, ".claude", "skills", name)
 	}
 	return dirs, cleanup, nil
-}
-
-// snapshotAdoptPaths applies the adopted-check's path selection
-// (synthesis.AdoptPathsUnder, covered by the synthesis code version in the
-// verify cache key) to the frozen config-snapshot layout.
-func snapshotAdoptPaths(dataDir, bucket string) []string {
-	return synthesis.AdoptPathsUnder(
-		filepath.Join(dataDir, "config-snapshot", "global"),
-		filepath.Join(dataDir, "config-snapshot", "repos", bucket),
-	)
 }
 
 // RunOutcome runs the pipeline stages over the frozen corpus with the
@@ -163,7 +152,10 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 		RanAt: time.Now().UTC(), Scope: opts.Scope, Population: opts.Population,
 		PoolVersion: opts.PoolVersion, Samples: opts.Samples,
 		SchemaHashes: map[string]string{"l1": insights.SchemaHash(), "l2": synthesis.SchemaHash()},
-		Models:       map[string]string{"l1": insights.AnalysisModel, "l2": synthesis.SynthesisModel},
+		// Task 8-10: the L2 model is a config key under v2 (synthesis_model), so
+		// the record names the default rather than a pinned constant; plan Task
+		// 10 threads the configured id through the env pin.
+		Models:       map[string]string{"l1": insights.AnalysisModel, "l2": insights.DefaultSynthesisModel},
 		CodeVersions: map[string]string{},
 	}
 
@@ -235,10 +227,6 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 		return rec, err
 	}
 
-	synth := opts.Synth
-	if synth == nil {
-		synth = synthesis.NewClaudeSynthesizerPinned(pin.ConfigDir, pin.WorkDir)
-	}
 	judge := opts.Judge
 	if judge == nil {
 		judge = insights.NewClaudeJudgePinned(pin.ConfigDir, pin.WorkDir)
@@ -323,70 +311,18 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 		}
 		bundleHash := sha256hex(bundleJSON)
 
-		adopt := synthesis.NewAdoptCheckerFromFiles(snapshotAdoptPaths(opts.DataDir, bucket))
 		bo := BucketOutputs{Bucket: bucket, Population: ids, GapFallbacks: facts.GapFallbacks,
 			PoolSliceHash: facts.PoolSliceHash, BundleKey: bundleKey, BundleHash: bundleHash}
 
-		// appendBucketAndReturn appends the current (possibly partial) bucket to the record
-		// before returning an error, preserving in-flight state on park/error.
-		appendBucketAndReturn := func(err error) (RunRecord, error) {
-			rec.Buckets = append(rec.Buckets, bo)
-			return rec, err
-		}
-
-		for s := 0; s < opts.Samples; s++ {
-			rawKey := cacheKey("l2", bundleHash, pin.SkillHashes["synthesizing-workflow-insights"],
-				synthesis.SchemaHash(), synthesis.SynthesisModel, pin.EnvHash, strconv.Itoa(s))
-			var raw synthesis.RawSynthesis
-			hit, err := cache.Get("l2", rawKey, &raw)
-			if err != nil {
-				return appendBucketAndReturn(err)
-			}
-			fresh := !hit
-			if hit {
-				rec.CacheHits++
-			} else {
-				rctx, cancel := context.WithTimeout(ctx, l2SynthesisTimeout)
-				raw, err = synth.Synthesize(rctx, bundle)
-				cancel()
-				if err != nil {
-					consecutiveFailures++
-					rec.Warnings = append(rec.Warnings, fmt.Sprintf("%s sample %d: L2 failed: %v", bucket, s, err))
-					if consecutiveFailures >= consecutiveLLMFailureLimit {
-						return appendBucketAndReturn(fmt.Errorf("parked after %d consecutive LLM failures (see warnings)", consecutiveFailures))
-					}
-					continue
-				}
-				consecutiveFailures = 0
-				rec.CacheMisses++
-				if err := cache.Put("l2", rawKey, raw); err != nil {
-					return appendBucketAndReturn(err)
-				}
-			}
-
-			rawJSON, err := json.Marshal(raw)
-			if err != nil {
-				return appendBucketAndReturn(err)
-			}
-			verKey := cacheKey("verify", sha256hex(rawJSON), bundleHash, bucket, rec.ConfigSnapshotHash, synthCV)
-			var vo VerifiedOutput
-			hit, err = cache.Get("verify", verKey, &vo)
-			if err != nil {
-				return appendBucketAndReturn(err)
-			}
-			if hit {
-				rec.CacheHits++
-			} else {
-				rec.CacheMisses++
-				rs, report := synthesis.Finalize(bucket, bundle, raw, adopt, bench.FrozenAt)
-				vo = VerifiedOutput{Synthesis: rs, Raw: raw, Report: report}
-				if err := cache.Put("verify", verKey, vo); err != nil {
-					return appendBucketAndReturn(err)
-				}
-			}
-			bo.Samples = append(bo.Samples, SampleOutput{SampleIndex: s, Fresh: fresh, RawKey: rawKey, VerifiedKey: verKey})
-		}
+		// Task 8-10: the L2 stage ran the v1 per-repo synthesizer and Finalize,
+		// which the v2 pipeline replaced with one cross-repo run plus a Go
+		// verifier (plan Task 7). Sampling a global synthesis per bucket is not
+		// a mechanical port — carding, corroboration and the cache keys are all
+		// re-derived in plan Tasks 8-10 — so the stage fails closed rather than
+		// scoring a shape the pipeline no longer produces. L1 scope and
+		// --l1-sample are unaffected: both return above this point.
 		rec.Buckets = append(rec.Buckets, bo)
+		return rec, fmt.Errorf("bucket %s: the L2 eval stage is being rebuilt for the v2 global synthesis (plan Tasks 8-10)", bucket)
 	}
 
 	rec.RecordPath = filepath.Join(opts.CacheDir, "run-records",

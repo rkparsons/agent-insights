@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
-
-	"github.com/rkparsons/agent-insights/internal/synthesis"
 )
 
 // Tier-1 thresholds mirror the existing real gate (synthesis/eval_test.go
@@ -17,98 +15,21 @@ const (
 	churnWarnThreshold      = 0.5
 )
 
-// ComputeTier1 embeds the existing trust-property gates in the verdict:
-// EvaluateRun per sample for the property fields, membership churn across
-// consecutive FRESH sample pairs only (an all-cached re-run has no fresh
-// pairs → churn is null, fresh_sample_pairs 0 — the documented behavior).
-// Returns gates, hard-fail reasons, warnings.
+// ComputeTier1 embeds the trust-property gates in the verdict.
+//
+// Task 8-10: the properties were computed by the v1 synthesis.EvaluateRun over
+// per-repo themes/recommendations, which the v2 pipeline no longer produces
+// (plan Task 7); the recasts — preference/opportunity/friction recall against
+// findings AND dropped, membership churn over findings' session sets, raw
+// quote-drop rate from meta.validation_notes — are plan Task 9. Until then
+// this reports no measured properties and one warning, so a verdict composed
+// in the interim cannot claim a Tier-1 pass it did not measure. The record and
+// cache arguments stay in the signature: Task 9 reads both.
 func ComputeTier1(record RunRecord, cache *Cache) (Tier1Gates, []string, []string, error) {
-	t1 := Tier1Gates{DominantTypePresent: true}
-	var reasons, warnings []string
-	oppSet, prefSet := map[string]bool{}, map[string]bool{}
-	churnSum, churnN := 0.0, 0
-	for _, b := range record.Buckets {
-		var bundle synthesis.EvidenceBundle
-		hit, err := cache.Get("bundle", b.BundleKey, &bundle)
-		if err != nil {
-			return t1, nil, nil, err
-		}
-		if !hit {
-			return t1, nil, nil, fmt.Errorf("bucket %s: bundle missing from cache — re-run `insights eval outcome`", b.Bucket)
-		}
-		var freshVOs []VerifiedOutput
-		for _, s := range b.Samples {
-			var vo VerifiedOutput
-			hit, err := cache.Get("verify", s.VerifiedKey, &vo)
-			if err != nil {
-				return t1, nil, nil, err
-			}
-			if !hit {
-				return t1, nil, nil, fmt.Errorf("bucket %s sample %d: verified output missing from cache — re-run `insights eval outcome`", b.Bucket, s.SampleIndex)
-			}
-			if len(vo.Synthesis.Themes) == 0 && len(vo.Synthesis.Recommendations) == 0 {
-				reasons = append(reasons, fmt.Sprintf("bucket %s sample %d: empty synthesis output (fail-closed)", b.Bucket, s.SampleIndex))
-			}
-			res := synthesis.EvaluateRun(vo.Synthesis, vo.Synthesis, vo.Report, bundle)
-			if res.RawFabricationRate > t1.MaxRawFabricationRate {
-				t1.MaxRawFabricationRate = res.RawFabricationRate
-			}
-			t1.HardErrorCount += len(res.HardErrors)
-			for _, g := range res.OpportunityRecallMisses {
-				oppSet[g] = true
-			}
-			for _, p := range res.PrefRecallMisses {
-				prefSet[p] = true
-			}
-			if !res.DominantTypePresent {
-				t1.DominantTypePresent = false
-			}
-			t1.ReportPrivacyLeakCount += len(res.PrivacyLeaks)
-			if s.Fresh {
-				freshVOs = append(freshVOs, vo)
-			}
-		}
-		for j := 0; j+1 < len(freshVOs); j++ {
-			res := synthesis.EvaluateRun(freshVOs[j].Synthesis, freshVOs[j+1].Synthesis, freshVOs[j].Report, bundle)
-			churnSum += res.MembershipChurn
-			churnN++
-		}
-	}
-	for g := range oppSet {
-		t1.OpportunityRecallMisses = append(t1.OpportunityRecallMisses, g)
-	}
-	sort.Strings(t1.OpportunityRecallMisses)
-	for p := range prefSet {
-		t1.PrefRecallMisses = append(t1.PrefRecallMisses, p)
-	}
-	sort.Strings(t1.PrefRecallMisses)
-	t1.FreshSamplePairs = churnN
-	if churnN > 0 {
-		churn := churnSum / float64(churnN)
-		t1.MembershipChurn = &churn
-		if churn > churnWarnThreshold {
-			warnings = append(warnings, fmt.Sprintf("membership churn %.2f exceeds %.2f across %d fresh pairs", churn, churnWarnThreshold, churnN))
-		}
-	}
-	if t1.MaxRawFabricationRate > fabricationHardFailRate {
-		reasons = append(reasons, fmt.Sprintf("raw fabrication rate %.3f exceeds %.2f", t1.MaxRawFabricationRate, fabricationHardFailRate))
-	}
-	if t1.ReportPrivacyLeakCount > 0 {
-		reasons = append(reasons, fmt.Sprintf("%d privacy leak(s) in rendered reports", t1.ReportPrivacyLeakCount))
-	}
-	if t1.HardErrorCount > 0 {
-		warnings = append(warnings, fmt.Sprintf("%d synthesis hard error(s) across samples", t1.HardErrorCount))
-	}
-	if !t1.DominantTypePresent {
-		warnings = append(warnings, "soft floor breached: friction evidence present but no friction theme")
-	}
-	for _, g := range t1.OpportunityRecallMisses {
-		warnings = append(warnings, "opportunity recall miss: "+g)
-	}
-	for _, p := range t1.PrefRecallMisses {
-		warnings = append(warnings, "pref recall miss: "+p)
-	}
-	return t1, reasons, warnings, nil
+	_ = record
+	_ = cache
+	return Tier1Gates{DominantTypePresent: true}, nil,
+		[]string{"tier-1 trust properties not measured: the v2 probe recast is pending (plan Task 9)"}, nil
 }
 
 // VerdictInputs carries everything ComposeVerdict folds together. Results is

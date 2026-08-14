@@ -15,36 +15,6 @@ import (
 	"github.com/rkparsons/agent-insights/skills"
 )
 
-func TestClaudeSynthesizerParsesEnvelope(t *testing.T) {
-	data, err := os.ReadFile("testdata/envelope.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := claudeSynthesizer{run: func(ctx context.Context, stdin []byte) ([]byte, error) { return data, nil }}
-	raw, err := s.Synthesize(context.Background(), EvidenceBundle{Repo: "alpha"})
-	if err != nil {
-		t.Fatalf("Synthesize: %v", err)
-	}
-	if len(raw.Themes) != 1 || raw.Themes[0].Kind != "friction" {
-		t.Fatalf("themes = %+v", raw.Themes)
-	}
-	if raw.Themes[0].EvidenceIDs[1] != "F2" {
-		t.Errorf("evidence_ids = %v, want [F1 F2]", raw.Themes[0].EvidenceIDs)
-	}
-	if len(raw.Recommendations) != 1 || raw.Recommendations[0].Type != "claude_md_rule" {
-		t.Errorf("recs = %+v", raw.Recommendations)
-	}
-}
-
-func TestClaudeSynthesizerNullStructuredOutput(t *testing.T) {
-	s := claudeSynthesizer{run: func(ctx context.Context, stdin []byte) ([]byte, error) {
-		return []byte(`{"is_error": false, "result": "", "structured_output": null}`), nil
-	}}
-	if _, err := s.Synthesize(context.Background(), EvidenceBundle{}); err == nil {
-		t.Error("expected error on null structured_output")
-	}
-}
-
 func TestWrapClaudeExit(t *testing.T) {
 	cmd := exec.Command("sh", "-c", "exit 3")
 	err := cmd.Run()
@@ -62,60 +32,6 @@ func TestWrapClaudeExit(t *testing.T) {
 	plain := errors.New("not an exit error")
 	if got := wrapClaudeExit(nil, plain); got != plain {
 		t.Fatalf("non-ExitError must pass through unchanged, got %v", got)
-	}
-}
-
-func TestNewSynthesizeCommandPinsConfigDirAndCwd(t *testing.T) {
-	cmd, err := newSynthesizeCommand(context.Background(), "m", "s", nil, "/tmp/cfg", "/tmp/work")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cmd.Dir != "/tmp/work" {
-		t.Fatalf("Dir = %q", cmd.Dir)
-	}
-	if !slices.Contains(cmd.Env, "CLAUDE_CONFIG_DIR=/tmp/cfg") {
-		t.Fatal("env missing pinned CLAUDE_CONFIG_DIR")
-	}
-	// An unpinned config dir stays inherited (production); the workdir never can.
-	inherited, err := newSynthesizeCommand(context.Background(), "m", "s", nil, "", "/tmp/work")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, kv := range inherited.Env {
-		if kv == "CLAUDE_CONFIG_DIR=" {
-			t.Fatal("unpinned command must not append an empty CLAUDE_CONFIG_DIR")
-		}
-	}
-}
-
-// The nested claude resolves the skill from its cwd, so an empty workDir is a
-// wiring bug that must fail loudly rather than run against whatever skills are
-// ambient in the caller's cwd.
-func TestNewSynthesizeCommandRejectsEmptyWorkDir(t *testing.T) {
-	if _, err := newSynthesizeCommand(context.Background(), "m", "s", nil, "/tmp/cfg", ""); err == nil {
-		t.Fatal("expected an error for an empty workDir")
-	}
-	s := NewClaudeSynthesizerPinned("/tmp/cfg", "")
-	if _, err := s.Synthesize(context.Background(), EvidenceBundle{}); err == nil {
-		t.Fatal("expected the synthesizer to refuse to run without a workdir")
-	}
-}
-
-func TestSynthesizeStdinOmitsSessionDates(t *testing.T) {
-	var captured []byte
-	s := claudeSynthesizer{run: func(ctx context.Context, stdin []byte) ([]byte, error) {
-		captured = stdin
-		return []byte(`{"is_error":false,"result":"","structured_output":{"themes":[],"recommendations":[]}}`), nil
-	}}
-	b := EvidenceBundle{Repo: "r", SessionDates: map[string]string{"00000000-0000-4000-8000-000000000001": "2026-07-03"}}
-	if _, err := s.Synthesize(context.Background(), b); err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(captured), "session_dates") {
-		t.Errorf("stdin payload leaked session_dates: %s", captured)
-	}
-	if strings.Contains(string(captured), "2026-07-03") {
-		t.Errorf("stdin payload leaked a session date: %s", captured)
 	}
 }
 
@@ -167,7 +83,15 @@ func TestGlobalManifestDegradesWithoutDotfilesOrRepoRoots(t *testing.T) {
 	if !strings.Contains(got, "dotfiles git history unavailable") {
 		t.Errorf("unset dotfiles_repo must read unavailable:\n%s", got)
 	}
-	if strings.Contains(got, "repo roots alpha:") {
+	// A repo with no configured checkout is named as unavailable, never
+	// omitted: a missing key reads as "this repo has no assets" rather than
+	// "its assets cannot be read from here".
+	for _, want := range []string{"alpha: unavailable", "beta: unavailable"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("manifest missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "alpha: /") {
 		t.Errorf("unconfigured repos must not invent roots:\n%s", got)
 	}
 }
@@ -309,14 +233,47 @@ func TestSynthesizeGlobalPreparesWorkdirAndDecodesOutput(t *testing.T) {
 
 func TestSynthesizeGlobalErrorsWhenSkillWroteNoOutput(t *testing.T) {
 	s, _ := fakeGlobalCLI(t, func(string) ([]byte, error) {
-		return []byte(`{"is_error":true,"result":"Not logged in"}`), nil
+		return []byte(`{"is_error":false,"result":"nothing to do"}`), nil
 	})
 	_, err := s.SynthesizeGlobal(context.Background(), globalTestBundles())
 	if err == nil {
 		t.Fatal("expected an error when no synthesis.json was written")
 	}
-	if !strings.Contains(err.Error(), "synthesis.json") || !strings.Contains(err.Error(), "Not logged in") {
+	if !strings.Contains(err.Error(), "synthesis.json") || !strings.Contains(err.Error(), "nothing to do") {
 		t.Errorf("error = %q, want it to name the missing file and the CLI's own report", err)
+	}
+}
+
+// TestSynthesizeGlobalFailsClosedOnEnvelopeError: the CLI reports a refusal or
+// an aborted turn in its envelope, sometimes on a zero exit and sometimes
+// alongside a partially-written output file — which would otherwise be
+// accepted as a successful run.
+func TestSynthesizeGlobalFailsClosedOnEnvelopeError(t *testing.T) {
+	s, _ := fakeGlobalCLI(t, func(dir string) ([]byte, error) {
+		return []byte(`{"is_error":true,"result":"Not logged in"}`),
+			os.WriteFile(filepath.Join(dir, "synthesis.json"), []byte(fakeRawSynthesis), 0o644)
+	})
+	_, err := s.SynthesizeGlobal(context.Background(), globalTestBundles())
+	if err == nil {
+		t.Fatal("expected an error when the CLI envelope reports one")
+	}
+	if !strings.Contains(err.Error(), "Not logged in") {
+		t.Errorf("error = %q, want the CLI's own report", err)
+	}
+}
+
+// TestSynthesizeGlobalRequiresMaterializedSkill: the nested claude resolves the
+// skill from its cwd, so a workdir without it would run the model with no
+// contract at all and burn the whole deadline.
+func TestSynthesizeGlobalRequiresMaterializedSkill(t *testing.T) {
+	s := claudeGlobalSynthesizer{cfg: globalTestConfig(), workDir: t.TempDir(),
+		run: func(context.Context) ([]byte, error) {
+			t.Fatal("the CLI must not be invoked without the materialized skill")
+			return nil, nil
+		}}
+	_, err := s.SynthesizeGlobal(context.Background(), globalTestBundles())
+	if err == nil || !strings.Contains(err.Error(), skills.SynthesisSkill) {
+		t.Errorf("error = %v, want it to name the missing skill", err)
 	}
 }
 

@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/rkparsons/agent-insights/internal/synthesis"
 )
 
 // TestPartARubricsAnchorsResolveInFrozenData verifies, against the private
@@ -33,7 +31,7 @@ func TestPartARubricsAnchorsResolveInFrozenData(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var gt synthesis.RepoSynthesis
+		var gt RepoSynthesis
 		if err := json.Unmarshal(raw, &gt); err != nil {
 			t.Fatal(err)
 		}

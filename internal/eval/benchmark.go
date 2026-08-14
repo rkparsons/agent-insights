@@ -42,12 +42,12 @@ type Benchmark struct {
 // chronological desc — same convention as synthesis.LoadSyntheses). A repo
 // dir whose every .json file is unreadable or malformed is an error naming
 // the dir, not a silently omitted bucket.
-func loadGroundTruth(dir string) (map[string]synthesis.RepoSynthesis, error) {
+func loadGroundTruth(dir string) (map[string]RepoSynthesis, error) {
 	repoDirs, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
-	out := map[string]synthesis.RepoSynthesis{}
+	out := map[string]RepoSynthesis{}
 	for _, rd := range repoDirs {
 		if !rd.IsDir() {
 			continue
@@ -69,7 +69,7 @@ func loadGroundTruth(dir string) (map[string]synthesis.RepoSynthesis, error) {
 			if err != nil {
 				continue
 			}
-			var s synthesis.RepoSynthesis
+			var s RepoSynthesis
 			if err := json.Unmarshal(raw, &s); err != nil {
 				continue
 			}
@@ -119,7 +119,7 @@ func allBucketsResolved(b Benchmark) bool {
 // descriptive and possibly reversed) and the scoring population (as_consumed
 // minus meta-sessions). An unresolved count mismatch is returned as a problem;
 // its populations are still written for inspection.
-func BuildBenchmark(frozenAt time.Time, analyses []insights.AgentSessionAnalysis, truths map[string]synthesis.RepoSynthesis, cfg insights.Config) (Benchmark, []string) {
+func BuildBenchmark(frozenAt time.Time, analyses []insights.AgentSessionAnalysis, truths map[string]RepoSynthesis, cfg insights.Config) (Benchmark, []string) {
 	b := Benchmark{FrozenAt: frozenAt, Buckets: map[string]BucketPopulations{}, Statuses: map[string]string{}}
 	var problems []string
 	for repo, t := range truths {

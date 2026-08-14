@@ -45,31 +45,9 @@ func WriteBundleFiles(dir string, bundles map[string]EvidenceBundle) ([]string, 
 
 	paths := make([]string, 0, len(repos))
 	for _, repo := range repos {
-		b := bundles[repo]
-		fb := bundleFile{
-			Repo: b.Repo, SessionCount: b.SessionCount, AnalyzedCount: b.AnalyzedCount,
-			From: b.From, To: b.To, Context: b.Context,
-		}
-		for _, f := range b.Friction {
-			f.ID = namespaceID(repo, f.ID)
-			fb.Friction = append(fb.Friction, f)
-		}
-		for _, p := range b.Prefs {
-			p.ID = namespaceID(repo, p.ID)
-			fb.Prefs = append(fb.Prefs, p)
-		}
-		for _, s := range b.Success {
-			s.ID = namespaceID(repo, s.ID)
-			fb.Success = append(fb.Success, s)
-		}
-		for _, sig := range b.Signals {
-			sig.ID = namespaceID(repo, sig.ID) // MemberSessions are session ids, left untouched
-			fb.Signals = append(fb.Signals, sig)
-		}
-
-		data, err := json.MarshalIndent(fb, "", "  ")
+		data, err := marshalBundleFile(repo, bundles[repo])
 		if err != nil {
-			return nil, fmt.Errorf("marshal bundle %q: %w", repo, err)
+			return nil, err
 		}
 		path := filepath.Join(dir, repo+"-bundle.json")
 		if err := atomicWrite(path, data); err != nil {
@@ -78,6 +56,37 @@ func WriteBundleFiles(dir string, bundles map[string]EvidenceBundle) ([]string, 
 		paths = append(paths, path)
 	}
 	return paths, nil
+}
+
+// marshalBundleFile renders one bundle exactly as the model will read it —
+// namespaced ids, no session dates — so a size taken from it (the --dry-run
+// report) is the size that actually reaches the model's context.
+func marshalBundleFile(repo string, b EvidenceBundle) ([]byte, error) {
+	fb := bundleFile{
+		Repo: b.Repo, SessionCount: b.SessionCount, AnalyzedCount: b.AnalyzedCount,
+		From: b.From, To: b.To, Context: b.Context,
+	}
+	for _, f := range b.Friction {
+		f.ID = namespaceID(repo, f.ID)
+		fb.Friction = append(fb.Friction, f)
+	}
+	for _, p := range b.Prefs {
+		p.ID = namespaceID(repo, p.ID)
+		fb.Prefs = append(fb.Prefs, p)
+	}
+	for _, s := range b.Success {
+		s.ID = namespaceID(repo, s.ID)
+		fb.Success = append(fb.Success, s)
+	}
+	for _, sig := range b.Signals {
+		sig.ID = namespaceID(repo, sig.ID) // MemberSessions are session ids, left untouched
+		fb.Signals = append(fb.Signals, sig)
+	}
+	data, err := json.MarshalIndent(fb, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal bundle %q: %w", repo, err)
+	}
+	return data, nil
 }
 
 func namespaceID(repo, id string) string { return repo + "/" + id }

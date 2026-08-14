@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/rkparsons/agent-insights/internal/synthesis"
 	"gopkg.in/yaml.v3"
 )
 
@@ -291,7 +290,7 @@ func parseAnchorTheme(s string) (string, int, error) {
 // from ground-truth/ (never re-derived, never the rubric file). The run-0
 // as_consumed control scores against these. Errors when the rubric's stripped
 // anchors are not a subset — that means anchor_theme names the wrong theme.
-func PreStripAnchors(truths map[string]synthesis.RepoSynthesis, r Rubric) ([]string, error) {
+func PreStripAnchors(truths map[string]RepoSynthesis, r Rubric) ([]string, error) {
 	if r.AnchorTheme == "" {
 		return nil, nil
 	}

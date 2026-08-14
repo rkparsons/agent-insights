@@ -20,19 +20,19 @@ func scoredFixture() (VerifiedOutput, synthesis.EvidenceBundle) {
 		Signals: []synthesis.OppSignal{{ID: "G1", Kind: "high_read", Magnitude: 3, MemberSessions: []string{"sA", "sD", "sE"}}},
 	}
 	vo := VerifiedOutput{
-		Synthesis: synthesis.RepoSynthesis{
+		Synthesis: RepoSynthesis{
 			Repo: "alpha",
-			Themes: []synthesis.Theme{
+			Themes: []Theme{
 				{Title: "Detours", Summary: "detours happen", Kind: "friction",
 					SessionIDs: []string{"sA", "sB", "sA"}, Quotes: []string{"q1", "q2", "q3"}},
 			},
-			Recommendations: []synthesis.Recommendation{
+			Recommendations: []Recommendation{
 				{Type: "claude_md_rule", Statement: "verify first", Quotes: []string{"rq1"}},
 			},
 		},
-		Raw: synthesis.RawSynthesis{
-			Themes:          []synthesis.RawTheme{{Title: "Detours"}},
-			Recommendations: []synthesis.RawRec{{Title: "Verify first", Statement: "verify first", EvidenceIDs: []string{"F1", "P1", "G1", "F1", "F9"}}},
+		Raw: RawSynthesis{
+			Themes:          []RawTheme{{Title: "Detours"}},
+			Recommendations: []RawRec{{Title: "Verify first", Statement: "verify first", EvidenceIDs: []string{"F1", "P1", "G1", "F1", "F9"}}},
 		},
 	}
 	return vo, bundle

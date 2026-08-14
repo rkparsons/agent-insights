@@ -23,7 +23,13 @@ func TestDevBundleDump(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	groups := GroupByRepo(analyses, DefaultMinSessions, insights.Config{})
+	// The loaded config, not a zero Config: aliases and min_sessions decide
+	// which buckets exist, so an empty one dumps bundles no run would build.
+	cfg, err := insights.LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	groups := GroupByRepo(analyses, cfg.MinSessions, cfg)
 	for k, g := range groups {
 		b := BuildBundle(k, g)
 		raw, err := json.MarshalIndent(b, "", " ")

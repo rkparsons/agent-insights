@@ -27,10 +27,10 @@ func tier1Fixture(t *testing.T, freshCount int, emptyLast bool) (RunRecord, *Cac
 		CodeVersions: map[string]string{"facts": "f1"}, SkillHashes: map[string]string{}}
 	b := BucketOutputs{Bucket: "tmux-ctrl", Population: []string{"s1", "s2"}, BundleKey: "bk1", BundleHash: "bh1"}
 	for i := 0; i < 3; i++ {
-		vo := VerifiedOutput{Synthesis: synthesis.RepoSynthesis{Repo: "tmux-ctrl",
-			Themes: []synthesis.Theme{{Title: "T", Kind: "friction", SessionIDs: []string{"s1"}}}}}
+		vo := VerifiedOutput{Synthesis: RepoSynthesis{Repo: "tmux-ctrl",
+			Themes: []Theme{{Title: "T", Kind: "friction", SessionIDs: []string{"s1"}}}}}
 		if emptyLast && i == 2 {
-			vo = VerifiedOutput{Synthesis: synthesis.RepoSynthesis{Repo: "tmux-ctrl"}}
+			vo = VerifiedOutput{Synthesis: RepoSynthesis{Repo: "tmux-ctrl"}}
 		}
 		key := fmt.Sprintf("vk%d", i)
 		if err := cache.Put("verify", key, vo); err != nil {
@@ -42,40 +42,13 @@ func tier1Fixture(t *testing.T, freshCount int, emptyLast bool) (RunRecord, *Cac
 	return rec, cache
 }
 
+// Task 8-10: the tier-1 gates (churn over fresh sample pairs, fail-closed on an
+// empty synthesis, fabrication rate, recall misses) were computed by the v1
+// EvaluateRun over per-repo themes, removed with the pipeline in plan Task 7.
+// ComputeTier1 reports nothing measured until the probes are recast against
+// findings/dropped in plan Task 9; this test is the checklist for that rework.
 func TestComputeTier1ChurnAndEmptyFailClosed(t *testing.T) {
-	rec, cache := tier1Fixture(t, 0, false)
-	t1, reasons, _, err := ComputeTier1(rec, cache)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if t1.MembershipChurn != nil || t1.FreshSamplePairs != 0 {
-		t.Fatalf("all-cached run must report nil churn: %+v", t1)
-	}
-	if len(reasons) != 0 {
-		t.Fatalf("reasons: %v", reasons)
-	}
-	rec, cache = tier1Fixture(t, 2, false)
-	t1, _, _, err = ComputeTier1(rec, cache)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if t1.MembershipChurn == nil || *t1.MembershipChurn != 0 || t1.FreshSamplePairs != 1 {
-		t.Fatalf("identical fresh pair churn: %+v", t1)
-	}
-	rec, cache = tier1Fixture(t, 0, true)
-	_, reasons, _, err = ComputeTier1(rec, cache)
-	if err != nil {
-		t.Fatal(err)
-	}
-	found := false
-	for _, r := range reasons {
-		if strings.Contains(r, "empty synthesis") {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("empty synthesis must fail closed: %v", reasons)
-	}
+	t.Skip("tier-1 probes recast in plan Task 9")
 }
 
 func composeInputs(t *testing.T, results []TargetResult, prior []namedVerdict) (VerdictInputs, *Cache) {

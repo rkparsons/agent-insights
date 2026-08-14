@@ -1,8 +1,7 @@
 package synthesis
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -50,9 +49,10 @@ const dateLayout = "2006-01-02"
 // VerifyGlobal validates a raw synthesis against the bundles it was produced
 // from and returns the snapshot to store. Hard failures return an error and no
 // snapshot; soft corrections are applied and recorded in
-// meta.validation_notes.
-func VerifyGlobal(raw insights.RawGlobalSynthesis, bundles map[string]EvidenceBundle, cfg insights.Config, generatedAt time.Time) (insights.GlobalSynthesisJSON, error) {
-	return verifyGlobal(raw, bundles, cfg, generatedAt, gitRuleDate(cfg.DotfilesRepo))
+// meta.validation_notes. ctx bounds the dotfiles git lookups the recency
+// arbitration shells out to.
+func VerifyGlobal(ctx context.Context, raw insights.RawGlobalSynthesis, bundles map[string]EvidenceBundle, cfg insights.Config, generatedAt time.Time) (insights.GlobalSynthesisJSON, error) {
+	return verifyGlobal(raw, bundles, cfg, generatedAt, gitRuleDate(ctx, cfg.DotfilesRepo))
 }
 
 // evidenceItem is one bundle item flattened for lookup by its namespaced id.
@@ -424,17 +424,7 @@ func (v *verifier) fillGoOwned(f *insights.FindingJSON) {
 	f.Repos = sortedKeys(repos)
 	f.SessionCount = len(sessions)
 	f.LastSeen = lastSeen
-	f.ActedKey = ActedKeyV2(f.Asset.Type, f.Statement)
-}
-
-// ActedKeyV2 is the v2 acted-store key: v1's hash mechanism (ActedKey) over
-// asset type + normalized statement, with no source repo — a cross-repo
-// finding has none. This orphans all v1 acted state at cutover, accepted
-// without migration because the store is empty (spec §Verification).
-func ActedKeyV2(assetType, statement string) string {
-	norm := strings.Join(strings.Fields(strings.ToLower(statement)), " ")
-	sum := sha256.Sum256([]byte(assetType + "\x00" + norm))
-	return hex.EncodeToString(sum[:])[:16]
+	f.ActedKey = ActedKey(f.Asset.Type, f.Statement)
 }
 
 func sortedKeys(set map[string]bool) []string {
@@ -618,22 +608,32 @@ func repoStats(bundles map[string]EvidenceBundle) []insights.RepoStatsJSON {
 	return out
 }
 
+// gitRuleDateTimeout bounds one `git log` lookup. A hung git (a network
+// filesystem, an index lock) must degrade the recency check to "undatable",
+// never stall the verification of a 90-minute run.
+const gitRuleDateTimeout = 10 * time.Second
+
 // gitRuleDate dates a rule file from the dotfiles repo's git history. An empty
 // dotfilesRepo yields nil: the recency arbitration is skipped entirely rather
 // than guessed at (spec §Verification). Anything that stops git answering —
-// a path outside the repo, an untracked file, no git at all — reports
-// "undatable" rather than a wrong date, which keeps the escalation.
-func gitRuleDate(dotfilesRepo string) RuleDateFunc {
+// a path outside the repo, an untracked file, no git at all, a timeout —
+// reports "undatable" rather than a wrong date, which keeps the escalation.
+func gitRuleDate(ctx context.Context, dotfilesRepo string) RuleDateFunc {
 	if dotfilesRepo == "" {
 		return nil
 	}
+	// The config key may be written ~-relative like every other path in this
+	// contract; git needs the real one.
 	home, _ := os.UserHomeDir()
+	repo := expandHome(dotfilesRepo, home)
 	return func(sourcePath string) (time.Time, bool) {
-		rel, err := filepath.Rel(dotfilesRepo, expandHome(sourcePath, home))
+		rel, err := filepath.Rel(repo, expandHome(sourcePath, home))
 		if err != nil || strings.HasPrefix(rel, "..") {
 			return time.Time{}, false
 		}
-		out, err := exec.Command("git", "-C", dotfilesRepo, "log", "-1", "--format=%cI", "--", rel).Output()
+		cctx, cancel := context.WithTimeout(ctx, gitRuleDateTimeout)
+		defer cancel()
+		out, err := exec.CommandContext(cctx, "git", "-C", repo, "log", "-1", "--format=%cI", "--", rel).Output()
 		if err != nil {
 			return time.Time{}, false
 		}

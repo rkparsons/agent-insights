@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/rkparsons/agent-insights/internal/insights"
-	"github.com/rkparsons/agent-insights/internal/synthesis"
 )
 
 func analysisFor(id, repo, cwd string, start time.Time) insights.AgentSessionAnalysis {
@@ -31,10 +30,10 @@ func TestBuildBenchmarkPopulations(t *testing.T) {
 		// other repo: not in this bucket
 		analysisFor("b1", "/Users/dev/Developer/other", "", day(25)),
 	}
-	truths := map[string]synthesis.RepoSynthesis{
+	truths := map[string]RepoSynthesis{
 		"myrepo": {GeneratedAt: gen,
 			// reversed From/To, as the pre-sort-fix reports print
-			Window: synthesis.Window{From: "2026-06-28", To: "2026-06-24", AnalyzedCount: 3}},
+			Window: Window{From: "2026-06-28", To: "2026-06-24", AnalyzedCount: 3}},
 	}
 	b, problems := BuildBenchmark(gen, analyses, truths, insights.Config{})
 	if len(problems) != 0 {
@@ -66,8 +65,8 @@ func TestBuildBenchmarkRepoPathStripsWorktree(t *testing.T) {
 		analysisFor("a1", "/Users/dev/Developer/myrepo/.worktrees/some-feature", "",
 			time.Date(2026, 6, 24, 9, 0, 0, 0, time.UTC)),
 	}
-	truths := map[string]synthesis.RepoSynthesis{
-		"myrepo": {GeneratedAt: gen, Window: synthesis.Window{From: "2026-06-24", To: "2026-06-24", AnalyzedCount: 1}},
+	truths := map[string]RepoSynthesis{
+		"myrepo": {GeneratedAt: gen, Window: Window{From: "2026-06-24", To: "2026-06-24", AnalyzedCount: 1}},
 	}
 	b, problems := BuildBenchmark(gen, analyses, truths, insights.Config{})
 	if len(problems) != 0 {
@@ -85,8 +84,8 @@ func TestBuildBenchmarkPostGenerationFallback(t *testing.T) {
 		// started after the report was generated → excluded by the fallback
 		analysisFor("a9", "/Users/dev/Developer/myrepo", "", time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC)),
 	}
-	truths := map[string]synthesis.RepoSynthesis{
-		"myrepo": {GeneratedAt: gen, Window: synthesis.Window{From: "2026-06-24", To: "2026-06-24", AnalyzedCount: 1}},
+	truths := map[string]RepoSynthesis{
+		"myrepo": {GeneratedAt: gen, Window: Window{From: "2026-06-24", To: "2026-06-24", AnalyzedCount: 1}},
 	}
 	b, problems := BuildBenchmark(gen, analyses, truths, insights.Config{})
 	if len(problems) != 0 {
@@ -102,8 +101,8 @@ func TestBuildBenchmarkUnresolvedMismatch(t *testing.T) {
 	analyses := []insights.AgentSessionAnalysis{
 		analysisFor("a1", "/Users/dev/Developer/myrepo", "", time.Date(2026, 6, 24, 9, 0, 0, 0, time.UTC)),
 	}
-	truths := map[string]synthesis.RepoSynthesis{
-		"myrepo": {GeneratedAt: gen, Window: synthesis.Window{From: "2026-06-24", To: "2026-06-24", AnalyzedCount: 5}},
+	truths := map[string]RepoSynthesis{
+		"myrepo": {GeneratedAt: gen, Window: Window{From: "2026-06-24", To: "2026-06-24", AnalyzedCount: 5}},
 	}
 	b, problems := BuildBenchmark(gen, analyses, truths, insights.Config{})
 	if len(problems) != 1 {
@@ -124,12 +123,12 @@ func TestLoadGroundTruth(t *testing.T) {
 	}
 
 	// 2026-07-01: AnalyzedCount = 5
-	older := synthesis.RepoSynthesis{
+	older := RepoSynthesis{
 		Repo:        "myrepo",
 		GeneratedAt: time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC),
-		Window:      synthesis.Window{From: "2026-06-24", To: "2026-06-30", AnalyzedCount: 5},
-		Themes:      []synthesis.Theme{},
-		Meta:        synthesis.Meta{Model: "test"},
+		Window:      Window{From: "2026-06-24", To: "2026-06-30", AnalyzedCount: 5},
+		Themes:      []Theme{},
+		Meta:        Meta{Model: "test"},
 	}
 	olderJSON, err := json.Marshal(older)
 	if err != nil {
@@ -140,12 +139,12 @@ func TestLoadGroundTruth(t *testing.T) {
 	}
 
 	// 2026-07-02: AnalyzedCount = 10 (should be selected as newest)
-	newer := synthesis.RepoSynthesis{
+	newer := RepoSynthesis{
 		Repo:        "myrepo",
 		GeneratedAt: time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC),
-		Window:      synthesis.Window{From: "2026-06-24", To: "2026-07-01", AnalyzedCount: 10},
-		Themes:      []synthesis.Theme{},
-		Meta:        synthesis.Meta{Model: "test"},
+		Window:      Window{From: "2026-06-24", To: "2026-07-01", AnalyzedCount: 10},
+		Themes:      []Theme{},
+		Meta:        Meta{Model: "test"},
 	}
 	newerJSON, err := json.Marshal(newer)
 	if err != nil {
@@ -167,12 +166,12 @@ func TestLoadGroundTruth(t *testing.T) {
 	}
 
 	// 2026-07-01: valid JSON (should be selected as fallback)
-	otherValid := synthesis.RepoSynthesis{
+	otherValid := RepoSynthesis{
 		Repo:        "other",
 		GeneratedAt: time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC),
-		Window:      synthesis.Window{From: "2026-06-20", To: "2026-06-30", AnalyzedCount: 3},
-		Themes:      []synthesis.Theme{},
-		Meta:        synthesis.Meta{Model: "test"},
+		Window:      Window{From: "2026-06-20", To: "2026-06-30", AnalyzedCount: 3},
+		Themes:      []Theme{},
+		Meta:        Meta{Model: "test"},
 	}
 	otherValidJSON, err := json.Marshal(otherValid)
 	if err != nil {

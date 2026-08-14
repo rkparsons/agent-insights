@@ -9,9 +9,9 @@ import (
 	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
-// sessionDate is the single date format shared by BuildBundle's SessionDates/
-// From/To and enrich's analysisDates — the spec pins all three to this exact
-// call, so they must never drift apart.
+// sessionDate is the single date format shared by BuildBundle's SessionDates,
+// From/To, and the verifier's recency arbitration — day granularity on every
+// side of every date comparison, so they must never drift apart.
 func sessionDate(t time.Time) string { return t.Format("2006-01-02") }
 
 const signalFloor = 3

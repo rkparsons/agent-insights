@@ -13,7 +13,7 @@ func lockPath() string { return filepath.Join(InsightsDir(), "insights.lock") }
 
 // LockOps are the ops a run may hold the insights lock under; status.schema.json's
 // running_op enum must match.
-var LockOps = []string{"analyze", "synthesize", "enrich"}
+var LockOps = []string{"analyze", "synthesize"}
 
 // RunLock is an advisory whole-run lock held via flock on an open file descriptor.
 // It is released automatically when the process exits or dies (no stale-PID class).
@@ -107,8 +107,8 @@ func LockHeld() bool {
 	return false
 }
 
-// HeldOp returns the op recorded by the current lock holder ("analyze",
-// "synthesize", or "enrich"), or "" when no run holds the lock or the body is unreadable.
+// HeldOp returns the op recorded by the current lock holder (one of LockOps),
+// or "" when no run holds the lock or the body is unreadable.
 // A stale body with a free flock reports "" — the flock, not the body, is
 // the source of truth for "held".
 func HeldOp() string {
