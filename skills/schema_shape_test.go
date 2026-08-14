@@ -30,11 +30,11 @@ func TestSynthesisSchemaMatchesRawGlobalSynthesis(t *testing.T) {
 func assertNodeMatchesStruct(t *testing.T, root, node map[string]any, typ reflect.Type, exempt map[string]bool) {
 	t.Helper()
 	if ref, ok := node["$ref"].(string); ok {
-		const prefix = "#/definitions/"
-		defs, _ := root["definitions"].(map[string]any)
+		const prefix = "#/$defs/"
+		defs, _ := root["$defs"].(map[string]any)
 		def, ok := defs[strings.TrimPrefix(ref, prefix)].(map[string]any)
 		if !strings.HasPrefix(ref, prefix) || !ok {
-			t.Fatalf("unresolved $ref %q (only #/definitions/* is resolved)", ref)
+			t.Fatalf("unresolved $ref %q (only #/$defs/* is resolved)", ref)
 		}
 		node = def
 	}

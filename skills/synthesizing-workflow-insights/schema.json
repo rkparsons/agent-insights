@@ -9,18 +9,18 @@
     "findings": {
       "type": "array",
       "maxItems": 10,
-      "items": { "$ref": "#/definitions/RawFinding" }
+      "items": { "$ref": "#/$defs/RawFinding" }
     },
     "dropped": {
       "type": "array",
-      "items": { "$ref": "#/definitions/Dropped" }
+      "items": { "$ref": "#/$defs/Dropped" }
     },
     "meta": {
-      "$ref": "#/definitions/GlobalMeta",
+      "$ref": "#/$defs/GlobalMeta",
       "description": "Go-owned: the model id is stamped and validation_notes are appended by the verifier. Omit."
     }
   },
-  "definitions": {
+  "$defs": {
     "RawFinding": {
       "type": "object",
       "additionalProperties": false,
@@ -50,7 +50,7 @@
           "type": "string",
           "description": "One sentence: why this finding sits at this rank. No numbers."
         },
-        "asset": { "$ref": "#/definitions/Asset" },
+        "asset": { "$ref": "#/$defs/Asset" },
         "audience": {
           "type": "string",
           "enum": ["user", "orchestrator", "subagents", "both", "automation"],
@@ -71,9 +71,9 @@
           "items": { "type": "string" },
           "description": "Verbatim copies from cited items' quote fields (or a cited signal's detail lines). Never paraphrased."
         },
-        "already_adopted": { "$ref": "#/definitions/Adopted" },
+        "already_adopted": { "$ref": "#/$defs/Adopted" },
         "escalated_from": {
-          "$ref": "#/definitions/EscalatedFrom",
+          "$ref": "#/$defs/EscalatedFrom",
           "description": "placement_fix only: the existing rule being escalated."
         }
       }
