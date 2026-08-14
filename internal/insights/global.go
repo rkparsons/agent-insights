@@ -3,8 +3,8 @@ package insights
 import "time"
 
 // GlobalSynthesisJSON is `insights show --json`'s stdout payload under the v2
-// (schema_version 2) contract: one cross-repo synthesis pass replacing the v1
-// per-repo `ShowJSON`/`SynthesisJSON` shapes. It is the model's RawGlobalSynthesis
+// (schema_version 2) contract: one cross-repo synthesis pass, replacing v1's
+// per-repo payload wholesale. It is the model's RawGlobalSynthesis
 // output plus the fields Go always computes/overwrites (window, repos,
 // generated_at, and each Finding's Go-owned fields).
 type GlobalSynthesisJSON struct {

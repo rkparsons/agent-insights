@@ -35,8 +35,8 @@ func TestGoldenStatusRoundTrips(t *testing.T) {
 	assertSchemaVersion(t, schema, status.SchemaVersion)
 }
 
-// show.schema.json describes GlobalSynthesisJSON (v2), not ShowJSON — see
-// TestGoldenShowV2RoundTrips in global_test.go.
+// show.schema.json describes GlobalSynthesisJSON — see TestGoldenShowV2RoundTrips
+// in global_test.go.
 
 func readGolden(t *testing.T, name string) []byte {
 	t.Helper()
