@@ -788,3 +788,129 @@ func TestVerify2_DoesNotMutateRaw(t *testing.T) {
 		t.Errorf("raw quotes = %v, want them untouched", raw.Findings[0].Quotes)
 	}
 }
+
+func TestVerify2_EmptyCitations_Fails(t *testing.T) {
+	noEvidence := v2Finding()
+	noEvidence.EvidenceIDs = nil
+
+	emptyDropped := v2Raw(v2Finding())
+	emptyDropped.Dropped = []insights.DroppedJSON{{
+		Summary: "tooling gripe", Reason: "single incident the user already addressed",
+	}}
+
+	cases := []struct {
+		name string
+		raw  insights.RawGlobalSynthesis
+	}{
+		{"finding cites nothing", v2Raw(noEvidence)},
+		{"dropped entry cites nothing", emptyDropped},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if _, err := verifyFixture(t, c.raw); err == nil {
+				t.Fatal("want fail-closed error, got nil")
+			}
+		})
+	}
+}
+
+func TestVerify2_EscalatedFromCompleteness(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	rulePath := writeHomeFile(t, home, "dotfiles/CLAUDE.md", "Open a draft PR before requesting review.\n")
+
+	placement := func(from insights.EscalatedFromJSON) insights.RawGlobalSynthesis {
+		f := typedFinding("placement_fix", "alpha/P1", "alpha/F2")
+		f.EscalatedFrom = &from
+		return v2Raw(f)
+	}
+	cases := []struct {
+		name string
+		raw  insights.RawGlobalSynthesis
+	}{
+		{"empty excerpt", placement(insights.EscalatedFromJSON{SourcePath: rulePath})},
+		{"empty source path", placement(insights.EscalatedFromJSON{Excerpt: "Open a draft PR before requesting review."})},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if _, err := verifyFixture(t, c.raw); err == nil {
+				t.Fatal("want fail-closed error, got nil (an empty excerpt verifies trivially)")
+			}
+		})
+	}
+}
+
+func TestVerify2_AbsorbedSchemaConstraints(t *testing.T) {
+	t.Run("empty title fails", func(t *testing.T) {
+		f := v2Finding()
+		f.Title = ""
+		if _, err := verifyFixture(t, v2Raw(f)); err == nil {
+			t.Fatal("want fail-closed error, got nil")
+		}
+	})
+
+	t.Run("wrong schema version fails", func(t *testing.T) {
+		for _, version := range []int{0, 1, 3} {
+			raw := v2Raw(v2Finding())
+			raw.SchemaVersion = version
+			if _, err := verifyFixture(t, raw); err == nil {
+				t.Errorf("schema_version %d: want fail-closed error, got nil", version)
+			}
+		}
+	})
+
+	t.Run("invalid adopted verdict fails", func(t *testing.T) {
+		for _, verdict := range []string{"", "Yes", "adopted", "maybe"} {
+			f := v2Finding()
+			f.AlreadyAdopted = insights.AdoptedJSON{Verdict: verdict}
+			if _, err := verifyFixture(t, v2Raw(f)); err == nil {
+				t.Errorf("verdict %q: want fail-closed error, got nil", verdict)
+			}
+		}
+	})
+
+	t.Run("more than three quotes trimmed with a note", func(t *testing.T) {
+		f := typedFinding("hook", "alpha/G1", "alpha/F1", "alpha/F2", "beta/F1")
+		f.Quotes = []string{
+			"re-run the review after a rewrite",    // alpha/G1 detail
+			"the build passed but I never ran it",  // alpha/F1
+			"we had to redo the whole review pass", // alpha/F2
+			"nothing stopped me committing that",   // beta/F1
+		}
+		out, err := verifyFixture(t, v2Raw(f))
+		if err != nil {
+			t.Fatalf("verify: %v", err)
+		}
+		got := out.Findings[0].Quotes
+		if want := f.Quotes[:3]; !equalStrings(got, want) {
+			t.Errorf("quotes = %v, want the first three %v", got, want)
+		}
+		if len(out.Meta.ValidationNotes) != 1 {
+			t.Errorf("validation_notes = %v, want one trim note", out.Meta.ValidationNotes)
+		}
+	})
+}
+
+func TestVerify2_FindingsSortedByRank(t *testing.T) {
+	ranked := func(rank int, name string) insights.RawFinding {
+		f := v2Finding()
+		f.Rank = rank
+		f.Title = "Rule " + name
+		f.Statement = "Rule " + name + " must hold before a task is done."
+		return f
+	}
+	out, err := verifyFixture(t, v2Raw(ranked(3, "c"), ranked(1, "a"), ranked(2, "b")))
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	var titles []string
+	for i, f := range out.Findings {
+		if f.Rank != i+1 {
+			t.Errorf("findings[%d].rank = %d, want %d", i, f.Rank, i+1)
+		}
+		titles = append(titles, f.Title)
+	}
+	if want := []string{"Rule a", "Rule b", "Rule c"}; !equalStrings(titles, want) {
+		t.Errorf("titles = %v, want %v (array ordered by rank)", titles, want)
+	}
+}

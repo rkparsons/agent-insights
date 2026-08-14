@@ -14,6 +14,16 @@ import (
 	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
+// The verifier absorbs the raw contract's schema constraints
+// (skills/synthesizing-workflow-insights/schema.json) as explicit Go checks
+// rather than validating the decoded synthesis against the schema file: a JSON
+// Schema validator would be a new dependency enforcing the same handful of
+// rules, and encoding/json enforces none of them. Absorbed here: the
+// schema_version const, non-empty title, evidence_ids minItems, the
+// already_adopted verdict enum, the audience enum, the asset-type enum (via
+// the grounding table) and the three-quote cap — each marked "absorbed schema
+// constraint" at its check. A schema.json change must be mirrored here.
+
 // RuleDateFunc reports when the rule file at sourcePath last changed, and
 // whether that date could be determined at all. Injected so the recency
 // arbitration is testable without a git repo; production builds it from
@@ -22,6 +32,12 @@ type RuleDateFunc func(sourcePath string) (time.Time, bool)
 
 // maxFindings mirrors the skill's N <= 10 ranking bound.
 const maxFindings = 10
+
+// maxQuotes is the raw schema's per-finding quote cap.
+const maxQuotes = 3
+
+// rawSchemaVersion is the only raw contract this verifier understands.
+const rawSchemaVersion = 2
 
 // dateLayout is the bundle's session-date format (see sessionDate), the only
 // granularity the recency arbitration has on either side of its comparison.
@@ -58,6 +74,9 @@ func verifyGlobal(raw insights.RawGlobalSynthesis, bundles map[string]EvidenceBu
 	home, _ := os.UserHomeDir()
 	v := &verifier{bundles: bundles, items: indexItems(bundles), cfg: cfg, ruleDate: ruleDate, home: home}
 
+	if raw.SchemaVersion != rawSchemaVersion { // absorbed schema constraint
+		v.fail(fmt.Sprintf("raw schema_version is %d, want %d", raw.SchemaVersion, rawSchemaVersion))
+	}
 	v.checkRanks(raw.Findings)
 
 	findings := make([]insights.FindingJSON, 0, len(raw.Findings))
@@ -66,7 +85,7 @@ func verifyGlobal(raw insights.RawGlobalSynthesis, bundles map[string]EvidenceBu
 			findings = append(findings, f)
 		}
 	}
-	compactRanks(findings)
+	orderByRank(findings)
 	dropped := v.dropped(raw.Dropped)
 	for i, n := range v.notes {
 		v.notes[i] = v.tilde(n)
@@ -156,10 +175,21 @@ var retypingSignalKinds = map[string]bool{"retyped_directives": true, "retyped_k
 // naming who must see it.
 var audienceRequired = map[string]bool{"claude_md_rule": true, "repo_doc": true}
 
+// adoptedVerdicts is the raw schema's already_adopted enum.
+var adoptedVerdicts = map[string]bool{"yes": true, "no": true, "unknown": true}
+
 // finding verifies one raw finding and returns its snapshot form. keep is
 // false when a soft correction removed the finding outright.
 func (v *verifier) finding(i int, rf insights.RawFinding) (f insights.FindingJSON, keep bool) {
 	where := fmt.Sprintf("findings[%d]", i)
+	if rf.Title == "" { // absorbed schema constraint
+		v.fail(where + " has an empty title")
+	}
+	if !adoptedVerdicts[rf.AlreadyAdopted.Verdict] { // absorbed schema constraint
+		// A "Yes"/"adopted" variant would read as not-adopted to every
+		// consumer, silently un-filtering a finding the model marked done.
+		v.fail(fmt.Sprintf("%s has invalid already_adopted verdict %q", where, rf.AlreadyAdopted.Verdict))
+	}
 	v.checkCitations(where, rf.EvidenceIDs)
 	v.checkGrounding(where, rf.Asset.Type, rf.EvidenceIDs)
 	v.checkAudience(where, rf.Asset.Type, rf.Audience)
@@ -213,6 +243,13 @@ func (v *verifier) checkEscalation(where string, f *insights.FindingJSON) (keep 
 		v.fail(where + " placement_fix is missing escalated_from")
 		return true
 	}
+	if from.SourcePath == "" || from.Excerpt == "" {
+		// An empty excerpt is "in" every file, so this must fail before the
+		// verbatim check rather than downgrade the way an adopted verdict does:
+		// an unevidenced escalation is the fail-closed class.
+		v.fail(where + " placement_fix escalated_from is missing source_path or excerpt")
+		return true
+	}
 	switch found, err := excerptInFile(from.SourcePath, from.Excerpt, v.home); {
 	case err != nil:
 		v.fail(fmt.Sprintf("%s placement_fix escalated_from is unverifiable: cannot read %s", where, v.tilde(from.SourcePath)))
@@ -247,17 +284,14 @@ func (v *verifier) checkEscalation(where string, f *insights.FindingJSON) (keep 
 	return true
 }
 
-// compactRanks re-normalizes ranks to a gapless 1..N in their existing order.
-// Only a recency removal can open a gap (the input permutation is verified),
-// and a snapshot whose ranks skip a number reads as a bug in the TUI.
-func compactRanks(findings []insights.FindingJSON) {
-	order := make([]int, len(findings))
+// orderByRank sorts the findings array by rank and re-normalizes ranks to a
+// gapless 1..N. Consumers are contracted to preserve the array's order as the
+// model's ranking, so the array and the rank field must agree; only a recency
+// removal can open a gap, since the input permutation is verified.
+func orderByRank(findings []insights.FindingJSON) {
+	sort.SliceStable(findings, func(i, j int) bool { return findings[i].Rank < findings[j].Rank })
 	for i := range findings {
-		order[i] = i
-	}
-	sort.SliceStable(order, func(a, b int) bool { return findings[order[a]].Rank < findings[order[b]].Rank })
-	for rank, i := range order {
-		findings[i].Rank = rank + 1
+		findings[i].Rank = i + 1
 	}
 }
 
@@ -337,6 +371,12 @@ func (v *verifier) tilde(s string) string {
 // eval's fabrication signal, and dropping keeps the fabricated text out of the
 // snapshot.
 func (v *verifier) filterQuotes(f *insights.FindingJSON) {
+	if len(f.Quotes) > maxQuotes { // absorbed schema constraint (maxItems)
+		// Trimmed before the pool check, keeping the model's own ordering: the
+		// quotes past the cap were never part of a legal finding.
+		v.note(fmt.Sprintf("finding %q: trimmed to %d quotes", f.Title, maxQuotes))
+		f.Quotes = f.Quotes[:maxQuotes]
+	}
 	var pool []string
 	for _, id := range f.EvidenceIDs {
 		if item, ok := v.items[id]; ok {
@@ -439,8 +479,12 @@ func sortedFieldNames(fields map[string]string) []string {
 
 // checkCitations fails closed on any id that does not resolve to a bundle item
 // — an invented id is the failure mode every downstream count would silently
-// inherit.
+// inherit — and on citing nothing at all, which would otherwise pass every
+// evidence check vacuously and land a finding with no support.
 func (v *verifier) checkCitations(where string, ids []string) {
+	if len(ids) == 0 { // absorbed schema constraint (minItems)
+		v.fail(where + " cites no evidence")
+	}
 	for _, id := range ids {
 		if _, ok := v.items[id]; !ok {
 			v.fail(fmt.Sprintf("%s cites unknown evidence id %q", where, id))
