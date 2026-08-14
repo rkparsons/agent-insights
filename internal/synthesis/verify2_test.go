@@ -914,3 +914,33 @@ func TestVerify2_FindingsSortedByRank(t *testing.T) {
 		t.Errorf("titles = %v, want %v (array ordered by rank)", titles, want)
 	}
 }
+
+func TestVerify2_AssetCompleteness(t *testing.T) {
+	asset := func(assetType, target, content string, ids ...string) insights.RawGlobalSynthesis {
+		f := typedFinding(assetType, ids...)
+		f.Asset.Target, f.Asset.Content = target, content
+		return v2Raw(f)
+	}
+	cases := []struct {
+		name    string
+		raw     insights.RawGlobalSynthesis
+		wantErr bool
+	}{
+		{"rule without content", asset("claude_md_rule", "~/.claude/CLAUDE.md", "", "alpha/P1"), true},
+		{"rule without target", asset("claude_md_rule", "", "Run the smoke test.", "alpha/P1"), true},
+		{"hook without content", asset("hook", "~/.claude/settings.json", "", "alpha/F1"), true},
+		{"habit without either", asset("habit", "", "", "alpha/F1", "alpha/S1"), false},
+		{"rule with both", asset("claude_md_rule", "~/.claude/CLAUDE.md", "Run the smoke test.", "alpha/P1"), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := verifyFixture(t, c.raw)
+			if c.wantErr && err == nil {
+				t.Fatal("want fail-closed error, got nil")
+			}
+			if !c.wantErr && err != nil {
+				t.Fatalf("want no error, got %v", err)
+			}
+		})
+	}
+}

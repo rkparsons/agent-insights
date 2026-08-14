@@ -23,6 +23,10 @@ import (
 // already_adopted verdict enum, the audience enum, the asset-type enum (via
 // the grounding table) and the three-quote cap — each marked "absorbed schema
 // constraint" at its check. A schema.json change must be mirrored here.
+//
+// One check is schema-adjacent rather than absorbed: the schema documents
+// asset.target/content as "omitted only for habit" in prose but cannot express
+// the conditional, so the Go check below is that rule's only enforcement.
 
 // RuleDateFunc reports when the rule file at sourcePath last changed, and
 // whether that date could be determined at all. Injected so the recency
@@ -190,6 +194,7 @@ func (v *verifier) finding(i int, rf insights.RawFinding) (f insights.FindingJSO
 		// consumer, silently un-filtering a finding the model marked done.
 		v.fail(fmt.Sprintf("%s has invalid already_adopted verdict %q", where, rf.AlreadyAdopted.Verdict))
 	}
+	v.checkAsset(where, rf.Asset)
 	v.checkCitations(where, rf.EvidenceIDs)
 	v.checkGrounding(where, rf.Asset.Type, rf.EvidenceIDs)
 	v.checkAudience(where, rf.Asset.Type, rf.Audience)
@@ -513,6 +518,22 @@ func (v *verifier) checkGrounding(where, assetType string, ids []string) {
 		if assetType == "new_skill" && item.kind == 'G' && !retypingSignalKinds[item.signalKind] {
 			v.fail(fmt.Sprintf("%s new_skill cites non-retyping signal %q (kind %s)", where, id, item.signalKind))
 		}
+	}
+}
+
+// checkAsset requires the deliverable to exist. Only a habit may omit target
+// and content — its deliverable is its statement; for every other type the
+// asset IS the finding, and an empty target or content makes it unactionable
+// at launch time. Schema-adjacent: the raw schema states this in prose only.
+func (v *verifier) checkAsset(where string, asset insights.AssetJSON) {
+	if asset.Type == "habit" {
+		return
+	}
+	if asset.Target == "" {
+		v.fail(fmt.Sprintf("%s asset type %s is missing target", where, asset.Type))
+	}
+	if asset.Content == "" {
+		v.fail(fmt.Sprintf("%s asset type %s is missing content", where, asset.Type))
 	}
 }
 
