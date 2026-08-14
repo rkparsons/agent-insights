@@ -44,4 +44,11 @@ type AgentSessionAnalysis struct {
 	// TranscriptMtime is the decode-time transcript mtime, stamped by the
 	// orchestrator (not the producer) so incremental detection is race-free.
 	TranscriptMtime time.Time `json:"transcript_mtime"`
+
+	// AnalyzedAt is when this analysis was written, taken from its store
+	// file's mtime at load (synthesis.LoadAnalyses). Deliberately not
+	// persisted: the file's own mtime is the fact, and a stored copy would
+	// disagree with it after any rewrite. Due-ness reads this rather than
+	// TranscriptMtime so a backfill of old transcripts counts as new work.
+	AnalyzedAt time.Time `json:"-"`
 }

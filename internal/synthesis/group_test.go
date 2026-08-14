@@ -1,7 +1,11 @@
 package synthesis
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/rkparsons/agent-insights/internal/insights"
 )
@@ -35,6 +39,47 @@ func TestRepoKey(t *testing.T) {
 				t.Errorf("RepoKey(repo=%q,cwd=%q) = %q, want %q", c.repo, c.cwd, got, c.want)
 			}
 		})
+	}
+}
+
+// TestLoadAnalysesStampsAnalyzedAt pins the store-file mtime as the "when was
+// this analyzed" instant: the stored artifact carries no such timestamp, and
+// due-ness reads it to decide what is new since the last global snapshot.
+func TestLoadAnalysesStampsAnalyzedAt(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("AGENT_INSIGHTS_DIR", dir)
+	adir := filepath.Join(dir, "analyses")
+	if err := os.MkdirAll(adir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var a insights.AgentSessionAnalysis
+	a.Stats.SessionID = "s1"
+	a.TranscriptMtime = time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
+	data, err := json.Marshal(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(adir, "s1.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	written := time.Date(2026, 8, 12, 9, 30, 0, 0, time.UTC)
+	if err := os.Chtimes(path, written, written); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := LoadAnalyses()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("loaded %d analyses, want 1", len(got))
+	}
+	if !got[0].AnalyzedAt.Equal(written) {
+		t.Errorf("AnalyzedAt = %v, want the store file's mtime %v", got[0].AnalyzedAt, written)
+	}
+	if !got[0].TranscriptMtime.Equal(a.TranscriptMtime) {
+		t.Errorf("TranscriptMtime = %v, want the stored %v (the transcript's own mtime is untouched)", got[0].TranscriptMtime, a.TranscriptMtime)
 	}
 }
 

@@ -38,13 +38,24 @@ func TestDueRepos(t *testing.T) {
 	}
 }
 
-// mkFresh builds n analyses for repo, all stamped with mtime. Stats.Repo is set
+// mkFresh builds n analyses for repo, all stamped with mtime as their
+// transcript mtime and no AnalyzedAt — the fallback path. Stats.Repo is set
 // directly so RepoKey resolves without cwd heuristics.
 func mkFresh(repo string, n int, mtime time.Time) []insights.AgentSessionAnalysis {
 	out := make([]insights.AgentSessionAnalysis, n)
 	for i := range out {
 		out[i].Stats.Repo = repo
 		out[i].TranscriptMtime = mtime
+	}
+	return out
+}
+
+// mkAnalyzed builds n analyses whose transcripts are old but whose analyses
+// were written at analyzedAt — the backfill-onboarding shape.
+func mkAnalyzed(repo string, n int, transcriptMtime, analyzedAt time.Time) []insights.AgentSessionAnalysis {
+	out := mkFresh(repo, n, transcriptMtime)
+	for i := range out {
+		out[i].AnalyzedAt = analyzedAt
 	}
 	return out
 }
@@ -114,6 +125,39 @@ func TestGlobalDue(t *testing.T) {
 		want := []string{"repo-a"}
 		if !reflect.DeepEqual(contributing, want) {
 			t.Fatalf("contributing = %v, want %v", contributing, want)
+		}
+	})
+
+	t.Run("backfilled old transcripts count as new", func(t *testing.T) {
+		// Onboarding shape: a year-old transcript pool analyzed today. Freshness
+		// keyed on the transcript's own mtime would report nothing new and never
+		// let a first global run happen.
+		lastGenerated := now.Add(-30 * 24 * time.Hour)
+		ancient := now.Add(-365 * 24 * time.Hour)
+		analyses := mkAnalyzed("repo-a", 12, ancient, now.Add(-1*time.Hour))
+
+		due, contributing := GlobalDue(analyses, cfg, lastGenerated, now)
+		if !due {
+			t.Fatalf("due = false, want true (12 analyses written after the snapshot)")
+		}
+		want := []string{"repo-a"}
+		if !reflect.DeepEqual(contributing, want) {
+			t.Fatalf("contributing = %v, want %v", contributing, want)
+		}
+	})
+
+	t.Run("analyzed before the snapshot is not new", func(t *testing.T) {
+		// The mirror case: recently-touched transcripts (a rebase, a copy) whose
+		// analyses predate the snapshot must not manufacture due pressure.
+		lastGenerated := now.Add(-30 * 24 * time.Hour)
+		analyses := mkAnalyzed("repo-a", 12, now.Add(-1*time.Hour), lastGenerated.Add(-24*time.Hour))
+
+		due, contributing := GlobalDue(analyses, cfg, lastGenerated, now)
+		if due {
+			t.Fatalf("due = true, want false (every analysis predates the snapshot)")
+		}
+		if len(contributing) != 0 {
+			t.Fatalf("contributing = %v, want none", contributing)
 		}
 	})
 

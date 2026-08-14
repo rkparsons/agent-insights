@@ -52,7 +52,10 @@ func projectUnderDeveloper(cwd string) string {
 	return rest
 }
 
-// LoadAnalyses reads every analysis JSON under insights.AnalysesDir().
+// LoadAnalyses reads every analysis JSON under insights.AnalysesDir(),
+// stamping each one's AnalyzedAt from its store file's mtime — the only record
+// of when an analysis was written, since the artifact itself carries no such
+// field (see insights.AgentSessionAnalysis).
 func LoadAnalyses() ([]insights.AgentSessionAnalysis, error) {
 	dir := insights.AnalysesDir()
 	entries, err := os.ReadDir(dir)
@@ -71,6 +74,9 @@ func LoadAnalyses() ([]insights.AgentSessionAnalysis, error) {
 		var a insights.AgentSessionAnalysis
 		if err := json.Unmarshal(data, &a); err != nil {
 			return nil, err
+		}
+		if info, err := e.Info(); err == nil {
+			a.AnalyzedAt = info.ModTime()
 		}
 		out = append(out, a)
 	}
