@@ -213,13 +213,17 @@ func newScoreSession(ctx context.Context, opts ScoreOptions, scratchStamp time.T
 	// never outlive their run. No skill overlay — the matcher is not a skill;
 	// the EnvHash formula (claude version + snapshot hash) matches the
 	// record's, so CLI/config drift between outcome and score is detectable.
+	// No synthesis model either: the matcher never invokes it, and EnvHash
+	// excludes it precisely so a pipeline model switch cannot orphan the paid
+	// match cache (a model change re-baselines through the comparison tuple's
+	// Models instead).
 	scratchRoot := filepath.Join(opts.CacheDir, "scratch")
 	if err := os.RemoveAll(scratchRoot); err != nil {
 		return nil, nil, err
 	}
 	cleanup := func() { os.RemoveAll(scratchRoot) }
 	scratch := filepath.Join(scratchRoot, strconv.FormatInt(scratchStamp.UnixNano(), 10))
-	pin, err := ComposeEnvPin(opts.DataDir, scratch, map[string]string{}, opts.ClaudeVersion)
+	pin, err := ComposeEnvPin(opts.DataDir, scratch, map[string]string{}, opts.ClaudeVersion, "")
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -503,7 +507,7 @@ func ProbeRun(ctx context.Context, opts ScoreOptions) ([]ProbeResult, error) {
 	}
 	scratch := filepath.Join(scratchRoot, strconv.FormatInt(time.Now().UnixNano(), 10))
 	defer os.RemoveAll(scratchRoot)
-	pin, err := ComposeEnvPin(opts.DataDir, scratch, map[string]string{}, opts.ClaudeVersion)
+	pin, err := ComposeEnvPin(opts.DataDir, scratch, map[string]string{}, opts.ClaudeVersion, "")
 	if err != nil {
 		return nil, err
 	}

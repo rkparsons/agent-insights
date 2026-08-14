@@ -141,17 +141,29 @@ func copyTree(srcRoot, dstRoot string, keep func(rel string) bool) (int, error) 
 	return copyTreeVisited(resolved, dstRoot, keep, visited)
 }
 
-// CopyGroundTruth freezes the live synthesis artifacts into ground-truth/: the
-// v2 global snapshots under global/ (the anchor source under the v2 contract)
-// and any v1 per-repo reports still on disk beside them, which stay readable
-// for historical records. loadGroundTruth reads the latter and skips global/;
-// loadGlobalGroundTruth reads the former — so the snapshot dir is never carded
-// as a phantom repo bucket.
+// CopyGroundTruth freezes the live v1 per-repo synthesis reports into
+// ground-truth/. The v2 global snapshots sitting beside them in the store are
+// explicitly NOT part of this leg: they freeze through CopyGlobalGroundTruth
+// into the subdir loadGlobalGroundTruth reads, which is what keeps them out of
+// loadGroundTruth's per-repo walk and off the cards as a phantom repo bucket.
+// Two legs rather than one wholesale copy because the two are canonical at
+// different moments — see RunFreeze.
 //
 // Failed-run model output is NOT a concern here: it never passed the verifier's
 // privacy scan and so lives outside Dir() entirely (synthesis.diagnosticsDir).
 func CopyGroundTruth(dataDir string) (int, error) {
-	return copyTree(synthesis.Dir(), filepath.Join(dataDir, "ground-truth"), func(string) bool { return true })
+	globalPrefix := globalGroundTruthDir + string(filepath.Separator)
+	return copyTree(synthesis.Dir(), filepath.Join(dataDir, "ground-truth"), func(rel string) bool {
+		return !strings.HasPrefix(rel, globalPrefix)
+	})
+}
+
+// CopyGlobalGroundTruth freezes the v2 cross-repo snapshots into
+// ground-truth/global — the anchor source under the v2 contract, and the exact
+// path loadGlobalGroundTruth reads.
+func CopyGlobalGroundTruth(dataDir string) (int, error) {
+	return copyTree(filepath.Join(synthesis.Dir(), globalGroundTruthDir),
+		filepath.Join(dataDir, "ground-truth", globalGroundTruthDir), func(string) bool { return true })
 }
 
 // CopyBaselinePool freezes the analyses pool as baseline-pool/v1 — the judged
@@ -167,7 +179,14 @@ func CopyBaselinePool(dataDir string) (int, error) {
 // *.md, settings.json, statusline.mjs, the full skills and hooks trees, and
 // the plugin inventory — never the plugins cache) plus each bucket repo's
 // CLAUDE.md and .claude tree.
-func SnapshotConfig(dataDir string, buckets map[string]BucketPopulations) (int, error) {
+//
+// A bucket's repo is taken from cfg.Repos when the config lists it, keyed the
+// way synthesis.repoRootsFor keys configured paths: that path is exactly what
+// the production manifest names, so the frozen copy is of the tree a live run
+// would have read. A bucket the config does not list falls back to the
+// benchmark's RepoPath (an observed session cwd), and a bucket with neither is
+// skipped — frozenAssetConfig warns about the resulting hole at run time.
+func SnapshotConfig(dataDir string, buckets map[string]BucketPopulations, cfg insights.Config) (int, error) {
 	home, _ := os.UserHomeDir()
 	total := 0
 	globalDst := filepath.Join(dataDir, "config-snapshot", "global")
@@ -191,13 +210,20 @@ func SnapshotConfig(dataDir string, buckets map[string]BucketPopulations) (int, 
 	}
 	total += n
 
+	configured := make(map[string]string, len(cfg.Repos))
+	for _, p := range cfg.Repos {
+		configured[cfg.Canonical(filepath.Base(p))] = p
+	}
 	keys := make([]string, 0, len(buckets))
 	for k := range buckets {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		repoPath := buckets[k].RepoPath
+		repoPath := configured[k]
+		if repoPath == "" {
+			repoPath = buckets[k].RepoPath
+		}
 		if repoPath == "" {
 			continue
 		}
@@ -218,6 +244,42 @@ func SnapshotConfig(dataDir string, buckets map[string]BucketPopulations) (int, 
 		total += n
 	}
 	return total, nil
+}
+
+// frozenAssetConfig builds the pipeline config an eval run hands the global
+// synthesizer: repo roots redirected into the frozen corpus, the configured L2
+// model, and no dotfiles_repo.
+//
+// The redirect has two halves. Repo roots are named here, keyed the way
+// synthesis.repoRootsFor keys configured paths (by base name), so the manifest
+// names <data>/config-snapshot/repos/<bucket> instead of a live checkout. The
+// global half is the env pin's doing: the nested claude's CLAUDE_CONFIG_DIR is
+// the ephemeral copy of config-snapshot/global, and
+// NewClaudeGlobalSynthesizerPinned names that same dir as the manifest's
+// globalRoot. Between them the model reads only frozen bytes.
+//
+// dotfiles_repo is omitted deliberately (spec §Eval adaptation): git history is
+// the one input a freeze cannot pin, so eval takes the graceful-degradation
+// path ("rule exists now") as its reproducibility answer. The dated escalation
+// branch that skips is pure Go and is covered by the verifier's unit tests, so
+// the gate loses nothing it could have measured.
+//
+// A bucket with no frozen repo config is omitted rather than pointed at a live
+// path: the manifest then names it "unavailable", which is the honest state,
+// and the omission is warned about so a hole in the corpus is never silent.
+func frozenAssetConfig(dataDir string, buckets []string, synthesisModel string) (insights.Config, []string) {
+	cfg := insights.Config{SynthesisModel: synthesisModel}
+	var warnings []string
+	for _, bucket := range buckets {
+		root := filepath.Join(dataDir, "config-snapshot", "repos", bucket)
+		if info, err := os.Stat(root); err != nil || !info.IsDir() {
+			warnings = append(warnings, fmt.Sprintf(
+				"%s: no frozen repo config under config-snapshot/repos — the synthesis manifest names its assets unavailable (re-run `agent-insights eval freeze`)", bucket))
+			continue
+		}
+		cfg.Repos = append(cfg.Repos, root)
+	}
+	return cfg, warnings
 }
 
 const scaffoldReadme = `# insights-eval-data

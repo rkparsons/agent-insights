@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/rkparsons/agent-insights/internal/insights"
 )
 
 func TestCopyFileRawAppendOnly(t *testing.T) {
@@ -272,8 +274,8 @@ func TestSnapshotConfigCopiesGlobalAndRepoSurface(t *testing.T) {
 
 	n, err := SnapshotConfig(data, map[string]BucketPopulations{
 		"myrepo":   {RepoPath: repo},
-		"pathless": {}, // no RepoPath → skipped without error
-	})
+		"pathless": {}, // no RepoPath and no configured root → skipped without error
+	}, insights.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,6 +301,51 @@ func TestSnapshotConfigCopiesGlobalAndRepoSurface(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(data, "config-snapshot", "global", "plugins", "cache")); !os.IsNotExist(err) {
 		t.Fatal("plugins cache must never be snapshotted")
+	}
+}
+
+// The configured checkout root is what the production manifest names, so the
+// frozen copy must come from there — a bucket's RepoPath is only an observed
+// session cwd, and is the fallback for repos the config does not list.
+func TestSnapshotConfigPrefersConfiguredRepoRoot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	data := t.TempDir()
+	configured := filepath.Join(t.TempDir(), "alpha")
+	observed := filepath.Join(t.TempDir(), "alpha")
+	unconfigured := filepath.Join(t.TempDir(), "beta")
+	for path, body := range map[string]string{
+		filepath.Join(configured, "CLAUDE.md"):   "configured root rules",
+		filepath.Join(observed, "CLAUDE.md"):     "stale checkout rules",
+		filepath.Join(unconfigured, "CLAUDE.md"): "beta rules",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := SnapshotConfig(data, map[string]BucketPopulations{
+		"alpha": {RepoPath: observed},
+		"beta":  {RepoPath: unconfigured},
+	}, insights.Config{Repos: []string{configured}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(data, "config-snapshot", "repos", "alpha", "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "configured root rules" {
+		t.Fatalf("frozen alpha CLAUDE.md = %q, want the configured root's", got)
+	}
+	got, err = os.ReadFile(filepath.Join(data, "config-snapshot", "repos", "beta", "CLAUDE.md"))
+	if err != nil {
+		t.Fatalf("an unconfigured bucket must still freeze from its observed path: %v", err)
+	}
+	if string(got) != "beta rules" {
+		t.Fatalf("frozen beta CLAUDE.md = %q", got)
 	}
 }
 

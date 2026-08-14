@@ -37,7 +37,7 @@ func TestDevAnchorQAPass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pin, err := ComposeEnvPin(dataDir, t.TempDir(), nil, version)
+	pin, err := ComposeEnvPin(dataDir, t.TempDir(), nil, version, "")
 	if err != nil {
 		t.Fatal(err)
 	}

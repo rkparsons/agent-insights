@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -12,16 +14,18 @@ import (
 )
 
 type FreezeReport struct {
-	Manifest            Manifest     `json:"manifest"`
-	FreezeStats         FreezeStats  `json:"freeze_stats"`
-	Benchmark           Benchmark    `json:"benchmark"`
-	Issues              FreezeIssues `json:"issues"`
-	GroundTruth         int          `json:"ground_truth_files"`
-	PoolCopied          int          `json:"pool_files"`
-	ConfigCopied        int          `json:"config_files"`
-	PoolSkipped         bool         `json:"pool_skipped"`
-	PoolRetained        bool         `json:"pool_retained"`
-	GroundTruthRetained bool         `json:"ground_truth_retained"`
+	Manifest                  Manifest     `json:"manifest"`
+	FreezeStats               FreezeStats  `json:"freeze_stats"`
+	Benchmark                 Benchmark    `json:"benchmark"`
+	Issues                    FreezeIssues `json:"issues"`
+	GroundTruth               int          `json:"ground_truth_files"`
+	GlobalGroundTruth         int          `json:"global_ground_truth_files"`
+	PoolCopied                int          `json:"pool_files"`
+	ConfigCopied              int          `json:"config_files"`
+	PoolSkipped               bool         `json:"pool_skipped"`
+	PoolRetained              bool         `json:"pool_retained"`
+	GroundTruthRetained       bool         `json:"ground_truth_retained"`
+	GlobalGroundTruthRetained bool         `json:"global_ground_truth_retained"`
 }
 
 // RunFreeze executes the full freeze: scaffold, ground-truth copy, corpus +
@@ -45,7 +49,8 @@ func RunFreeze(dataDir string, cfg insights.Config) (FreezeReport, error) {
 	if err := EnsureRepoScaffold(dataDir); err != nil {
 		return rep, err
 	}
-	if dirExists(filepath.Join(dataDir, "ground-truth")) {
+	gtDir := filepath.Join(dataDir, "ground-truth")
+	if dirExists(gtDir) {
 		// Ground truth is canonical once frozen: re-copying would let a newer
 		// live synthesis slip in and silently shift loadGroundTruth's
 		// newest-file pick — the anchors' source of truth.
@@ -56,6 +61,20 @@ func RunFreeze(dataDir string, cfg insights.Config) (FreezeReport, error) {
 			return rep, fmt.Errorf("ground truth: %w", err)
 		}
 		rep.GroundTruth = n
+	}
+	// The v2 anchors are their own canonical-once leg. A data repo frozen
+	// before the cutover already has (retained) v1 ground truth, so folding
+	// this into the branch above would mean its v2 snapshots never arrive at
+	// all; write-once for the same reason the v1 leg is, so a newer live
+	// snapshot can never shift loadGlobalGroundTruth's newest-file pick.
+	if dirExists(filepath.Join(gtDir, globalGroundTruthDir)) {
+		rep.GlobalGroundTruthRetained = true
+	} else {
+		n, err := CopyGlobalGroundTruth(dataDir)
+		if err != nil {
+			return rep, fmt.Errorf("global ground truth: %w", err)
+		}
+		rep.GlobalGroundTruth = n
 	}
 
 	analyses, err := synthesis.LoadAnalyses()
@@ -73,7 +92,6 @@ func RunFreeze(dataDir string, cfg insights.Config) (FreezeReport, error) {
 		return rep, fmt.Errorf("corpus: %w", err)
 	}
 
-	gtDir := filepath.Join(dataDir, "ground-truth")
 	truths, err := loadGroundTruth(gtDir)
 	if err != nil {
 		return rep, fmt.Errorf("read frozen ground truth: %w", err)
@@ -96,6 +114,17 @@ func RunFreeze(dataDir string, cfg insights.Config) (FreezeReport, error) {
 		return rep, fmt.Errorf("load existing benchmark: %w", err)
 	}
 	reuseBenchmark := hasBenchmark && len(existingBenchmark.Buckets) > 0 && allBucketsResolved(existingBenchmark)
+	if reuseBenchmark && hasGlobal {
+		if why := benchmarkCutoverMismatch(existingBenchmark, globalTruth); why != "" {
+			// Refuse rather than auto-rebuild: benchmark.json's populations are
+			// what every committed v1 verdict's BenchmarkHash names, and every
+			// bucket population feeds a cache key. Silently rewriting it would
+			// relabel history and re-buy L2 without the operator ever seeing a
+			// cutover happen. Archiving is a deliberate, one-line act.
+			return rep, fmt.Errorf("benchmark.json predates the v2 cutover (%s): reusing it would pin v1 buckets the frozen v2 ground truth does not describe — archive it (e.g. `mv %s %s`) and re-run `agent-insights eval freeze` to rebuild the buckets from the v2 snapshot",
+				why, filepath.Join(dataDir, "benchmark.json"), filepath.Join(dataDir, "benchmark-v1.json"))
+		}
+	}
 
 	var problems []string
 	if reuseBenchmark {
@@ -134,11 +163,41 @@ func RunFreeze(dataDir string, cfg insights.Config) (FreezeReport, error) {
 		rep.PoolSkipped = true
 	}
 
-	rep.ConfigCopied, err = SnapshotConfig(dataDir, rep.Benchmark.Buckets)
+	rep.ConfigCopied, err = SnapshotConfig(dataDir, rep.Benchmark.Buckets, cfg)
 	if err != nil {
 		return rep, fmt.Errorf("config snapshot: %w", err)
 	}
 	return rep, nil
+}
+
+// benchmarkCutoverMismatch reports why an existing (resolved, therefore
+// reusable) benchmark cannot be reused against frozen v2 ground truth, or ""
+// when it still describes the same populations. Under v2 the global snapshot is
+// the sole authority for which buckets exist and how many analyses each
+// contributed (BuildBenchmark), so a benchmark reconstructed from v1 per-repo
+// reports can pin buckets — and counts — the v2 anchors never had.
+func benchmarkCutoverMismatch(b Benchmark, global insights.GlobalSynthesisJSON) string {
+	want := make(map[string]int, len(global.Repos))
+	var wantKeys []string
+	for _, r := range global.Repos {
+		want[r.Key] = r.AnalyzedCount
+		wantKeys = append(wantKeys, r.Key)
+	}
+	var haveKeys []string
+	for k := range b.Buckets {
+		haveKeys = append(haveKeys, k)
+	}
+	sort.Strings(wantKeys)
+	sort.Strings(haveKeys)
+	if !slices.Equal(wantKeys, haveKeys) {
+		return fmt.Sprintf("benchmark buckets %v, v2 ground-truth repos %v", haveKeys, wantKeys)
+	}
+	for _, k := range haveKeys {
+		if got := b.Buckets[k].ExpectedAnalyzed; got != want[k] {
+			return fmt.Sprintf("bucket %s expects %d analyses, the v2 snapshot says %d", k, got, want[k])
+		}
+	}
+	return ""
 }
 
 // dirExists reports whether path exists and is a directory.

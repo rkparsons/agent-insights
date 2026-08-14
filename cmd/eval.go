@@ -87,8 +87,12 @@ func runEvalFreeze(args []string) {
 	if rep.GroundTruthRetained {
 		gt = "ground-truth retained (canonical)"
 	}
-	fmt.Fprintf(os.Stderr, "freeze: %d sessions · %d sidechains · %s · %d config files\n",
-		len(rep.Manifest.Entries), len(rep.Manifest.Sidechains), gt, rep.ConfigCopied)
+	global := fmt.Sprintf("%d v2 snapshots", rep.GlobalGroundTruth)
+	if rep.GlobalGroundTruthRetained {
+		global = "v2 snapshots retained (canonical)"
+	}
+	fmt.Fprintf(os.Stderr, "freeze: %d sessions · %d sidechains · %s · %s · %d config files\n",
+		len(rep.Manifest.Entries), len(rep.Manifest.Sidechains), gt, global, rep.ConfigCopied)
 	for _, repo := range sortedBucketKeys(rep.Benchmark.Buckets) {
 		bp := rep.Benchmark.Buckets[repo]
 		fmt.Fprintf(os.Stderr, "freeze: %s · as_consumed=%d scoring=%d (report says %d, resolved=%v)\n",
@@ -172,6 +176,15 @@ func runEvalOutcome(args []string) {
 		fmt.Fprintf(os.Stderr, "agent-insights eval outcome: %v\n", err)
 		os.Exit(1)
 	}
+	// The ONLY live-config key an outcome run reads: the L2 model it must
+	// invoke and key on. Repo roots and the global asset root come from the
+	// frozen snapshot, and dotfiles_repo is deliberately not carried over.
+	icfg, err := insights.LoadConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "agent-insights eval outcome: load config: %v\n", err)
+		os.Exit(1)
+	}
+	opts.SynthesisModel = icfg.SynthesisModel
 	rec, err := eval.RunOutcome(context.Background(), opts)
 	for _, w := range rec.Warnings {
 		fmt.Fprintf(os.Stderr, "outcome: WARN %s\n", w)

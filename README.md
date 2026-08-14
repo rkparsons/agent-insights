@@ -115,7 +115,13 @@ not a smoke test.
 - **Frozen corpus** — `eval freeze` writes a fixed set of real sessions (gzipped) plus
   their ground-truth syntheses into an append-only data repo. Re-freezing identical
   content is a no-op; differing content is a hard error. Every score runs on the same
-  bytes.
+  bytes. The freeze also captures the **asset corpus** the synthesis reads — the global
+  `CLAUDE.md`, settings, skills and hooks, plus every bucket repo's `CLAUDE.md` and
+  `.claude` tree — and an eval run points the synthesis manifest at those frozen copies
+  instead of the live checkouts, so "what the model could read" is pinned too.
+  `dotfiles_repo` is deliberately omitted from the eval config: git history is the one
+  input a freeze cannot pin, so the run takes the graceful-degradation path, and the
+  dated rule-recency branch it skips is pure Go covered by verifier unit tests.
 - **Rubric targets, hash-keyed** — each expected insight is a YAML rubric with a
   `pass_at` granularity and nuance clauses; the rubric's sha256 keys every human
   decision made against it, so editing a rubric invalidates its adjudications instead
@@ -128,11 +134,17 @@ not a smoke test.
 - **Env-pinning** — `EnvPin` composes an ephemeral Claude config dir from a pristine
   snapshot with the live skills overlaid, plus an empty scratch cwd, and hashes the
   lot together with the `claude --version` string. Skill drift and CLI upgrades change
-  the hash, so a run is either reproducible or visibly not.
+  the hash, so a run is either reproducible or visibly not. The pin also carries the
+  configured `synthesis_model`, folded into a *layer-2-only* env hash: a model switch
+  re-keys the synthesis stage (an explicit re-baseline) without orphaning the layer-1
+  and matcher caches, which cannot see that model.
 - **Cache-keyed scoring** — judge calls are content-addressed on
   `(stage, exact stdin payload, model, code version, env hash, repeat index)`.
   Anything the judge can see re-keys; nothing else does. Re-runs are free, and a cache
-  hit is provably the same question.
+  hit is provably the same question. The layer-2 raw key additionally carries the
+  **asset-corpus hash**: the synthesis reads the frozen `CLAUDE.md`s, skills and
+  settings, so a re-frozen corpus must re-buy its answers rather than serve output
+  written against corpus bytes that no longer exist.
 - **Contested-card adjudication** — Tier 1 is automatic and fail-closed on empty output
   (schema compliance, raw fabrication rate, verbatim-quote validity, run-to-run
   stability, and **recall probes symmetric to every precision axis** so the pipeline
@@ -140,6 +152,17 @@ not a smoke test.
   as recognition cards: rubric statement + produced item + verified quotes + match
   counts. No transcripts, no session ids; cards stay in the local cache and are never
   committed.
+
+**The v2 cutover re-baselines the gate.** Expectations re-freeze on the first v2 run:
+findings replace themes, so the v1 score line (0.62) is historical and is not a bar the
+first v2 run is measured against. Two things change mechanically at that cutover, both
+handled by `eval freeze`: the v2 cross-repo snapshot freezes into its own
+`ground-truth/global/` (write-once, like the v1 per-repo reports beside it, which stay
+readable for historical records), and a `benchmark.json` left over from the v1 era —
+reused verbatim while every bucket resolves — is refused rather than silently pinning v1
+buckets the v2 anchors never had. The refusal names the mismatch and asks for the file to
+be archived and the freeze re-run; nothing is rewritten under the operator, because those
+populations are what committed verdicts' benchmark hashes refer to.
 
 The eval targets themselves were derived by diffing this pipeline's output against two
 independent analyses of the same corpus — see

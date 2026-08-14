@@ -17,11 +17,20 @@ import (
 // ephemeral config dir (pristine snapshot + live skills overlaid), an empty
 // scratch cwd, and the hashes that make the run reproducible.
 type EnvPin struct {
-	ConfigDir        string
-	WorkDir          string
-	ClaudeVersion    string
-	SnapshotHash     string
-	EnvHash          string
+	ConfigDir     string
+	WorkDir       string
+	ClaudeVersion string
+	SnapshotHash  string
+	EnvHash       string
+	// SynthesisModel is the configured L2 model this pin was composed for, and
+	// L2EnvHash is the env identity that includes it. They are deliberately NOT
+	// folded into EnvHash: L1 judgments, the matcher and the integrity probes
+	// all key on EnvHash and none of them can see the synthesis model, so
+	// folding it in would orphan paid cache entries on a switch that cannot
+	// have changed their answers. Only the L2 stage keys on L2EnvHash, which is
+	// what makes a model switch a re-baseline event there and nowhere else.
+	SynthesisModel   string
+	L2EnvHash        string
 	SkillHashes      map[string]string
 	SnapshotWarnings []string
 	DriftWarnings    []string
@@ -32,13 +41,18 @@ type EnvPin struct {
 // state into its config dir on every invocation, which would dirty the
 // append-only fixture repo and drift any hash taken from a live dir.
 // claudeVersion is injected so tests never exec the real binary.
-func ComposeEnvPin(dataDir, scratchDir string, skillDirs map[string]string, claudeVersion string) (EnvPin, error) {
+//
+// synthesisModel is the configured L2 model (insights.Config.SynthesisModel).
+// Stages that never invoke it — the matcher and the probe runner — pass "" and
+// use EnvHash, which the model does not enter.
+func ComposeEnvPin(dataDir, scratchDir string, skillDirs map[string]string, claudeVersion, synthesisModel string) (EnvPin, error) {
 	pristine := filepath.Join(dataDir, "config-snapshot", "global")
 	pin := EnvPin{
-		ConfigDir:     filepath.Join(scratchDir, "config"),
-		WorkDir:       filepath.Join(scratchDir, "cwd"),
-		ClaudeVersion: claudeVersion,
-		SkillHashes:   map[string]string{},
+		ConfigDir:      filepath.Join(scratchDir, "config"),
+		WorkDir:        filepath.Join(scratchDir, "cwd"),
+		ClaudeVersion:  claudeVersion,
+		SynthesisModel: synthesisModel,
+		SkillHashes:    map[string]string{},
 	}
 	snapHash, err := hashTree(pristine)
 	if err != nil {
@@ -46,6 +60,7 @@ func ComposeEnvPin(dataDir, scratchDir string, skillDirs map[string]string, clau
 	}
 	pin.SnapshotHash = snapHash
 	pin.EnvHash = cacheKey("env", claudeVersion, snapHash)
+	pin.L2EnvHash = cacheKey("env-l2", pin.EnvHash, synthesisModel)
 
 	if _, err := copyTree(pristine, pin.ConfigDir, func(string) bool { return true }); err != nil {
 		return pin, fmt.Errorf("copy config snapshot: %w", err)

@@ -25,15 +25,20 @@ const globalSynthesisTimeout = synthesis.DefaultGlobalTimeout
 
 type OutcomeOptions struct {
 	DataDir, CacheDir string
-	Scope             string                      // "l2" (default) | "full"
-	Population        string                      // "scoring" (default) | "as_consumed"
-	Samples           int                         // default 3
-	L1Sample          bool                        // Task 11
-	PoolVersion       string                      // default "v1"
-	ClaudeVersion     string                      // injected; CLI fills via claudeVersionString()
-	SkillDirs         map[string]string           // nil → defaultSkillDirs()
-	Judge             insights.Judge              // nil → NewClaudeJudgePinned(pin)
-	Synth             synthesis.GlobalSynthesizer // nil → NewClaudeGlobalSynthesizerPinned(pin)
+	Scope             string // "l2" (default) | "full"
+	Population        string // "scoring" (default) | "as_consumed"
+	Samples           int    // default 3
+	L1Sample          bool   // Task 11
+	PoolVersion       string // default "v1"
+	ClaudeVersion     string // injected; CLI fills via claudeVersionString()
+	// SynthesisModel is the configured L2 model (insights.Config.SynthesisModel);
+	// "" defaults to insights.DefaultSynthesisModel. It is the only key the eval
+	// takes from the live config — repo roots and the global asset root come
+	// from the frozen snapshot (frozenAssetConfig).
+	SynthesisModel string
+	SkillDirs      map[string]string           // nil → defaultSkillDirs()
+	Judge          insights.Judge              // nil → NewClaudeJudgePinned(pin)
+	Synth          synthesis.GlobalSynthesizer // nil → NewClaudeGlobalSynthesizerPinned(pin)
 }
 
 type SampleOutput struct {
@@ -148,6 +153,9 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 	if opts.PoolVersion == "" {
 		opts.PoolVersion = "v1"
 	}
+	if opts.SynthesisModel == "" {
+		opts.SynthesisModel = insights.DefaultSynthesisModel
+	}
 	if opts.Scope != "l2" && opts.Scope != "full" {
 		return RunRecord{}, fmt.Errorf("unknown scope %q", opts.Scope)
 	}
@@ -167,10 +175,10 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 		RanAt: time.Now().UTC(), Scope: opts.Scope, Population: opts.Population,
 		PoolVersion: opts.PoolVersion, Samples: opts.Samples,
 		SchemaHashes: map[string]string{"l1": insights.SchemaHash(), "l2": synthesis.SchemaHash()},
-		// Task 10: the L2 model is a config key under v2 (synthesis_model), so
-		// the record names the default rather than a pinned constant; plan Task
-		// 10 threads the configured id through the env pin.
-		Models:       map[string]string{"l1": insights.AnalysisModel, "l2": insights.DefaultSynthesisModel},
+		// The L2 model is a config key under v2 (synthesis_model), not a pinned
+		// constant: the configured id is recorded here, keys the L2 stage through
+		// the env pin, and is what a switch re-baselines against.
+		Models:       map[string]string{"l1": insights.AnalysisModel, "l2": opts.SynthesisModel},
 		CodeVersions: map[string]string{},
 	}
 
@@ -193,6 +201,11 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 	if len(bench.Buckets) == 0 {
 		return rec, fmt.Errorf("benchmark has no buckets — nothing to run (fail-closed)")
 	}
+	buckets := make([]string, 0, len(bench.Buckets))
+	for k := range bench.Buckets {
+		buckets = append(buckets, k)
+	}
+	sort.Strings(buckets)
 
 	if rec.RubricSetHash, err = RubricSetHash(opts.DataDir); err != nil {
 		return rec, err
@@ -229,7 +242,7 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 	// removing the whole scratch root at exit (not just this run's subdir)
 	// leaves no trace of the run and keeps re-runs from accumulating copies.
 	defer os.RemoveAll(scratchRoot)
-	pin, err := ComposeEnvPin(opts.DataDir, scratch, opts.SkillDirs, opts.ClaudeVersion)
+	pin, err := ComposeEnvPin(opts.DataDir, scratch, opts.SkillDirs, opts.ClaudeVersion, opts.SynthesisModel)
 	if err != nil {
 		return rec, err
 	}
@@ -246,23 +259,18 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 	if judge == nil {
 		judge = insights.NewClaudeJudgePinned(pin.ConfigDir, pin.WorkDir)
 	}
-	// The eval config is deliberately minimal: dotfiles_repo is omitted (the
-	// graceful-degradation path doubles as the reproducibility answer — spec
-	// §Eval adaptation), so the verifier's recency arbitration is skipped rather
-	// than reading unfrozen git history. Task 10 points the rest of the config
-	// (asset corpus) at the frozen snapshot.
-	cfg := insights.Config{SynthesisModel: rec.Models["l2"]}
+	// The config the model's manifest is built from points into the frozen
+	// corpus and omits dotfiles_repo; see frozenAssetConfig. pin.ConfigDir is
+	// the global half of that redirect — the synthesizer names its config dir as
+	// the manifest's ~/.claude.
+	cfg, assetWarnings := frozenAssetConfig(opts.DataDir, buckets, rec.Models["l2"])
+	rec.Warnings = append(rec.Warnings, assetWarnings...)
 	synth := opts.Synth
 	if synth == nil {
 		synth = synthesis.NewClaudeGlobalSynthesizerPinned(cfg, pin.ConfigDir, pin.WorkDir)
 	}
 
 	poolDir := filepath.Join(opts.DataDir, "baseline-pool", opts.PoolVersion)
-	buckets := make([]string, 0, len(bench.Buckets))
-	for k := range bench.Buckets {
-		buckets = append(buckets, k)
-	}
-	sort.Strings(buckets)
 
 	consecutiveFailures := 0
 	bundles := map[string]synthesis.EvidenceBundle{}
@@ -388,16 +396,28 @@ func runGlobalSamples(ctx context.Context, rec *RunRecord, cache *Cache, synth s
 	if len(bundles) == 0 {
 		return fmt.Errorf("no bundles built — nothing to synthesize (fail-closed)")
 	}
+	// The L2 keys are built from the pin's model, the run reports the record's:
+	// a pin composed without the run's model would key every paid sample under
+	// an identity that does not name the model that produced it.
+	if pin.SynthesisModel == "" || pin.SynthesisModel != rec.Models["l2"] {
+		return fmt.Errorf("env pin's synthesis model %q does not match the run's L2 model %q — refusing to key L2 spend on a model the pin does not name",
+			pin.SynthesisModel, rec.Models["l2"])
+	}
 	setHash, err := bundleSetHash(bundles)
 	if err != nil {
 		return err
 	}
 	for s := 0; s < samples; s++ {
-		// Task 10: the raw key gains the frozen asset-corpus hash — the v2
-		// model reads the CLAUDE.mds/skills/settings, so a raw result is only
-		// valid for the corpus it saw.
+		// The raw key carries the whole frozen asset corpus, not just the
+		// global half the env pin hashes: the v2 model READS the CLAUDE.mds,
+		// skills and settings the manifest names, so a raw result is only valid
+		// for the corpus it saw — v1's key would have served an answer written
+		// against a since-re-frozen corpus as a free cache hit. pin.L2EnvHash
+		// folds the configured synthesis model into the env identity (the model
+		// is not in EnvHash — see EnvPin), so a model switch re-keys L2 and
+		// nothing else.
 		rawKey := cacheKey("l2", setHash, pin.SkillHashes[skills.SynthesisSkill],
-			synthesis.SchemaHash(), rec.Models["l2"], pin.EnvHash, strconv.Itoa(s))
+			synthesis.SchemaHash(), rec.ConfigSnapshotHash, pin.L2EnvHash, strconv.Itoa(s))
 		var raw insights.RawGlobalSynthesis
 		hit, err := cache.Get("l2", rawKey, &raw)
 		if err != nil {
@@ -429,7 +449,11 @@ func runGlobalSamples(ctx context.Context, rec *RunRecord, cache *Cache, synth s
 		if err != nil {
 			return err
 		}
-		verKey := cacheKey("verify", sha256hex(rawJSON), setHash, rec.ConfigSnapshotHash, synthCV)
+		// The model belongs in this key too: VerifyGlobal stamps meta.model from
+		// the run's config, so a re-run on a switched model over identical raw
+		// output would otherwise be served a snapshot naming the OLD model.
+		// Verification is pure Go — re-keying it costs compute, never spend.
+		verKey := cacheKey("verify", sha256hex(rawJSON), setHash, rec.ConfigSnapshotHash, rec.Models["l2"], synthCV)
 		var vo VerifiedOutput
 		hit, err = cache.Get("verify", verKey, &vo)
 		if err != nil {

@@ -81,7 +81,7 @@ func TestComposeEnvPinBuildsEphemeralConfig(t *testing.T) {
 	liveSkill := t.TempDir()
 	mustWriteFile(t, filepath.Join(liveSkill, "SKILL.md"), "live skill v2")
 
-	pin, err := ComposeEnvPin(data, scratch, map[string]string{"synthesizing-workflow-insights": liveSkill}, "1.2.3 (Claude Code)")
+	pin, err := ComposeEnvPin(data, scratch, map[string]string{"synthesizing-workflow-insights": liveSkill}, "1.2.3 (Claude Code)", "claude-fable-5")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,16 +116,51 @@ func TestComposeEnvPinBuildsEphemeralConfig(t *testing.T) {
 		t.Fatalf("hashes: %+v", pin)
 	}
 	// env hash covers the pristine snapshot, not the overlaid copy
-	pin2, err := ComposeEnvPin(data, t.TempDir(), map[string]string{"synthesizing-workflow-insights": liveSkill}, "1.2.3 (Claude Code)")
+	pin2, err := ComposeEnvPin(data, t.TempDir(), map[string]string{"synthesizing-workflow-insights": liveSkill}, "1.2.3 (Claude Code)", "claude-fable-5")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if pin2.EnvHash != pin.EnvHash {
 		t.Fatal("env hash must be stable for the same snapshot + claude version")
 	}
-	pin3, _ := ComposeEnvPin(data, t.TempDir(), map[string]string{"synthesizing-workflow-insights": liveSkill}, "9.9.9")
+	pin3, _ := ComposeEnvPin(data, t.TempDir(), map[string]string{"synthesizing-workflow-insights": liveSkill}, "9.9.9", "claude-fable-5")
 	if pin3.EnvHash == pin.EnvHash {
 		t.Fatal("claude version bump must change the env hash")
+	}
+}
+
+// The configured L2 model is pinned, but only for the L2 stage: EnvHash also
+// keys L1 judgments and the matcher/probe caches, none of which can see the
+// synthesis model, so folding it in there would orphan paid entries a model
+// switch cannot have changed.
+func TestComposeEnvPinModelKeysL2Only(t *testing.T) {
+	withFakeCredentials(t)
+	data := t.TempDir()
+	mustWriteFile(t, filepath.Join(data, "config-snapshot", "global", "CLAUDE.md"), "frozen")
+
+	fable, err := ComposeEnvPin(data, t.TempDir(), nil, "1.0.0", "claude-fable-5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	opus, err := ComposeEnvPin(data, t.TempDir(), nil, "1.0.0", "claude-opus-5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fable.SynthesisModel != "claude-fable-5" {
+		t.Fatalf("pin must carry the configured model: %q", fable.SynthesisModel)
+	}
+	if fable.EnvHash != opus.EnvHash {
+		t.Fatal("the synthesis model must NOT enter EnvHash (it would orphan the L1 and matcher caches)")
+	}
+	if fable.L2EnvHash == opus.L2EnvHash {
+		t.Fatal("a model switch must change the L2 env hash")
+	}
+	bumped, err := ComposeEnvPin(data, t.TempDir(), nil, "9.9.9", "claude-fable-5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bumped.L2EnvHash == fable.L2EnvHash {
+		t.Fatal("the L2 env hash must still track the environment it is built on")
 	}
 }
 
@@ -175,7 +210,7 @@ func TestComposeEnvPinWarnsOnHookDrift(t *testing.T) {
 	mustWriteFile(t, filepath.Join(data, "config-snapshot", "global", "settings.json"), "{}")
 	mustWriteFile(t, filepath.Join(data, "config-snapshot", "global", "hooks", "h.sh"), "frozen hook")
 	mustWriteFile(t, filepath.Join(home, ".claude", "hooks", "h.sh"), "live hook CHANGED")
-	pin, err := ComposeEnvPin(data, scratch, nil, "1.0.0")
+	pin, err := ComposeEnvPin(data, scratch, nil, "1.0.0", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +227,7 @@ func TestComposeEnvPinFailsWhenCredentialUnavailable(t *testing.T) {
 
 	data, scratch := t.TempDir(), t.TempDir()
 	mustWriteFile(t, filepath.Join(data, "config-snapshot", "global", "settings.json"), "{}")
-	_, err := ComposeEnvPin(data, scratch, nil, "1.0.0")
+	_, err := ComposeEnvPin(data, scratch, nil, "1.0.0", "")
 	if err == nil || !strings.Contains(err.Error(), "keychain credential") {
 		t.Fatalf("expected keychain credential error, got %v", err)
 	}

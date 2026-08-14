@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,6 +62,158 @@ func buildFixtureWorld(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return data
+}
+
+// writeLiveGlobalSnapshot drops a v2 cross-repo snapshot into the live store
+// (synthesis/global), the shape a v2 freeze anchors on.
+func writeLiveGlobalSnapshot(t *testing.T, repos []insights.RepoStatsJSON, generatedAt time.Time) string {
+	t.Helper()
+	snap := insights.GlobalSynthesisJSON{SchemaVersion: 2, GeneratedAt: generatedAt, Repos: repos}
+	raw, err := json.Marshal(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(os.Getenv("AGENT_INSIGHTS_DIR"), "synthesis", "global")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	name := generatedAt.UTC().Format("2006-01-02T15-04-05Z") + ".json"
+	if err := os.WriteFile(filepath.Join(dir, name), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return name
+}
+
+// The two ground-truth legs freeze independently: v2 snapshots land in the
+// subdir loadGlobalGroundTruth reads, the v1 per-repo reports beside them stay
+// out of it, and the snapshot dir never walks as a phantom repo bucket.
+func TestRunFreezeSplitsGlobalGroundTruthFromRepoTruths(t *testing.T) {
+	data := buildFixtureWorld(t)
+	name := writeLiveGlobalSnapshot(t, []insights.RepoStatsJSON{
+		{Key: "myrepo", Window: insights.WindowBoundsJSON{From: "2026-06-25", To: "2026-06-25"}, AnalyzedCount: 1},
+	}, time.Date(2026, 7, 4, 9, 0, 0, 0, time.UTC))
+
+	rep, err := RunFreeze(data, insights.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.GlobalGroundTruth != 1 {
+		t.Fatalf("global ground-truth files = %d, want 1", rep.GlobalGroundTruth)
+	}
+	gtDir := filepath.Join(data, "ground-truth")
+	if _, err := os.Stat(filepath.Join(gtDir, "global", name)); err != nil {
+		t.Fatalf("v2 snapshot must freeze where loadGlobalGroundTruth reads: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(gtDir, "myrepo", "2026-07-02.json")); err != nil {
+		t.Fatalf("v1 per-repo truth must still freeze: %v", err)
+	}
+	truths, err := loadGroundTruth(gtDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, phantom := truths["global"]; phantom {
+		t.Fatalf("the v2 snapshot dir must never card as a repo bucket: %v", truths)
+	}
+	if _, ok := loadGlobalGroundTruthOK(t, gtDir); !ok {
+		t.Fatal("frozen v2 snapshot must be loadable as global ground truth")
+	}
+	// the benchmark is anchored on the v2 snapshot's repos
+	if len(rep.Benchmark.Buckets) != 1 || !rep.Benchmark.Buckets["myrepo"].Resolved {
+		t.Fatalf("buckets: %+v", rep.Benchmark.Buckets)
+	}
+}
+
+func loadGlobalGroundTruthOK(t *testing.T, dir string) (insights.GlobalSynthesisJSON, bool) {
+	t.Helper()
+	g, ok, err := loadGlobalGroundTruth(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g, ok
+}
+
+// The v2 cutover on an already-frozen (v1-era) data repo: ground-truth/ is
+// canonical and retained, but the v2 anchors still have to arrive — and once
+// they have, they are write-once too.
+func TestRunFreezeCutoverBringsGlobalIntoRetainedGroundTruth(t *testing.T) {
+	data := buildFixtureWorld(t)
+	if _, err := RunFreeze(data, insights.Config{}); err != nil {
+		t.Fatal(err)
+	}
+	name := writeLiveGlobalSnapshot(t, []insights.RepoStatsJSON{
+		{Key: "myrepo", Window: insights.WindowBoundsJSON{From: "2026-06-25", To: "2026-06-25"}, AnalyzedCount: 1},
+	}, time.Date(2026, 7, 4, 9, 0, 0, 0, time.UTC))
+
+	rep, err := RunFreeze(data, insights.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep.GroundTruthRetained || rep.GlobalGroundTruth != 1 {
+		t.Fatalf("v1 truths retained, v2 snapshot copied: retained=%v global=%d", rep.GroundTruthRetained, rep.GlobalGroundTruth)
+	}
+	if _, err := os.Stat(filepath.Join(data, "ground-truth", "global", name)); err != nil {
+		t.Fatalf("cutover must freeze the v2 snapshot: %v", err)
+	}
+
+	// a newer live snapshot must not shift the frozen anchors
+	writeLiveGlobalSnapshot(t, []insights.RepoStatsJSON{
+		{Key: "myrepo", Window: insights.WindowBoundsJSON{From: "2026-06-25", To: "2026-06-25"}, AnalyzedCount: 1},
+	}, time.Date(2026, 7, 9, 9, 0, 0, 0, time.UTC))
+	rep3, err := RunFreeze(data, insights.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep3.GlobalGroundTruthRetained || rep3.GlobalGroundTruth != 0 {
+		t.Fatalf("frozen v2 ground truth must be canonical once written: %+v", rep3)
+	}
+	if _, err := os.Stat(filepath.Join(data, "ground-truth", "global", "2026-07-09T09-00-00Z.json")); !os.IsNotExist(err) {
+		t.Fatal("a newer live snapshot leaked into the frozen v2 ground truth")
+	}
+}
+
+// A resolved benchmark.json is reused verbatim, which at the v2 cutover would
+// silently pin v1 buckets the v2 anchors do not describe. The freeze must
+// refuse and say how to re-freeze, never quietly score the old populations.
+func TestRunFreezeRefusesStaleBenchmarkAgainstV2GroundTruth(t *testing.T) {
+	data := buildFixtureWorld(t)
+	if _, err := RunFreeze(data, insights.Config{}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(filepath.Join(data, "benchmark.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the v2 run bundled a different repo set than the v1 reports did
+	writeLiveGlobalSnapshot(t, []insights.RepoStatsJSON{
+		{Key: "otherrepo", Window: insights.WindowBoundsJSON{From: "2026-06-25", To: "2026-06-25"}, AnalyzedCount: 1},
+	}, time.Date(2026, 7, 4, 9, 0, 0, 0, time.UTC))
+
+	_, err = RunFreeze(data, insights.Config{})
+	if err == nil {
+		t.Fatal("a v1-shaped benchmark against v2 ground truth must fail the freeze")
+	}
+	if !strings.Contains(err.Error(), "benchmark.json") || !strings.Contains(err.Error(), "eval freeze") {
+		t.Fatalf("error must name the file and the re-freeze instruction: %v", err)
+	}
+	after, err := os.ReadFile(filepath.Join(data, "benchmark.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("the refusal must leave the canonical benchmark.json untouched")
+	}
+
+	// same repo set, same counts: the benchmark is still canonical and reusable
+	data2 := buildFixtureWorld(t)
+	if _, err := RunFreeze(data2, insights.Config{}); err != nil {
+		t.Fatal(err)
+	}
+	writeLiveGlobalSnapshot(t, []insights.RepoStatsJSON{
+		{Key: "myrepo", Window: insights.WindowBoundsJSON{From: "2026-06-25", To: "2026-06-25"}, AnalyzedCount: 1},
+	}, time.Date(2026, 7, 4, 9, 0, 0, 0, time.UTC))
+	if _, err := RunFreeze(data2, insights.Config{}); err != nil {
+		t.Fatalf("a matching v2 snapshot must not invalidate the benchmark: %v", err)
+	}
 }
 
 func TestRunFreezeEndToEnd(t *testing.T) {

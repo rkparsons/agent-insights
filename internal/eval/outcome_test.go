@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -306,5 +307,134 @@ func TestRunOutcomeRejectsUnverifiableSynthesis(t *testing.T) {
 	}
 	if _, _, err := loadScoreableRecord(ScoreOptions{RecordPath: rec.RecordPath}); err == nil {
 		t.Fatal("a record with zero samples must fail closed at scoring")
+	}
+}
+
+// The v2 model READS the frozen asset corpus (global CLAUDE.md/skills/settings
+// and every repo's CLAUDE.md), so a cached raw L2 result is only valid for the
+// corpus that produced it: an unchanged corpus must serve the same key, and a
+// changed corpus file — repo-side as well as global-side — must re-key. This is
+// the one cache-key mistake that costs real money silently (a stale L2 answer
+// served across a corpus re-freeze reads as a free run), so both directions are
+// asserted.
+func TestRunOutcomeRawKeyTracksAssetCorpus(t *testing.T) {
+	data, opts := buildOutcomeFixture(t)
+	fs := opts.Synth.(*fakeGlobalSynth)
+
+	rec, err := RunOutcome(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// unchanged corpus: same keys, no spend
+	same, err := RunOutcome(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fs.calls != 3 {
+		t.Fatalf("unchanged corpus must not re-buy any sample, calls = %d", fs.calls)
+	}
+	for i, s := range same.SampleOutputs {
+		if s.Fresh || s.RawKey != rec.SampleOutputs[i].RawKey {
+			t.Fatalf("unchanged corpus re-keyed sample %d: %+v vs %+v", i, s, rec.SampleOutputs[i])
+		}
+	}
+
+	// a repo CLAUDE.md the model can read changes: every sample must re-key
+	mustWriteFile(t, filepath.Join(data, "config-snapshot", "repos", "alpha", "CLAUDE.md"), "repo rules v2")
+	afterRepo, err := RunOutcome(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fs.calls != 6 {
+		t.Fatalf("a changed repo CLAUDE.md must re-buy all 3 samples, calls = %d", fs.calls)
+	}
+	for i, s := range afterRepo.SampleOutputs {
+		if !s.Fresh || s.RawKey == rec.SampleOutputs[i].RawKey {
+			t.Fatalf("sample %d served a stale raw entry across a repo-corpus change: %+v", i, s)
+		}
+	}
+
+	// the global half of the corpus re-keys too
+	mustWriteFile(t, filepath.Join(data, "config-snapshot", "global", "CLAUDE.md"), "frozen v2")
+	afterGlobal, err := RunOutcome(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, s := range afterGlobal.SampleOutputs {
+		if !s.Fresh || s.RawKey == afterRepo.SampleOutputs[i].RawKey {
+			t.Fatalf("sample %d served a stale raw entry across a global-corpus change: %+v", i, s)
+		}
+	}
+}
+
+// The configured synthesis_model is the run's L2 identity: it reaches the
+// record, the verified snapshot's meta, and the raw cache key — a model switch
+// is a re-baseline event, never a cache hit.
+func TestRunOutcomeConfiguredSynthesisModelKeysTheRun(t *testing.T) {
+	_, opts := buildOutcomeFixture(t)
+	rec, err := RunOutcome(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Models["l2"] != insights.DefaultSynthesisModel {
+		t.Fatalf("unset model must default: %v", rec.Models)
+	}
+
+	opts.SynthesisModel = "claude-opus-5"
+	switched, err := RunOutcome(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if switched.Models["l2"] != "claude-opus-5" {
+		t.Fatalf("record must name the configured model: %v", switched.Models)
+	}
+	for i, s := range switched.SampleOutputs {
+		if !s.Fresh || s.RawKey == rec.SampleOutputs[i].RawKey {
+			t.Fatalf("sample %d served a stale raw entry across a model switch: %+v", i, s)
+		}
+	}
+	var vo VerifiedOutput
+	hit, err := NewCache(opts.CacheDir).Get("verify", switched.SampleOutputs[0].VerifiedKey, &vo)
+	if err != nil || !hit {
+		t.Fatalf("verified output: hit=%v err=%v", hit, err)
+	}
+	if vo.Snapshot.Meta.Model != "claude-opus-5" {
+		t.Fatalf("the run's config must carry the configured model into verification: %q", vo.Snapshot.Meta.Model)
+	}
+}
+
+// The synthesis manifest must name the FROZEN repo corpus, never a live
+// checkout: eval redirects repo roots into config-snapshot/repos, and a bucket
+// with no frozen config degrades to "unavailable" visibly rather than silently.
+func TestFrozenAssetConfigRedirectsRepoRoots(t *testing.T) {
+	data, _ := buildOutcomeFixture(t)
+	cfg, warnings := frozenAssetConfig(data, []string{"alpha", "beta"}, "claude-fable-5")
+	want := []string{
+		filepath.Join(data, "config-snapshot", "repos", "alpha"),
+		filepath.Join(data, "config-snapshot", "repos", "beta"),
+	}
+	if len(cfg.Repos) != 2 || cfg.Repos[0] != want[0] || cfg.Repos[1] != want[1] {
+		t.Fatalf("repo roots = %v, want %v", cfg.Repos, want)
+	}
+	if cfg.DotfilesRepo != "" {
+		t.Fatalf("eval config must omit dotfiles_repo (degraded escalation is the reproducibility answer): %q", cfg.DotfilesRepo)
+	}
+	if cfg.SynthesisModel != "claude-fable-5" {
+		t.Fatalf("model = %q", cfg.SynthesisModel)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("fully frozen corpus must not warn: %v", warnings)
+	}
+
+	if err := os.RemoveAll(filepath.Join(data, "config-snapshot", "repos", "beta")); err != nil {
+		t.Fatal(err)
+	}
+	cfg, warnings = frozenAssetConfig(data, []string{"alpha", "beta"}, "claude-fable-5")
+	if len(cfg.Repos) != 1 || cfg.Repos[0] != want[0] {
+		t.Fatalf("an unfrozen bucket must be omitted, not faked: %v", cfg.Repos)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "beta") {
+		t.Fatalf("an unfrozen bucket must warn: %v", warnings)
 	}
 }
