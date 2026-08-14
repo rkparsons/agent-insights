@@ -86,8 +86,13 @@ type RunRecord struct { // the spec's reproducibility record
 	L1Sample      *L1SampleResult `json:"l1_sample,omitempty"`
 	CacheHits     int             `json:"cache_hits"`
 	CacheMisses   int             `json:"cache_misses"`
-	Warnings      []string        `json:"warnings,omitempty"`
-	RecordPath    string          `json:"-"`
+	// VerifierRejections names every sample whose raw output the deterministic
+	// verifier refused. Structured, not sniffed out of Warnings: it is the
+	// pre-spend refusal channel scoring fails closed on — a contract the
+	// pipeline broke, not a transient loss.
+	VerifierRejections []string `json:"verifier_rejections,omitempty"`
+	Warnings           []string `json:"warnings,omitempty"`
+	RecordPath         string   `json:"-"`
 }
 
 // VerifiedOutput is one L2 sample as scoring reads it: the verified v2 snapshot
@@ -358,13 +363,8 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 // ANY bucket re-keys every sample — there is no per-bucket sample to key
 // separately any more.
 func bundleSetHash(bundles map[string]synthesis.EvidenceBundle) (string, error) {
-	keys := make([]string, 0, len(bundles))
-	for k := range bundles {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
 	parts := []string{"bundle-set"}
-	for _, k := range keys {
+	for _, k := range sortedKeysOfBundles(bundles) {
 		raw, err := json.Marshal(bundles[k])
 		if err != nil {
 			return "", err
@@ -446,8 +446,12 @@ func runGlobalSamples(ctx context.Context, rec *RunRecord, cache *Cache, synth s
 			if err != nil {
 				// Verification is deterministic — a rejected sample is model
 				// output the contract refuses, not a transient failure, so it
-				// does not count toward the consecutive-failure park.
-				rec.Warnings = append(rec.Warnings, fmt.Sprintf("sample %d: verification rejected the synthesis: %v", s, err))
+				// does not count toward the consecutive-failure park. It is
+				// recorded structurally as well as warned about: scoring
+				// refuses a record carrying one, pre-spend.
+				note := fmt.Sprintf("sample %d: verification rejected the synthesis: %v", s, err)
+				rec.VerifierRejections = append(rec.VerifierRejections, note)
+				rec.Warnings = append(rec.Warnings, note)
 				continue
 			}
 			vo = VerifiedOutput{Snapshot: snap, Raw: raw}

@@ -7,7 +7,26 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rkparsons/agent-insights/internal/insights"
+	"github.com/rkparsons/agent-insights/internal/synthesis"
 )
+
+// alternatingSynth emits output the verifier rejects on its first call and
+// valid output afterwards: a run that loses a sample to the VERIFIER while
+// other samples land.
+type alternatingSynth struct {
+	good, bad insights.RawGlobalSynthesis
+	calls     int
+}
+
+func (a *alternatingSynth) SynthesizeGlobal(_ context.Context, _ map[string]synthesis.EvidenceBundle) (insights.RawGlobalSynthesis, error) {
+	a.calls++
+	if a.calls == 1 {
+		return a.bad, nil
+	}
+	return a.good, nil
+}
 
 // buildScoreFixture is buildOutcomeFixture with statuses seeded (scoring
 // fail-closes on missing statuses).
@@ -243,12 +262,111 @@ func TestFindCardByPrefix(t *testing.T) {
 	}
 }
 
-// Task 8-10: the pre-spend hard-error gate keyed on the v1 ValidationReport
-// that Finalize produced per bucket; under v2 the equivalent signal is the
-// verifier's fail-closed run plus meta.validation_notes, wired into the gate in
-// plan Task 9.
+// The pre-spend refusal gate: a sample whose raw output the verifier REJECTED
+// is a broken pipeline, not a thin run — scoring refuses before it buys a
+// single matcher read, however many other samples landed.
 func TestScoreRefusesRecordWithSynthesisHardErrors(t *testing.T) {
-	t.Skip("pre-spend hard-error gate re-sourced in plan Task 9")
+	_, opts := buildScoreFixture(t)
+	rejected := mergedRaw()
+	rejected.Findings[0].EvidenceIDs = []string{"alpha/F99"} // dangling citation
+	opts.Synth = &alternatingSynth{good: mergedRaw(), bad: rejected}
+	rec, err := RunOutcome(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.SampleOutputs) == 0 || len(rec.VerifierRejections) == 0 {
+		t.Fatalf("fixture must land some samples and reject others: %d landed, rejections %v",
+			len(rec.SampleOutputs), rec.VerifierRejections)
+	}
+	sm := &scriptedMatcher{responses: map[string]MatchResult{"M1": m1Match()}}
+	_, _, err = ScoreRun(context.Background(), ScoreOptions{
+		DataDir: opts.DataDir, CacheDir: opts.CacheDir, ClaudeVersion: "1.0.0 (test)",
+		Matcher: sm, ScoredAt: time.Date(2026, 7, 5, 10, 0, 0, 0, time.UTC)})
+	if err == nil || !strings.Contains(err.Error(), "hard errors") {
+		t.Fatalf("a rejected sample must refuse scoring: %v", err)
+	}
+	if sm.calls != 0 {
+		t.Fatalf("refusal must precede every matcher read, calls = %d", sm.calls)
+	}
+	if _, statErr := os.Stat(filepath.Join(opts.DataDir, "runs")); !os.IsNotExist(statErr) {
+		t.Fatal("a refused record must not commit a verdict")
+	}
+}
+
+// The gate's side of the dropped-citation bargain: a drop that is the only
+// thing suppressing a recall floor reaches the human as a recognition card,
+// through the same contested-card surface every other trigger uses.
+func TestScoreRunCardsDroppedEvidenceThatSuppressesARecallFloor(t *testing.T) {
+	data, opts := buildScoreFixture(t)
+	// alpha's session now carries friction, so the alpha bundle has an F* item
+	// and the friction recall floor applies to it.
+	a := insights.AgentSessionAnalysis{
+		Stats: insights.AgentSessionStats{SessionID: "s1", Repo: "/Users/dev/Developer/alpha", AssistantTurns: 3},
+		JudgedFields: insights.JudgedFields{
+			UnderlyingGoal: "goal-s1", Outcome: "fully_achieved", SessionType: "single_task",
+			FrictionIncidents: []insights.FrictionIncident{{Type: "tooling", OneLine: "re-ran the build by hand"}},
+		},
+		TranscriptMtime: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
+	}
+	if err := writeJSON(filepath.Join(data, "baseline-pool", "v1", "s1.json"), a); err != nil {
+		t.Fatal(err)
+	}
+	raw := mergedRaw()
+	raw.Dropped[0].EvidenceIDs = []string{"alpha/F1"} // the only mention of alpha's friction
+	opts.Synth = &fakeGlobalSynth{raw: raw}
+	if _, err := RunOutcome(context.Background(), opts); err != nil {
+		t.Fatal(err)
+	}
+	v, arts, err := ScoreRun(context.Background(), ScoreOptions{
+		DataDir: opts.DataDir, CacheDir: opts.CacheDir, ClaudeVersion: "1.0.0 (test)",
+		Matcher:  &scriptedMatcher{responses: map[string]MatchResult{"M1": m1Match()}},
+		ScoredAt: time.Date(2026, 7, 5, 10, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Tier1.FrictionRecallMisses) != 0 || v.Tier1.DroppedSuppressions == 0 {
+		t.Fatalf("the drop must suppress the friction floor, not clear it: %+v", v.Tier1)
+	}
+	md, err := os.ReadFile(filepath.Join(arts.CardsDir, "cards.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(md), droppedSuppression) || !strings.Contains(string(md), "comment-style nit") {
+		t.Fatalf("the dropped entry must reach the adjudication set:\n%s", md)
+	}
+}
+
+// The fabrication gate end to end, against the REAL verifier: a quote the
+// model invented is dropped by VerifyGlobal into meta.validation_notes, and the
+// tier-1 rate reads it back. Couples the note format to its only consumer — a
+// reworded note would otherwise silently zero the fabrication signal.
+func TestScoreRunFabricationRateReadsVerifierNotes(t *testing.T) {
+	_, opts := buildScoreFixture(t)
+	raw := mergedRaw()
+	raw.Findings[0].Quotes = []string{"the user never said this"} // no such quote in the pool
+	opts.Synth = &fakeGlobalSynth{raw: raw}
+	if _, err := RunOutcome(context.Background(), opts); err != nil {
+		t.Fatal(err)
+	}
+	v, _, err := ScoreRun(context.Background(), ScoreOptions{
+		DataDir: opts.DataDir, CacheDir: opts.CacheDir, ClaudeVersion: "1.0.0 (test)",
+		Matcher:  &scriptedMatcher{responses: map[string]MatchResult{"M1": m1Match()}},
+		ScoredAt: time.Date(2026, 7, 5, 10, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Tier1.MaxRawFabricationRate != 1 {
+		t.Fatalf("the one cited quote was fabricated: rate = %v", v.Tier1.MaxRawFabricationRate)
+	}
+	found := false
+	for _, r := range v.HardFailReasons {
+		if strings.Contains(r, "fabrication rate") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("fabrication over the gate must hard-fail: %v", v.HardFailReasons)
+	}
 }
 
 func TestScoreTargetsDevLoopNeverCommits(t *testing.T) {

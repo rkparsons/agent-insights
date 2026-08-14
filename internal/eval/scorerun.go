@@ -147,11 +147,11 @@ type scoreSession struct {
 	truths     map[string]RepoSynthesis
 	repeats    int
 	warnings   []string
-	// hardErrors is the pre-spend refusal channel. Task 9: v1 filled it from
-	// Finalize's ValidationReport; under v2 a hard verifier failure produces no
-	// sample at all (outcome warns and drops it), so the equivalent signal is
-	// meta.validation_notes plus the dropped-sample count — wired in with the
-	// probe recast. The gate below stays so that wiring is a one-line change.
+	// hardErrors is the pre-spend refusal channel: v1 filled it from Finalize's
+	// ValidationReport, v2 from the record's verifier rejections. A sample the
+	// deterministic verifier refused is output the contract rejects — the
+	// pipeline is broken, not merely thin — so scoring refuses before it buys a
+	// single matcher read.
 	hardErrors []string
 }
 
@@ -187,15 +187,16 @@ func newScoreSession(ctx context.Context, opts ScoreOptions, scratchStamp time.T
 	if err = s.loadSamples(); err != nil {
 		return nil, nil, err
 	}
+	s.hardErrors = append(s.hardErrors, s.rec.VerifierRejections...)
 	if len(s.hardErrors) > 0 {
 		return nil, nil, fmt.Errorf("record %s carries synthesis hard errors (%s) — scoring refused before any matcher spend; fix the pipeline and re-run `insights eval outcome`",
 			filepath.Base(s.recPath), strings.Join(s.hardErrors, "; "))
 	}
-	// A sample the run lost (LLM failure, or output the verifier rejected)
-	// silently shrinks the scoring denominator: medians are taken over the
-	// survivors and sample agreement goes trivially to 1.0. Task 9 re-sources
-	// the pre-spend refusal channel; until then the loss must at least reach
-	// the verdict rather than living only in the run record's warnings.
+	// The residual loss the refusal above does not cover: a sample the LLM
+	// never produced. It silently shrinks the scoring denominator — medians are
+	// taken over the survivors and sample agreement goes trivially to 1.0 — so
+	// it must at least reach the verdict rather than living only in the run
+	// record's warnings.
 	if got := len(s.rec.SampleOutputs); s.rec.Samples > 0 && got < s.rec.Samples {
 		s.warnings = append(s.warnings, fmt.Sprintf(
 			"record %s scored %d of %d requested samples — %d were lost at synthesis time (see the record's warnings); every median and sample-agreement figure below is over the survivors",
@@ -399,10 +400,20 @@ func ScoreRun(ctx context.Context, opts ScoreOptions) (Verdict, ScoreArtifacts, 
 	for i := range results {
 		byID[results[i].Rubric.ID] = i
 	}
+	// The tier-1 gates card evidence the model dropped, which answers to no
+	// rubric: those cards ride a pseudo-target rather than being discarded here.
+	var tier1Cards []PendingCard
 	for _, c := range extra {
 		if i, ok := byID[c.TargetID]; ok {
 			results[i].Pending = append(results[i].Pending, c)
+			continue
 		}
+		tier1Cards = append(tier1Cards, c)
+	}
+	if len(tier1Cards) > 0 {
+		results = append(results, TargetResult{
+			Rubric:  Rubric{ID: tier1CardTarget, Statement: tier1CardStatement},
+			Pending: tier1Cards})
 	}
 	cards, err := BuildCards(results, anchorsByTarget, s.oneLines)
 	if err != nil {

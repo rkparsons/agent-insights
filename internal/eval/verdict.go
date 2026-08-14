@@ -8,23 +8,6 @@ import (
 	"time"
 )
 
-// ComputeTier1 embeds the trust-property gates in the verdict.
-//
-// Task 8-10: the properties were computed by the v1 synthesis.EvaluateRun over
-// per-repo themes/recommendations, which the v2 pipeline no longer produces
-// (plan Task 7); the recasts — preference/opportunity/friction recall against
-// findings AND dropped, membership churn over findings' session sets, raw
-// quote-drop rate from meta.validation_notes — are plan Task 9. Until then this
-// measures nothing and hard-fails: an unmeasured gate must never read as a
-// passed one, and a stale v1 record still in the cache would otherwise score
-// into a verdict whose trust properties all look clean. The record and cache
-// arguments stay in the signature: Task 9 reads both.
-func ComputeTier1(record RunRecord, cache *Cache) (Tier1Gates, []string, []string, error) {
-	_ = record
-	_ = cache
-	return Tier1Gates{}, []string{"tier-1 trust properties not measured: the v2 probe recast is pending (plan Task 9)"}, nil, nil
-}
-
 // VerdictInputs carries everything ComposeVerdict folds together. Results is
 // mutated: flip and baseline_miss triggers attach to its verdicts.
 type VerdictInputs struct {
@@ -110,7 +93,7 @@ func ComposeVerdict(in VerdictInputs, cache *Cache) (Verdict, []PendingCard, err
 		}
 	}
 
-	t1, reasons, t1Warnings, err := ComputeTier1(in.Record, cache)
+	t1, reasons, t1Warnings, t1Cards, err := ComputeTier1(in.Record, cache, in.Adj)
 	if err != nil {
 		return v, nil, err
 	}
@@ -118,7 +101,7 @@ func ComposeVerdict(in VerdictInputs, cache *Cache) (Verdict, []PendingCard, err
 	v.Warnings = append(v.Warnings, t1Warnings...)
 
 	baseline := FindBaseline(v.Tuple, in.Prior)
-	var extra []PendingCard
+	extra := t1Cards
 	for i := range in.Results {
 		res := &in.Results[i]
 		tv := &res.Verdict

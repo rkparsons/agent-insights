@@ -46,16 +46,8 @@ func tier1Fixture(t *testing.T, freshCount int, emptyLast bool) (RunRecord, *Cac
 	return rec, cache
 }
 
-// Task 9: the tier-1 gates (churn over fresh sample pairs, fail-closed on an
-// empty synthesis, fabrication rate, recall misses) were computed by the v1
-// EvaluateRun over per-repo themes, removed with the pipeline in plan Task 7.
-// ComputeTier1 reports nothing measured until the probes are recast against
-// findings/dropped in plan Task 9; this test is the checklist for that rework.
-// The fixture above is already v2-shaped (global samples, snapshot outputs).
-func TestComputeTier1ChurnAndEmptyFailClosed(t *testing.T) {
-	t.Skip("tier-1 probes recast in plan Task 9")
-}
-
+// The tier-1 gates themselves live in tier1_test.go; this fixture is the
+// verdict-composition side (a record whose gates are quiet).
 func composeInputs(t *testing.T, results []TargetResult, prior []namedVerdict) (VerdictInputs, *Cache) {
 	t.Helper()
 	rec, cache := tier1Fixture(t, 0, false)

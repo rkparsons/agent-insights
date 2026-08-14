@@ -36,16 +36,24 @@ type VerdictBucket struct {
 }
 
 // Tier1Gates embeds the existing trust-property gates in every verdict —
-// tuning toward the 28 targets must not regress them (spec).
+// tuning toward the 28 targets must not regress them (spec). Every id-bearing
+// field carries bundle ids or repo keys, never session ids or model prose: the
+// verdict is committed, so the gates must survive its privacy scan.
 type Tier1Gates struct {
-	MaxRawFabricationRate   float64  `json:"max_raw_fabrication_rate"`
+	MaxRawFabricationRate float64 `json:"max_raw_fabrication_rate"`
+	// HardErrorCount is structurally 0 in any COMPOSED verdict: a verifier
+	// rejection refuses scoring pre-spend (scorerun.go), so a run that reaches
+	// composition carries none.
 	HardErrorCount          int      `json:"hard_error_count"`
-	OpportunityRecallMisses []string `json:"opportunity_recall_misses,omitempty"` // G ids — safe
-	PrefRecallMisses        []string `json:"pref_recall_misses,omitempty"`
-	DominantTypePresent     bool     `json:"dominant_type_present"`
-	MembershipChurn         *float64 `json:"membership_churn"` // nil: <2 fresh samples (all-cached re-run)
-	FreshSamplePairs        int      `json:"fresh_sample_pairs"`
-	ReportPrivacyLeakCount  int      `json:"report_privacy_leak_count"`
+	OpportunityRecallMisses []string `json:"opportunity_recall_misses,omitempty"` // "repo/G1"
+	PrefRecallMisses        []string `json:"pref_recall_misses,omitempty"`        // one entry per cluster: "repo/P1,repo/P3"
+	FrictionRecallMisses    []string `json:"friction_recall_misses,omitempty"`    // repo keys
+	// DroppedSuppressions counts the recall probes a dropped citation
+	// suppressed — the laundering surface the dropped cards put to a human.
+	DroppedSuppressions    int      `json:"dropped_suppressions"`
+	MembershipChurn        *float64 `json:"membership_churn"` // nil: <2 fresh samples (all-cached re-run)
+	FreshSamplePairs       int      `json:"fresh_sample_pairs"`
+	ReportPrivacyLeakCount int      `json:"report_privacy_leak_count"`
 }
 
 type PartASummary struct {
