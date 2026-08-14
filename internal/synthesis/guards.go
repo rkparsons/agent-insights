@@ -1,6 +1,7 @@
 package synthesis
 
 import (
+	"os"
 	"regexp"
 	"strings"
 )
@@ -73,4 +74,23 @@ var leakPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\$HOME`),
 	regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`), // session UUID
 	regexp.MustCompile(`\bsc-\d+\b`), // Shortcut ticket
+}
+
+// tildeHome rewrites the user's home directory (literal or $HOME) to "~" in s.
+// Every string that outlives the process gets this: the stored snapshot's
+// paths, the verifier's notes, and the CLI-authored error text that lands in
+// the run state and the TUI's error badge.
+func tildeHome(s string) string {
+	home, _ := os.UserHomeDir()
+	return tildeWithHome(s, home)
+}
+
+// tildeWithHome is tildeHome against an explicit home, for callers that
+// resolved it once (the verifier) or that must degrade to a no-op when the home
+// directory is undeterminable.
+func tildeWithHome(s, home string) string {
+	if home != "" {
+		s = strings.ReplaceAll(s, home, "~")
+	}
+	return strings.ReplaceAll(s, "$HOME", "~")
 }

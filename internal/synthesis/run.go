@@ -39,6 +39,11 @@ type Summary struct {
 // stores nothing and lands its reason verbatim in the run state's error, which
 // is what `status --json` surfaces as last_run.error.
 func RunSynthesize(ctx context.Context, newSyn GlobalSynthesizerFactory, opts Options) (sum Summary, retErr error) {
+	// Stamped before the evidence is read, and carried all the way to the
+	// snapshot's generated_at: due-ness asks which analyses postdate the last
+	// snapshot, so an end-of-run stamp would permanently swallow every session
+	// analyzed during a 35-90 minute model call.
+	startedAt := time.Now().UTC()
 	cfg, err := insights.LoadConfig()
 	if err != nil {
 		return Summary{}, err
@@ -68,7 +73,7 @@ func RunSynthesize(ctx context.Context, newSyn GlobalSynthesizerFactory, opts Op
 	if hasLatest {
 		lastGenerated = latest.GeneratedAt
 	}
-	due, contributing := GlobalDue(analyses, cfg, lastGenerated, time.Now())
+	due, contributing := GlobalDue(analyses, cfg, lastGenerated, startedAt)
 
 	groups := GroupByRepo(analyses, cfg.MinSessions, cfg)
 	bundles := buildBundles(groups)
@@ -95,7 +100,7 @@ func RunSynthesize(ctx context.Context, newSyn GlobalSynthesizerFactory, opts Op
 	}
 	defer lock.Release()
 
-	rs := RunState{Status: "running", PID: os.Getpid(), StartedAt: time.Now().UTC(), LogPath: opts.LogPath}
+	rs := RunState{Status: "running", PID: os.Getpid(), StartedAt: startedAt, LogPath: opts.LogPath}
 	writeRunState(rs)
 	defer func() {
 		finishedAt := time.Now().UTC()
@@ -128,19 +133,19 @@ func RunSynthesize(ctx context.Context, newSyn GlobalSynthesizerFactory, opts Op
 	defer cancel()
 	raw, err := newSyn(workDir).SynthesizeGlobal(rctx, bundles)
 	if err != nil {
-		return sum, withPreservedOutput(workDir, err)
+		return sum, withPreservedOutput(workDir, startedAt, err)
 	}
 	// Verification runs under the run's own context, not the model's: a call
 	// that used its whole deadline would otherwise start verification already
 	// expired, silently skipping the git-dated recency arbitration.
-	snapshot, err := VerifyGlobal(ctx, raw, bundles, cfg, time.Now().UTC())
+	snapshot, err := VerifyGlobal(ctx, raw, bundles, cfg, startedAt)
 	if err != nil {
-		return sum, withPreservedOutput(workDir, err)
+		return sum, withPreservedOutput(workDir, startedAt, err)
 	}
 	path, err := StoreGlobal(snapshot)
 	if err != nil {
 		// Verified but unstored: the model output is still the expensive half.
-		return sum, withPreservedOutput(workDir, err)
+		return sum, withPreservedOutput(workDir, startedAt, err)
 	}
 	sum.Written = 1
 	if n := len(snapshot.Meta.ValidationNotes); n > 0 {
@@ -165,8 +170,8 @@ func buildBundles(groups map[string][]insights.AgentSessionAnalysis) map[string]
 // workdir and names the copy in the returned error. A 90-minute run that fails
 // verification leaves nothing else behind, and the error text is what reaches
 // last_run.error — so the post-mortem path has to travel with it.
-func withPreservedOutput(workDir string, cause error) error {
-	path, err := preserveFailedSynthesis(workDir, time.Now().UTC())
+func withPreservedOutput(workDir string, at time.Time, cause error) error {
+	path, err := preserveFailedSynthesis(workDir, at)
 	switch {
 	case err != nil:
 		return fmt.Errorf("%w (model output could not be preserved: %v)", cause, err)

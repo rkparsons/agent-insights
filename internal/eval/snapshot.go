@@ -143,6 +143,13 @@ func copyTree(srcRoot, dstRoot string, keep func(rel string) bool) (int, error) 
 
 // CopyGroundTruth freezes the live synthesis artifacts (the JSONs whose
 // Theme.SessionIDs are the only valid anchor source) into ground-truth/.
+//
+// Task 8-10: the sweep takes every JSON under synthesis.Dir(), which now also
+// holds the v2 global snapshots — loadGroundTruth walks every subdir, so those
+// would card as a phantom "global" bucket once a v2 run has stored one. Plan
+// Task 8 re-sources ground truth from the global snapshot and this goes away.
+// Failed-run model output is NOT a concern here: it never passed the verifier's
+// privacy scan and so lives outside Dir() entirely (synthesis.diagnosticsDir).
 func CopyGroundTruth(dataDir string) (int, error) {
 	return copyTree(synthesis.Dir(), filepath.Join(dataDir, "ground-truth"), func(string) bool { return true })
 }
@@ -155,8 +162,8 @@ func CopyBaselinePool(dataDir string) (int, error) {
 	})
 }
 
-// SnapshotConfig freezes the config surface the adopted-check greps and the
-// env-pinning later composes from: the global ~/.claude surface (top-level
+// SnapshotConfig freezes the config surface the synthesis manifest points the
+// model at and the env-pinning later composes from: the global ~/.claude surface (top-level
 // *.md, settings.json, statusline.mjs, the full skills and hooks trees, and
 // the plugin inventory — never the plugins cache) plus each bucket repo's
 // CLAUDE.md and .claude tree.

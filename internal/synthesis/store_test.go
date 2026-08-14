@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,7 +91,12 @@ func TestPreserveFailedSynthesis(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(dir, "synthesis", "diagnostics", "2026-08-13T09-30-00Z.json")
+	// Outside synthesis/ on purpose: these bytes never passed the verifier's
+	// privacy scan, and the eval freeze copies synthesis/ wholesale.
+	want := filepath.Join(dir, "synthesis-diagnostics", "2026-08-13T09-30-00Z.json")
+	if strings.HasPrefix(want, Dir()+string(filepath.Separator)) {
+		t.Fatalf("diagnostics must not live under the freeze-copied synthesis root %s", Dir())
+	}
 	if path != want {
 		t.Errorf("diagnostics path = %q, want %q", path, want)
 	}

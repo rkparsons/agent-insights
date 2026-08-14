@@ -18,11 +18,6 @@ import (
 
 const consecutiveLLMFailureLimit = 3
 
-// l2SynthesisTimeout bounds one L2 synthesis subprocess. v4-era syntheses run
-// 8–14 minutes; a kill at the deadline discards the output but not the spend,
-// so the bound errs generous.
-const l2SynthesisTimeout = 20 * time.Minute
-
 type OutcomeOptions struct {
 	DataDir, CacheDir string
 	Scope             string            // "l2" (default) | "full"
@@ -319,8 +314,9 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 		// verifier (plan Task 7). Sampling a global synthesis per bucket is not
 		// a mechanical port — carding, corroboration and the cache keys are all
 		// re-derived in plan Tasks 8-10 — so the stage fails closed rather than
-		// scoring a shape the pipeline no longer produces. L1 scope and
-		// --l1-sample are unaffected: both return above this point.
+		// scoring a shape the pipeline no longer produces. --l1-sample returns
+		// above this point and is unaffected; --scope full is not — it re-judges
+		// the first bucket's sessions (real spend, cached) before dying here.
 		rec.Buckets = append(rec.Buckets, bo)
 		return rec, fmt.Errorf("bucket %s: the L2 eval stage is being rebuilt for the v2 global synthesis (plan Tasks 8-10)", bucket)
 	}

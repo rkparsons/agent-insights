@@ -1,5 +1,13 @@
 # Workflow Insights Pipeline — Analysis Strategy
 
+> **Superseded for Layer 2 (2026-08-13).** The per-repo synthesis, the themes
+> layer, and the `RawSynthesis`/`RepoSynthesis` shapes below were replaced by a
+> single cross-repo pass emitting a ranked, asset-oriented `GlobalSynthesis`
+> (schema_version 2). The authority is
+> `docs/superpowers/specs/2026-08-13-global-synthesis-v2-design.md`; this
+> document is kept for its Layer-1 detail (which is unchanged) and as the
+> methodology record of the v1 design it replaced.
+
 How this branch turns local Claude Code session transcripts into per-repo
 workflow-improvement insights. Covers data processing, analysis, aggregation, and
 insight extraction only (not rendering, scheduling, or TUI display). Written to

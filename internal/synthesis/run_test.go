@@ -144,6 +144,34 @@ func TestRunSynthesizeWritesOneGlobalSnapshot(t *testing.T) {
 // TestRunSynthesizeVerifierFailureStoresNothing is the fail-closed path: a
 // dangling evidence id must leave no snapshot, and the reason must reach the
 // run state verbatim (that is what status --json surfaces as last_run.error).
+// TestRunSynthesizeStampsGeneratedAtAtRunStart: generated_at is what the next
+// run's due gate compares analyses against, so stamping it at the end would
+// permanently swallow every session analyzed during the model call.
+func TestRunSynthesizeStampsGeneratedAtAtRunStart(t *testing.T) {
+	seedStore(t, "alpha", 12)
+	fake := &fakeGlobalSynth{raw: validRaw()}
+	var calledAt time.Time
+	factory := func(string) GlobalSynthesizer {
+		calledAt = time.Now().UTC()
+		return fake
+	}
+
+	if _, err := RunSynthesize(context.Background(), factory, Options{MinSessions: 10}); err != nil {
+		t.Fatal(err)
+	}
+	snap, ok, err := LoadLatestGlobal()
+	if err != nil || !ok {
+		t.Fatalf("LoadLatestGlobal = (ok=%v, err=%v)", ok, err)
+	}
+	if snap.GeneratedAt.After(calledAt) {
+		t.Errorf("generated_at %v postdates the model call at %v: work analyzed during the run would never count as new", snap.GeneratedAt, calledAt)
+	}
+	rs, _ := ReadRunState()
+	if !snap.GeneratedAt.Equal(rs.StartedAt) {
+		t.Errorf("generated_at %v != run state started_at %v; one run, one instant", snap.GeneratedAt, rs.StartedAt)
+	}
+}
+
 func TestRunSynthesizeVerifierFailureStoresNothing(t *testing.T) {
 	dir := seedStore(t, "alpha", 12)
 	raw := validRaw()
@@ -190,12 +218,15 @@ func TestRunSynthesizeFailurePreservesModelOutput(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a verification failure")
 	}
-	names, nerr := snapshotJSONNames(filepath.Join(dir, "synthesis", "diagnostics"))
+	names, nerr := snapshotJSONNames(filepath.Join(dir, "synthesis-diagnostics"))
 	if nerr != nil || len(names) != 1 {
 		t.Fatalf("diagnostics dir = %v (err %v), want one preserved output", names, nerr)
 	}
 	if !strings.Contains(err.Error(), "diagnostics") {
 		t.Errorf("error = %q, want it to name the preserved output path", err)
+	}
+	if _, serr := os.Stat(filepath.Join(dir, "synthesis", "diagnostics")); !os.IsNotExist(serr) {
+		t.Error("unscanned model output must not land under the synthesis root the eval freeze copies")
 	}
 	rs, _ := ReadRunState()
 	if !strings.Contains(rs.Reason, "diagnostics") {

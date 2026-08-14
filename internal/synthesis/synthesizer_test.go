@@ -2,6 +2,7 @@ package synthesis
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -241,6 +242,34 @@ func TestSynthesizeGlobalErrorsWhenSkillWroteNoOutput(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "synthesis.json") || !strings.Contains(err.Error(), "nothing to do") {
 		t.Errorf("error = %q, want it to name the missing file and the CLI's own report", err)
+	}
+}
+
+// TestSynthesizeGlobalErrorTextIsHomeFree: the CLI's own report lands verbatim
+// in the run state and the TUI's error badge, so it gets the same home-path
+// rewrite as every other string that outlives the process.
+func TestSynthesizeGlobalErrorTextIsHomeFree(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	s, _ := fakeGlobalCLI(t, func(string) ([]byte, error) {
+		body, err := json.Marshal(map[string]any{
+			"is_error": true,
+			"result":   "cannot read " + home + "/.claude/CLAUDE.md or $HOME/settings.json",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return body, nil
+	})
+	_, err := s.SynthesizeGlobal(context.Background(), globalTestBundles())
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if strings.Contains(err.Error(), home) || strings.Contains(err.Error(), "$HOME") {
+		t.Errorf("error = %q, want home paths rewritten to ~", err)
+	}
+	if !strings.Contains(err.Error(), "~/.claude/CLAUDE.md") {
+		t.Errorf("error = %q, want the report preserved with ~ paths", err)
 	}
 }
 

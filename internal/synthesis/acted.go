@@ -64,10 +64,9 @@ func MarkActed(key string) error {
 	return writeActedKeys(m)
 }
 
-// UnmarkActed removes key from the acted-keys store, resurfacing the
-// recommendation in future curations. Used to roll back an acted mark when the
-// launch it recorded fails before anything lands (see the insight launch
-// failure handler in internal/app). A no-op when the key isn't recorded.
+// UnmarkActed removes key from the acted-keys store, resurfacing the finding in
+// future filtering. Used by the TUI to roll back an acted mark when the launch
+// it recorded fails before anything lands. A no-op when the key isn't recorded.
 // Guarded by the same acted-file lock as MarkActed.
 func UnmarkActed(key string) error {
 	lock, err := insights.AcquireActedLock()

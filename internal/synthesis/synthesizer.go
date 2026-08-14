@@ -61,7 +61,7 @@ func wrapClaudeExit(out []byte, err error) error {
 	if detail == "" {
 		detail = "stdout: " + strings.TrimSpace(string(out))
 	}
-	return fmt.Errorf("claude exit %d: %s", ee.ExitCode(), truncRunes(detail, 2000))
+	return fmt.Errorf("claude exit %d: %s", ee.ExitCode(), tildeHome(truncRunes(detail, 2000)))
 }
 
 // truncRunes caps model- or CLI-authored text before it reaches an error
@@ -346,7 +346,7 @@ func checkGlobalEnvelope(out []byte) error {
 		return nil
 	}
 	if env.IsError {
-		return fmt.Errorf("claude reported error: %s", truncRunes(strings.TrimSpace(env.Result), 500))
+		return fmt.Errorf("claude reported error: %s", cliText(env.Result))
 	}
 	return nil
 }
@@ -360,10 +360,16 @@ func claudeResultText(out []byte) string {
 		Result string `json:"result"`
 	}
 	if err := json.Unmarshal(out, &env); err == nil && strings.TrimSpace(env.Result) != "" {
-		return truncRunes(strings.TrimSpace(env.Result), 500)
+		return cliText(env.Result)
 	}
 	if len(bytes.TrimSpace(out)) == 0 {
 		return "no output"
 	}
-	return truncRunes(strings.TrimSpace(string(out)), 500)
+	return cliText(string(out))
 }
+
+// cliText prepares CLI- or model-authored text for an error: trimmed, capped,
+// and home-rewritten. These errors are stored verbatim in the run state and
+// shown by the TUI, so they get the same treatment as any other string that
+// leaves the process (see tildeHome, verifier.modelText).
+func cliText(s string) string { return tildeHome(truncRunes(strings.TrimSpace(s), 500)) }

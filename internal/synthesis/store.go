@@ -22,9 +22,14 @@ func Dir() string { return synthesisDir() }
 // them, and nothing loads them (spec §Verification).
 func globalDir() string { return filepath.Join(synthesisDir(), "global") }
 
-// diagnosticsDir holds the model output of runs that never produced a
-// snapshot. See preserveFailedSynthesis.
-func diagnosticsDir() string { return filepath.Join(synthesisDir(), "diagnostics") }
+// diagnosticsDir holds the model output of runs that never produced a snapshot
+// (see preserveFailedSynthesis). Deliberately a sibling of the synthesis dir,
+// not a child: these bytes are raw model output that never reached the
+// verifier's privacy scan, and Dir() is copied wholesale into the eval data
+// repo by the freeze (internal/eval.CopyGroundTruth). Keeping unscanned output
+// structurally outside that root is what stops it being published, rather than
+// a filter every future caller of Dir() has to remember.
+func diagnosticsDir() string { return filepath.Join(insights.InsightsDir(), "synthesis-diagnostics") }
 
 // snapshotTimeLayout names a snapshot file after its instant, colon-free so it
 // is a legal filename on every platform, and fixed-width UTC so lexical order

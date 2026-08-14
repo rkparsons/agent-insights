@@ -360,15 +360,11 @@ func expandHome(path, home string) string {
 	return path
 }
 
-// tilde rewrites the user's home directory (literal or $HOME) to "~"
-// anywhere in s. Applied to every path-bearing structured field and to every
-// note Go authors, so the stored snapshot never carries a real home path.
-func (v *verifier) tilde(s string) string {
-	if v.home != "" {
-		s = strings.ReplaceAll(s, v.home, "~")
-	}
-	return strings.ReplaceAll(s, "$HOME", "~")
-}
+// tilde rewrites the user's home directory (literal or $HOME) to "~" anywhere
+// in s, against the home resolved once for this verification. Applied to every
+// path-bearing structured field and to every note Go authors, so the stored
+// snapshot never carries a real home path.
+func (v *verifier) tilde(s string) string { return tildeWithHome(s, v.home) }
 
 // filterQuotes drops every quote that is not verbatim in a cited item's quote
 // pool — the pool being that item's own quote, or a cited signal's detail
