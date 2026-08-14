@@ -18,18 +18,36 @@ import (
 const (
 	fabricationHardFailRate = 0.15
 	churnWarnThreshold      = 0.5
-	// substantiveSignalMagnitude is the "worth a finding" bar for a G* signal,
-	// mirroring the bundle's own signal floor (v1's probe used the same value).
+	// substantiveSignalMagnitude restates the bundle's own signal floor, as v1's
+	// probe did. Honest accounting: against a real bundle it filters NOTHING —
+	// computeSignals sets Magnitude = len(MemberSessions) and emits only signals
+	// at or above that floor. It is kept as a defensive restatement so a
+	// bundle-side floor change cannot silently widen what this gate calls
+	// substantive: the eval owns its own definition.
 	substantiveSignalMagnitude = 3
 	// prefClusterFloor is the "recurring" bar: a practice stated in fewer P*
 	// items than this is a one-off, and skipping it is not a recall miss.
 	prefClusterFloor = 3
-	// practiceSimilarity is the "same practice" bar for token-multiset overlap,
-	// mirroring the probe-pinned threshold the bundle's own directive
-	// clustering uses (0.5 admits junk, 0.7 fragments genuine repeats). One
-	// constant for both places the question is asked: which P* items state the
-	// same practice, and which findings across two runs state the same one.
-	practiceSimilarity = 0.6
+	// checkableQuotesPerFinding is the raw schema's per-finding quote cap (skill
+	// schema: quotes maxItems 3). The verifier trims past the cap BEFORE its
+	// pool check, so quotes beyond it were never checkable and must not sit in
+	// the fabrication denominator.
+	checkableQuotesPerFinding = 3
+)
+
+// The two "same practice?" bars, pinned to the frozen preference corpus rather
+// than borrowed from the bundle's directive clustering: prose rules score far
+// lower than directive clauses, and the borrowed 0.6 yields ZERO clusters at
+// the recurrence floor over the frozen pool — see
+// TestProbeSimilarityBarsPinnedToFrozenPool for the census and the band
+// evidence. They are split because the two questions have opposite failure
+// costs: a loose preference bar merges distinct practices into a phantom
+// cluster (a false miss, human attention wasted), while a tight churn bar
+// leaves same-practice restatements unmatched and scores them maximal churn
+// (an unconditional stability warning, signal destroyed).
+const (
+	prefClusterSimilarity = 0.5  // 1 real cluster (5 forms) over the frozen pool; 0.45 starts merging practices
+	churnMatchSimilarity  = 0.45 // inside the 0.40-0.50 band, every inspected pair of which restates one practice
 )
 
 // The dropped-suppression cards hang off a pseudo-target: they belong to the
@@ -54,12 +72,23 @@ type recallProbe struct {
 	IDs  []string
 }
 
-// droppedEntry is one dropped list entry with its resolved session set.
+// droppedEntry is one dropped list entry with its resolved session set. IDs and
+// Cites are the same citations in the two shapes the probes need: a list to ask
+// "did any finding engage this drop's evidence", a set to ask "does this drop
+// cite the probe's evidence".
 type droppedEntry struct {
 	Summary  string
 	Reason   string
+	IDs      []string
 	Cites    map[string]bool
 	Sessions []string
+}
+
+// key identifies one drop for adjudication: its normalized summary and the
+// sessions behind its evidence, stable across samples that repeat it.
+func (d droppedEntry) key() AdjKey {
+	return AdjKey{TargetID: tier1CardTarget, Statement: normalizeStatement(d.Summary),
+		IDSetHash: idSetHash(d.Sessions), Trigger: droppedSuppression}
 }
 
 // tier1Sample is one L2 sample reduced to what the trust probes read: RAW
@@ -72,10 +101,13 @@ type tier1Sample struct {
 	Empty        bool
 	FindingCites map[string]bool
 	Dropped      []droppedEntry
-	RawQuotes    int
-	QuoteDrops   int
-	ProseLeaks   int
-	Items        []ScoredItem
+	// CheckableQuotes is the fabrication denominator: quotes the model cited
+	// that the verifier actually pool-checked — raw quotes capped per finding,
+	// since it trims past the cap before checking.
+	CheckableQuotes int
+	QuoteDrops      int
+	ProseLeaks      int
+	Items           []ScoredItem
 }
 
 // ComputeTier1 embeds the trust-property gates in the verdict, recast for the
@@ -113,12 +145,13 @@ func ComputeTier1(record RunRecord, cache *Cache, adj map[string]Adjudication) (
 		if s.Empty {
 			reasons = append(reasons, fmt.Sprintf("sample %d: empty synthesis output (fail-closed)", s.Index))
 		}
-		if s.RawQuotes > 0 {
-			if rate := float64(s.QuoteDrops) / float64(s.RawQuotes); rate > t1.MaxRawFabricationRate {
+		if s.CheckableQuotes > 0 {
+			if rate := float64(s.QuoteDrops) / float64(s.CheckableQuotes); rate > t1.MaxRawFabricationRate {
 				t1.MaxRawFabricationRate = rate
 			}
 		}
 		t1.ReportPrivacyLeakCount += s.ProseLeaks
+		floorsHeld := map[string][]string{} // drop key hash → the floors it is holding up
 		for _, p := range probes {
 			if citesAny(s.FindingCites, p.IDs) {
 				continue
@@ -133,9 +166,21 @@ func ComputeTier1(record RunRecord, cache *Cache, adj map[string]Adjudication) (
 			}
 			suppressed[p.Kind+"/"+p.ID] = true // deduped across samples, as misses are
 			for _, d := range suppressing {
-				if c, ok := droppedCard(d, p, adj, seenCard); ok {
-					cards = append(cards, c)
-				}
+				h := d.key().Hash()
+				floorsHeld[h] = append(floorsHeld[h], p.Kind+" floor "+p.ID)
+			}
+		}
+		// The carding bargain: every drop the findings did not engage goes to
+		// the human, whether or not it is holding up a floor. A drop nobody
+		// acted on and nobody corroborated is exactly where a recall miss can
+		// be laundered through a plausible-sounding reason.
+		for _, d := range s.Dropped {
+			held := floorsHeld[d.key().Hash()]
+			if len(held) == 0 && citesAny(s.FindingCites, d.IDs) {
+				continue
+			}
+			if c, ok := droppedCard(d, held, adj, seenCard); ok {
+				cards = append(cards, c)
 			}
 		}
 	}
@@ -178,8 +223,12 @@ func ComputeTier1(record RunRecord, cache *Cache, adj map[string]Adjudication) (
 	}
 	if t1.DroppedSuppressions > 0 {
 		warnings = append(warnings, fmt.Sprintf(
-			"%d recall floor(s) suppressed by a dropped citation — %d drop(s) carded for a ruling; an unjustified drop is a laundered miss",
-			t1.DroppedSuppressions, len(cards)))
+			"%d recall floor(s) suppressed by a dropped citation; an unjustified drop is a laundered miss",
+			t1.DroppedSuppressions))
+	}
+	if len(cards) > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"%d dropped entr(ies) carded for a ruling — evidence the findings never engaged", len(cards)))
 	}
 	return t1, reasons, warnings, cards, nil
 }
@@ -232,21 +281,22 @@ func newTier1Sample(so SampleOutput, vo VerifiedOutput, bundles map[string]synth
 	if len(vo.Raw.Findings) > 0 || len(vo.Raw.Dropped) > 0 {
 		for _, f := range vo.Raw.Findings {
 			markCited(s.FindingCites, f.EvidenceIDs)
-			s.RawQuotes += len(f.Quotes)
+			s.CheckableQuotes += min(len(f.Quotes), checkableQuotesPerFinding)
 			prose = append(prose, f.Title, f.Statement, f.RankRationale, f.Asset.Content)
 		}
 		dropped = vo.Raw.Dropped
 	} else {
 		for _, f := range vo.Snapshot.Findings {
 			markCited(s.FindingCites, f.EvidenceIDs)
-			s.RawQuotes += len(f.Quotes)
+			s.CheckableQuotes += min(len(f.Quotes), checkableQuotesPerFinding)
 			prose = append(prose, f.Title, f.Statement, f.RankRationale, f.Asset.Content)
 		}
 		dropped = vo.Snapshot.Dropped
 	}
 	for _, d := range dropped {
 		sessions, _ := idx.resolve(d.EvidenceIDs)
-		e := droppedEntry{Summary: d.Summary, Reason: d.Reason, Cites: map[string]bool{}, Sessions: sessions}
+		e := droppedEntry{Summary: d.Summary, Reason: d.Reason,
+			IDs: d.EvidenceIDs, Cites: map[string]bool{}, Sessions: sessions}
 		markCited(e.Cites, d.EvidenceIDs)
 		s.Dropped = append(s.Dropped, e)
 		prose = append(prose, d.Summary, d.Reason)
@@ -297,11 +347,11 @@ func suppressingDrops(dropped []droppedEntry, ids []string) []droppedEntry {
 	return out
 }
 
-// droppedCard turns one suppressing drop into a recognition card, deduped by
-// adjudication key across probes and samples and skipped once ruled on.
-func droppedCard(d droppedEntry, p recallProbe, adj map[string]Adjudication, seen map[string]bool) (PendingCard, bool) {
-	k := AdjKey{TargetID: tier1CardTarget, Statement: normalizeStatement(d.Summary),
-		IDSetHash: idSetHash(d.Sessions), Trigger: droppedSuppression}
+// droppedCard turns one contested drop into a recognition card, deduped by
+// adjudication key across samples and skipped once ruled on. floors names the
+// recall floors the drop is holding up, if any.
+func droppedCard(d droppedEntry, floors []string, adj map[string]Adjudication, seen map[string]bool) (PendingCard, bool) {
+	k := d.key()
 	h := k.Hash()
 	if seen[h] {
 		return PendingCard{}, false
@@ -310,10 +360,14 @@ func droppedCard(d droppedEntry, p recallProbe, adj map[string]Adjudication, see
 	if _, ruled := adj[h]; ruled {
 		return PendingCard{}, false
 	}
+	why := "no finding cites the evidence it names"
+	if len(floors) > 0 {
+		why = "the only thing holding up the " + strings.Join(sortedSet(floors), ", ")
+	}
 	return PendingCard{TargetID: tier1CardTarget, Trigger: droppedSuppression, Key: k,
 		Adjudicable: true, ItemText: d.Summary, SessionIDs: d.Sessions,
-		Note: fmt.Sprintf("dropped as %q — the drop is the only thing holding up the %s recall floor for %s; accept if the drop is right, reject if it launders a miss",
-			d.Reason, p.Kind, p.ID)}, true
+		Note: fmt.Sprintf("dropped as %q — %s; accept if the drop is right, reject if it launders a recall miss",
+			d.Reason, why)}, true
 }
 
 // recallProbes derives the floors from the bundles alone: every substantive
@@ -379,7 +433,7 @@ func prefClusters(bundles map[string]synthesis.EvidenceBundle) [][]string {
 	}
 	for i := range items {
 		for j := i + 1; j < len(items); j++ {
-			if multisetJaccard(items[i].tokens, items[j].tokens) >= practiceSimilarity {
+			if multisetJaccard(items[i].tokens, items[j].tokens) >= prefClusterSimilarity {
 				uf[find(i)] = find(j)
 			}
 		}
@@ -417,7 +471,7 @@ func membershipChurn(a, b []ScoredItem) float64 {
 	total := 0.0
 	for _, ia := range af {
 		ta := practiceTokens(ia.Text)
-		best, bestSim := 0.0, practiceSimilarity
+		best, bestSim := 0.0, churnMatchSimilarity
 		for i, ib := range bf {
 			if sim := multisetJaccard(ta, bTokens[i]); sim >= bestSim {
 				best, bestSim = sessionJaccard(ia.SessionIDs, ib.SessionIDs), sim

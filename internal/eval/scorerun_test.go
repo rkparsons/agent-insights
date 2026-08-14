@@ -129,10 +129,11 @@ func TestScoreRunEndToEndFreshBaseline(t *testing.T) {
 	}
 }
 
-// Samples lost at synthesis time (LLM failure or a verifier rejection) shrink
-// the scoring denominator silently — the median is taken over survivors and
-// sample agreement is trivially 1.0. Until the pre-spend refusal channel is
-// re-sourced (Task 9), scoring must at least say so in the verdict.
+// Samples the LLM never produced shrink the scoring denominator silently — the
+// median is taken over survivors and sample agreement is trivially 1.0 — so the
+// loss must at least reach the verdict. This is the RESIDUAL case only: a
+// sample the verifier rejected refuses scoring outright (the hard-error gate
+// below), never merely warns.
 func TestScoreRunWarnsOnLostSamples(t *testing.T) {
 	_, opts := buildScoreFixture(t)
 	opts.Synth = &fakeGlobalSynth{raw: mergedRaw(), errs: []bool{true, true}} // only sample 2 lands

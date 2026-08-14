@@ -45,9 +45,9 @@ type TargetVerdict struct {
 	Triggers         []Trigger             `json:"triggers,omitempty"`
 }
 
-// PendingCard is the local-only source a trigger generates; Task 9 renders it
-// into recognition cards. Session ids here feed one-line lookups and never
-// render into the card itself.
+// PendingCard is the local-only source a trigger generates; BuildCards renders
+// it into a recognition card. Session ids here feed one-line lookups and
+// adjudication keys, and never render into the card itself.
 type PendingCard struct {
 	TargetID    string
 	Trigger     string

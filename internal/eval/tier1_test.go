@@ -36,6 +36,12 @@ func tier1Case(t *testing.T, bundles map[string]synthesis.EvidenceBundle, outs [
 // probeBundle carries every kind the recall probes read: a recurring
 // preference cluster (3 items, one practice), a substantive G signal, and
 // friction items.
+//
+// G2 is deliberately a shape BuildBundle cannot emit — Magnitude always equals
+// len(MemberSessions) and only signals at or above the bundle's own floor are
+// emitted, so nothing real ever trips the eval's magnitude filter. It pins that
+// filter as a defensive restatement: a bundle-side floor change must not
+// silently widen what this gate calls substantive.
 func probeBundle(repo string) synthesis.EvidenceBundle {
 	return synthesis.EvidenceBundle{Repo: repo,
 		Friction: []synthesis.FrictionItem{
@@ -189,6 +195,51 @@ func TestComputeTier1DroppedCitationSuppressesAndCards(t *testing.T) {
 	}
 }
 
+// The carding bargain is not limited to suppressed floors: a drop whose
+// evidence NO finding engages faces the human gate even when every floor is
+// clear, because a junk reason over evidence nobody acted on is exactly the
+// laundering the gate exists to catch. A drop the findings also cite is not
+// laundering anything and stays out of the set.
+func TestComputeTier1CardsDropsNoFindingEngages(t *testing.T) {
+	b := probeBundle("alpha")
+	b.Success = []synthesis.SuccessItem{
+		{ID: "S1", Summary: "shipped", SessionID: "s1"},
+		{ID: "S2", Summary: "shipped again", SessionID: "s2"},
+	}
+	bundles := map[string]synthesis.EvidenceBundle{"alpha": b}
+
+	// every floor cleared, but the drop names evidence no finding touches
+	vo := withDropped(findingSnapshot("alpha/P1", "alpha/G1", "alpha/F1"),
+		"a stray success note", "not actionable", "alpha/S2")
+	rec, cache := tier1Case(t, bundles, []VerifiedOutput{vo}, 0)
+	t1, _, _, cards, err := ComputeTier1(rec, cache, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(t1.OpportunityRecallMisses)+len(t1.PrefRecallMisses)+len(t1.FrictionRecallMisses) != 0 ||
+		t1.DroppedSuppressions != 0 {
+		t.Fatalf("every floor is cleared by the finding: %+v", t1)
+	}
+	if len(cards) != 1 || cards[0].ItemText != "a stray success note" {
+		t.Fatalf("an unengaged drop must reach the human gate: %+v", cards)
+	}
+	if !strings.Contains(cards[0].Note, "no finding") {
+		t.Fatalf("the card must say why it is contested: %q", cards[0].Note)
+	}
+
+	// same evidence in the finding AND the drop: nothing to rule on
+	engaged := withDropped(findingSnapshot("alpha/P1", "alpha/G1", "alpha/F1"),
+		"the same friction, partly", "covered by the finding above", "alpha/F1")
+	engagedRec, engagedCache := tier1Case(t, bundles, []VerifiedOutput{engaged}, 0)
+	_, _, _, cards2, err := ComputeTier1(engagedRec, engagedCache, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards2) != 0 {
+		t.Fatalf("a drop the findings engage needs no ruling: %+v", cards2)
+	}
+}
+
 // Churn is the run-to-run session-set Jaccard of findings matched by statement
 // similarity, over FRESH sample pairs only; an empty synthesis fails closed.
 func TestComputeTier1ChurnAndEmptyFailClosed(t *testing.T) {
@@ -243,15 +294,18 @@ func TestComputeTier1ChurnAndEmptyFailClosed(t *testing.T) {
 }
 
 // The fabrication signal is the raw quote-drop rate: quotes the model cited
-// that the verifier could not find verbatim, over the quotes it cited.
+// that the verifier could not find verbatim, over the quotes it actually
+// CHECKED — the cap-breaching tail is trimmed before the pool check, so it was
+// never checkable and must not dilute the denominator.
 func TestComputeTier1QuoteDropRateHardFail(t *testing.T) {
 	b := synthesis.EvidenceBundle{Repo: "alpha",
 		Friction: []synthesis.FrictionItem{{ID: "F1", OneLine: "a", SessionID: "s1"}}}
 	vo := findingSnapshot("alpha/F1")
-	vo.Raw.Findings[0].Quotes = []string{"q1", "q2", "q3", "q4"}
-	vo.Snapshot.Findings[0].Quotes = []string{"q1", "q2", "q3"}
+	vo.Raw.Findings[0].Quotes = []string{"q1", "q2", "q3", "q4"} // one past the cap
+	vo.Snapshot.Findings[0].Quotes = []string{"q1", "q2"}
 	vo.Snapshot.Meta.ValidationNotes = []string{
 		`finding "T": already_adopted downgraded to unknown (no excerpt)`,
+		`finding "T": trimmed to 3 quotes`,
 		`finding "T": dropped 1 quote(s) not verbatim in the cited evidence`,
 	}
 	rec, cache := tier1Case(t, map[string]synthesis.EvidenceBundle{"alpha": b}, []VerifiedOutput{vo}, 0)
@@ -260,15 +314,15 @@ func TestComputeTier1QuoteDropRateHardFail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := t1.MaxRawFabricationRate; got < 0.24 || got > 0.26 {
-		t.Fatalf("drop rate = %v, want 1 of 4 cited quotes", got)
+	if got := t1.MaxRawFabricationRate; got < 0.33 || got > 0.34 {
+		t.Fatalf("drop rate = %v, want 1 of the 3 CHECKED quotes (the 4th was trimmed unchecked)", got)
 	}
 	if len(reasons) != 1 || !strings.Contains(reasons[0], "fabrication rate") {
 		t.Fatalf("a rate over the gate must hard-fail: %v", reasons)
 	}
 
 	clean := findingSnapshot("alpha/F1")
-	clean.Raw.Findings[0].Quotes = []string{"q1", "q2", "q3", "q4"}
+	clean.Raw.Findings[0].Quotes = []string{"q1", "q2", "q3"}
 	clean.Snapshot.Findings[0].Quotes = clean.Raw.Findings[0].Quotes
 	cleanRec, cleanCache := tier1Case(t, map[string]synthesis.EvidenceBundle{"alpha": b}, []VerifiedOutput{clean}, 0)
 	t1c, cleanReasons, _, _, err := ComputeTier1(cleanRec, cleanCache, nil)
