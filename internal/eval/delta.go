@@ -24,14 +24,14 @@ type ComparisonTuple struct {
 	RubricSetHash string            `json:"rubric_set_hash"`
 }
 
-// VerdictBucket summarizes one bucket without any id lists (populations stay
-// in the run record; verdicts are structurally id-free).
+// VerdictBucket summarizes one bucket's evidence contribution without any id
+// lists (populations stay in the run record; verdicts are structurally
+// id-free). Sample counts are not per bucket under v2 — one synthesis covers
+// every bucket — so they live on the Verdict.
 type VerdictBucket struct {
 	Bucket       string `json:"bucket"`
 	Sessions     int    `json:"sessions"`
 	GapFallbacks int    `json:"gap_fallbacks"`
-	Samples      int    `json:"samples"`
-	FreshSamples int    `json:"fresh_samples"`
 	BundleHash   string `json:"bundle_hash"`
 }
 
@@ -87,6 +87,8 @@ type Verdict struct {
 	RecordName      string              `json:"record_name"` // basename only, never a path
 	Provenance      map[string]string   `json:"provenance"`
 	Buckets         []VerdictBucket     `json:"buckets"`
+	Samples         int                 `json:"samples"`       // global L2 samples scored
+	FreshSamples    int                 `json:"fresh_samples"` // of those, cache misses this run
 	Targets         []TargetVerdict     `json:"targets"`
 	Probes          []ProbeResult       `json:"probes"`
 	PartA           PartASummary        `json:"part_a"`

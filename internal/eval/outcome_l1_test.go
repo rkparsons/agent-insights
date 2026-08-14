@@ -19,12 +19,8 @@ func (f *fakeJudge) Judge(ctx context.Context, in insights.ReducedInput) (insigh
 }
 
 // TestRunOutcomeFullScopeJudgesAndCaches covers the full-scope L1 half: every
-// session is re-judged, cached, and fed to the bundle stage as fresh analyses.
-//
-// Task 8-10: the assertions past the bundle — that the verify-stage cache holds
-// a synthesis built from the fresh judged fields — belonged to the v1 L2 stage
-// removed in plan Task 7, and return with the global run in plan Task 8. The
-// run itself now fails closed there, so the L1 evidence is read from the cache.
+// session is re-judged, cached, and fed to the bundle stage as fresh analyses —
+// which is what the one global synthesis then reads.
 func TestRunOutcomeFullScopeJudgesAndCaches(t *testing.T) {
 	_, opts := buildOutcomeFixture(t)
 	fj := &fakeJudge{jf: insights.JudgedFields{
@@ -34,13 +30,13 @@ func TestRunOutcomeFullScopeJudgesAndCaches(t *testing.T) {
 	opts.Judge = fj
 
 	rec, err := RunOutcome(context.Background(), opts)
-	if err == nil {
-		t.Fatal("Task 8-10: the L2 stage must fail closed until the v2 rework")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if fj.calls != 2 { // s1 + s2
+	if fj.calls != 2 { // s1 + s2, one per bucket
 		t.Fatalf("judge calls = %d", fj.calls)
 	}
-	if len(rec.Buckets) != 1 {
+	if len(rec.Buckets) != 2 {
 		t.Fatalf("buckets: %+v", rec.Buckets)
 	}
 	// The cached bundle must carry the FRESH judged fields, not the pool's
@@ -53,9 +49,12 @@ func TestRunOutcomeFullScopeJudgesAndCaches(t *testing.T) {
 	if len(bundle.Success) == 0 || bundle.Success[0].Goal != "fresh-goal" {
 		t.Fatalf("bundle not built from fresh judged fields: %+v", bundle.Success)
 	}
+	if len(rec.SampleOutputs) != 3 {
+		t.Fatalf("full scope still samples the global synthesis: %+v", rec.SampleOutputs)
+	}
 
-	if _, err := RunOutcome(context.Background(), opts); err == nil {
-		t.Fatal("Task 8-10: the L2 stage must fail closed until the v2 rework")
+	if _, err := RunOutcome(context.Background(), opts); err != nil {
+		t.Fatal(err)
 	}
 	if fj.calls != 2 {
 		t.Fatalf("second run must serve L1 from cache, calls = %d", fj.calls)
@@ -78,7 +77,7 @@ func TestRunOutcomeL1SampleRunsSubsetOnly(t *testing.T) {
 	if fj.calls != rec.L1Sample.Analyzed {
 		t.Fatalf("judge calls %d != analyzed %d", fj.calls, rec.L1Sample.Analyzed)
 	}
-	if len(rec.Buckets) != 0 {
-		t.Fatal("l1-sample records no bucket outputs")
+	if len(rec.SampleOutputs) != 0 || opts.Synth.(*fakeGlobalSynth).calls != 0 {
+		t.Fatal("l1-sample mode must never reach the global synthesis")
 	}
 }

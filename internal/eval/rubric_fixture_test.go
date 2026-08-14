@@ -9,12 +9,12 @@ import (
 // covering every id the pipeline touches by hardcoded name: the probe triad
 // RunProbes reads directly (C-01 recall, N-01 negative_recall, C-04
 // near_miss — see probes.go's probeRecallRubricID etc.), a gap target
-// scorerun tests script matcher responses for (M1, repos[0]=tmux-ctrl so it
-// sees the fixture bucket's items), and an always-absent HIGH must_pass
-// regression target (C-07) whose benchmark.json status entry scorerun tests
-// edit directly. No real session ids, no real employer repos — this
-// replaces what used to be transparently available via the go:embed rubric
-// set now that rubrics live in the private data repo.
+// scorerun tests script matcher responses for (M1, anchored across both
+// fixture repos), and an always-absent HIGH must_pass regression target
+// (C-07) whose benchmark.json status entry scorerun tests edit directly. No
+// real session ids, no real employer repos — this replaces what used to be
+// transparently available via the go:embed rubric set now that rubrics live in
+// the private data repo.
 func writeMinimalRubricSet(t *testing.T, dataDir string) {
 	t.Helper()
 	rubrics := map[string]string{
@@ -43,7 +43,7 @@ part: regression
 tier: HIGH
 surface: either
 repos: [beta]
-statement: synthetic statement, always absent from the tmux-ctrl fixture bucket.
+statement: synthetic statement, always absent from the fixture synthesis.
 required_nuances:
   - synthetic nuance
 `,
@@ -51,7 +51,7 @@ required_nuances:
 part: gap
 tier: HIGH
 surface: either
-repos: [tmux-ctrl, alpha]
+repos: [alpha, beta]
 statement: synthetic gap statement.
 required_nuances:
   - synthetic nuance one

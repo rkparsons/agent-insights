@@ -151,7 +151,7 @@ func TestRubricValidationRejectsBadFiles(t *testing.T) {
 	if _, err := parseRubric("X.yaml", bad); err == nil || !strings.Contains(err.Error(), "X.yaml") {
 		t.Fatalf("want file-named validation error, got %v", err)
 	}
-	dupAnchor := []byte("id: G1\npart: gap\ntier: HIGH\nsurface: either\nrepos: [tmux-ctrl]\nstatement: s\nanchor_session_ids: [abc]\n")
+	dupAnchor := []byte("id: G1\npart: gap\ntier: HIGH\nsurface: either\nrepos: [beta]\nstatement: s\nanchor_session_ids: [abc]\n")
 	if _, err := parseRubric("G1.yaml", dupAnchor); err == nil || !strings.Contains(err.Error(), "anchor") {
 		t.Fatalf("gap rubric with anchors must fail, got %v", err)
 	}
@@ -160,12 +160,18 @@ func TestRubricValidationRejectsBadFiles(t *testing.T) {
 func TestRubricAnchorThemeValidation(t *testing.T) {
 	base := "id: C-77\npart: regression\ntier: HIGH\nsurface: theme\nrepos: [alpha]\nstatement: s\n"
 	anchored := base + "anchor_session_ids: [abc]\n"
-	if _, err := parseRubric("C-77.yaml", []byte(anchored)); err == nil || !strings.Contains(err.Error(), "anchor_theme") {
-		t.Fatalf("anchored rubric without anchor_theme must fail: %v", err)
+	// v2 anchors are finding-level and may span repos, so anchor_theme — the v1
+	// ground-truth pointer the as_consumed control reads — is optional.
+	v2 := anchored + "source_theme_session_ids: [abc]\n"
+	if r, err := parseRubric("C-77.yaml", []byte(v2)); err != nil || r.AnchorTheme != "" {
+		t.Fatalf("anchors without anchor_theme must parse under v2: %+v %v", r, err)
 	}
-	wrongBucket := anchored + "anchor_theme: tmux-ctrl/3\n"
+	if _, err := parseRubric("C-77.yaml", []byte(anchored)); err == nil || !strings.Contains(err.Error(), "source_theme_session_ids") {
+		t.Fatalf("anchored rubric without source ids must fail: %v", err)
+	}
+	wrongBucket := anchored + "anchor_theme: beta/3\nsource_theme_session_ids: [abc]\n"
 	if _, err := parseRubric("C-77.yaml", []byte(wrongBucket)); err == nil || !strings.Contains(err.Error(), "repos[0]") {
-		t.Fatalf("anchor_theme bucket must be repos[0]: %v", err)
+		t.Fatalf("a v1 anchor_theme must still name repos[0]: %v", err)
 	}
 	ok := anchored + "anchor_theme: alpha/3\nsource_theme_session_ids: [abc]\n"
 	r, err := parseRubric("C-77.yaml", []byte(ok))
@@ -182,7 +188,7 @@ func TestRubricAnchorThemeValidation(t *testing.T) {
 	if _, _, err := parseAnchorTheme("nonsense"); err == nil {
 		t.Fatal("parseAnchorTheme must reject un-slashed input")
 	}
-	if b, i, err := parseAnchorTheme("tmux-ctrl/10"); err != nil || b != "tmux-ctrl" || i != 10 {
+	if b, i, err := parseAnchorTheme("beta/10"); err != nil || b != "beta" || i != 10 {
 		t.Fatalf("parseAnchorTheme: %q %d %v", b, i, err)
 	}
 }

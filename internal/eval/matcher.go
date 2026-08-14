@@ -51,10 +51,10 @@ type MatchRubric struct {
 }
 
 type MatchItem struct {
-	ID      string `json:"id"` // "<bucket>/theme/<i>" | "<bucket>/rec/<i>" | "probe/<class>"
-	Bucket  string `json:"bucket"`
-	Surface string `json:"surface"` // "theme" | "recommendation"
-	Text    string `json:"text"`
+	ID      string   `json:"id"`    // "finding/<rank>" | "dropped/<i>" | "probe/<class>"
+	Repos   []string `json:"repos"` // the repos the item cites; several for a merged finding
+	Surface string   `json:"surface"`
+	Text    string   `json:"text"`
 }
 
 // MatchPayload is the exact matcher stdin; its JSON hash is the content part

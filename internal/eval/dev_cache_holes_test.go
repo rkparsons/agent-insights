@@ -30,21 +30,13 @@ func TestDevCacheHoles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	buckets := loadDevBuckets(t, cache, rec)
+	sampleItems, population := loadDevSamples(t, cache, rec)
 
 	const repeats = 3
 	holes, samplesChecked := 0, 0
 	for _, r := range rubrics {
-		repos := r.Repos
-		if r.Part == "negative" {
-			repos = sortedBucketNames(buckets)
-		}
-		bd, ok := buckets[repos[0]]
-		if !ok {
-			continue
-		}
-		for _, so := range bd.outputs.Samples {
-			items := itemsForSample(buckets, repos, so.SampleIndex)
+		for _, so := range rec.SampleOutputs {
+			items := sampleItems[so.SampleIndex]
 			payload := BuildMatchPayload(r, items)
 			if len(payload.Items) == 0 {
 				continue
@@ -75,7 +67,7 @@ func TestDevCacheHoles(t *testing.T) {
 			for _, it := range items {
 				byID[it.ID] = it
 			}
-			anchors, capAnchors := AnchorSets(r, buckets[r.Repos[0]].outputs.Population, nil)
+			anchors, capAnchors := AnchorSets(r, population, nil)
 			for k := 0; k < repeats; k++ {
 				if medianDecided(grans, repeats) {
 					break // cached-side branch: stops at first miss, never fresh

@@ -90,13 +90,14 @@ func medianGranularity(grans []string) string {
 }
 
 // SideMatch is an uncounted match worth carding: a corroboration failure that
-// would outrank the counted outcome, or any non-expected-bucket match.
+// would outrank the counted outcome, or any match on a dropped entry.
 type SideMatch struct {
 	Ref           string
 	Text          string
 	Granularity   string
 	Corroboration string
 	SessionIDs    []string
+	DropReason    string // dropped matches only: the model's stated reason
 }
 
 // SampleScore is one target's outcome on one L2 sample, with the local-only
@@ -143,8 +144,10 @@ func nuancePassCount(nuances []bool) int {
 // cap first (one bad item caps the whole target at over_generalized — spec),
 // then deterministic corroboration; the best counted match decides
 // (corroborated, anchorless, or human-accepted via adjudication). Uncounted
-// matches that outrank the decision — and every cross-bucket match — are kept
-// as side matches for cards.
+// matches that outrank the decision — and every match on a dropped entry — are
+// kept as side matches for cards. A dropped match is never counted, not even
+// by adjudication: accepting its card dismisses the recognition prompt, it
+// does not turn the drop into a hit.
 func aggregateRepeat(r Rubric, items map[string]ScoredItem, res MatchResult, anchors, capAnchors []string, adj map[string]Adjudication) repeatScore {
 	out := repeatScore{Granularity: "absent"}
 	type cand struct {
@@ -166,7 +169,7 @@ func aggregateRepeat(r Rubric, items map[string]ScoredItem, res MatchResult, anc
 		if gran == "full" && !allTrue(m.NuanceResults) {
 			gran = "partial" // full requires every nuance; enforce even if the matcher slipped
 		}
-		c := cand{gran: gran, corro: Corroborate(it, r.Repos[0], anchors, capAnchors), item: it, nuances: m.NuanceResults}
+		c := cand{gran: gran, corro: Corroborate(it, anchors, capAnchors), item: it, nuances: m.NuanceResults}
 		switch c.corro {
 		case CorroborationOK, CorroborationGrounded, CorroborationNoAnchors:
 			c.counted = true
@@ -234,10 +237,11 @@ func aggregateRepeat(r Rubric, items map[string]ScoredItem, res MatchResult, anc
 		if c.counted {
 			continue
 		}
-		if c.corro == CorroborationCrossBucket || granularityRank[c.gran] > granularityRank[out.Granularity] {
+		if c.corro == CorroborationDropped || granularityRank[c.gran] > granularityRank[out.Granularity] {
 			out.SideMatches = append(out.SideMatches, SideMatch{
 				Ref: c.item.ID, Text: c.item.Text, Granularity: c.gran,
 				Corroboration: c.corro, SessionIDs: c.item.SessionIDs,
+				DropReason: c.item.DropReason,
 			})
 		}
 	}
@@ -246,8 +250,8 @@ func aggregateRepeat(r Rubric, items map[string]ScoredItem, res MatchResult, anc
 
 // scoreTargetSample scores one (rubric, sample): k matcher repeats stabilize
 // the read (median = majority when one exists), and the first repeat voting
-// the median carries the detail forward. An empty payload — no items after
-// surface/bucket filtering — is absent without an LLM call (fail-closed
+// the median carries the detail forward. An empty payload — a sample whose
+// synthesis produced nothing — is absent without an LLM call (fail-closed
 // against wasted spend, not against detection: nothing to detect).
 func scoreTargetSample(ctx context.Context, cache *Cache, m Matcher, envHash string, r Rubric, items []ScoredItem, anchors, capAnchors []string, adj map[string]Adjudication, sampleIndex, repeats int) (SampleScore, error) {
 	if repeats < 1 {

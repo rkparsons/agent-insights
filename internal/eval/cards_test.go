@@ -10,14 +10,14 @@ import (
 )
 
 func cardResults() []TargetResult {
-	r := scoreRubric() // Task 6 fixture: ID C-77, expected bucket alpha
+	r := scoreRubric() // Task 6 fixture: ID C-77
 	return []TargetResult{{
 		Rubric:  r,
 		Verdict: TargetVerdict{ID: r.ID},
 		Pending: []PendingCard{
 			{TargetID: r.ID, Trigger: CorroborationMismatch, Adjudicable: true,
-				Key: AdjKey{TargetID: r.ID, Statement: "mega theme", IDSetHash: idSetHash([]string{"sA", "sX"}), RubricHash: r.Hash, Trigger: CorroborationMismatch},
-				Ref: "alpha/theme/1", ItemText: "Mega theme", Granularity: "full",
+				Key: AdjKey{TargetID: r.ID, Statement: "mega finding", IDSetHash: idSetHash([]string{"sA", "sX"}), RubricHash: r.Hash, Trigger: CorroborationMismatch},
+				Ref: "finding/2", ItemText: "Mega finding", Granularity: "full",
 				SessionIDs: []string{"sA", "sX"}},
 			{TargetID: r.ID, Trigger: "sample_split", Adjudicable: false,
 				ItemText: "Verify claims", Quotes: []string{"vq"}, Note: "samples [2] disagree"},
@@ -27,9 +27,9 @@ func cardResults() []TargetResult {
 
 func TestBuildCardsMembershipOneLines(t *testing.T) {
 	anchors := map[string][]string{"C-77": {"sA", "sB"}}
-	oneLines := map[string]map[string]string{"alpha": {
+	oneLines := map[string]string{
 		"sA": "took a detour", "sB": "diffed stale base", "sX": "unrelated session",
-	}}
+	}
 	cards, err := BuildCards(cardResults(), anchors, oneLines)
 	if err != nil {
 		t.Fatal(err)
@@ -46,7 +46,7 @@ func TestBuildCardsMembershipOneLines(t *testing.T) {
 	if mem == nil || mem.KeyHash == "" || !mem.Adjudicable {
 		t.Fatalf("membership card: %+v", cards)
 	}
-	if mem.Statement == "" || mem.ItemText != "Mega theme" {
+	if mem.Statement == "" || mem.ItemText != "Mega finding" {
 		t.Fatalf("recognition surface: %+v", mem)
 	}
 	if len(mem.AddedOneLines) != 1 || mem.AddedOneLines[0] != "unrelated session" {
@@ -60,11 +60,37 @@ func TestBuildCardsMembershipOneLines(t *testing.T) {
 func TestBuildCardsRejectsSessionIDLeak(t *testing.T) {
 	results := cardResults()
 	// a one_line that itself contains a session uuid must be caught
-	oneLines := map[string]map[string]string{"alpha": {
-		"sX": "mentions 0abc1234-de56-4f78-9abc-def012345678 verbatim",
-	}}
+	oneLines := map[string]string{"sX": "mentions 0abc1234-de56-4f78-9abc-def012345678 verbatim"}
 	if _, err := BuildCards(results, map[string][]string{"C-77": {"sA", "sB"}}, oneLines); err == nil {
 		t.Fatal("cards containing a session id must be rejected")
+	}
+}
+
+// A dropped entry that matched a rubric cards with the same membership
+// vocabulary as a corroboration failure: what it cited, what it missed.
+func TestBuildCardsDroppedEntry(t *testing.T) {
+	r := scoreRubric()
+	results := []TargetResult{{Rubric: r, Verdict: TargetVerdict{ID: r.ID},
+		Pending: []PendingCard{{TargetID: r.ID, Trigger: CorroborationDropped, Adjudicable: true,
+			Key: AdjKey{TargetID: r.ID, Statement: "nit", IDSetHash: idSetHash([]string{"sA"}),
+				RubricHash: r.Hash, Trigger: CorroborationDropped},
+			Ref: "dropped/0", ItemText: "comment-style nit", Granularity: "full",
+			SessionIDs: []string{"sA"},
+			Note:       "the model dropped this evidence — one session only — but it matches the rubric"}}}}
+	cards, err := BuildCards(results, map[string][]string{"C-77": {"sA", "sB"}},
+		map[string]string{"sA": "took a detour", "sB": "diffed stale base"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 1 || cards[0].Trigger != CorroborationDropped {
+		t.Fatalf("dropped card: %+v", cards)
+	}
+	if len(cards[0].MissingOneLines) != 1 || cards[0].MissingOneLines[0] != "diffed stale base" {
+		t.Fatalf("a dropped card must show the anchors it missed: %+v", cards[0])
+	}
+	md := RenderCardsMarkdown(cards)
+	if !strings.Contains(md, "dropped this evidence") {
+		t.Fatalf("drop reason must reach the recognition surface: %s", md)
 	}
 }
 
@@ -83,7 +109,7 @@ func TestSessionOneLinesPreference(t *testing.T) {
 func TestWriteCardsAndMarkdown(t *testing.T) {
 	cards, err := BuildCards(cardResults(),
 		map[string][]string{"C-77": {"sA", "sB"}},
-		map[string]map[string]string{"alpha": {"sB": "diffed stale base", "sX": "unrelated"}})
+		map[string]string{"sB": "diffed stale base", "sX": "unrelated"})
 	if err != nil {
 		t.Fatal(err)
 	}

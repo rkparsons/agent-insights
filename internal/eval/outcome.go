@@ -18,16 +18,22 @@ import (
 
 const consecutiveLLMFailureLimit = 3
 
+// globalSynthesisTimeout bounds one L2 sample. The production run allows
+// synthesis.DefaultGlobalTimeout for a tool-enabled cross-repo pass; eval must
+// not kill a call that would have succeeded, because the spend is already gone.
+const globalSynthesisTimeout = synthesis.DefaultGlobalTimeout
+
 type OutcomeOptions struct {
 	DataDir, CacheDir string
-	Scope             string            // "l2" (default) | "full"
-	Population        string            // "scoring" (default) | "as_consumed"
-	Samples           int               // default 3
-	L1Sample          bool              // Task 11
-	PoolVersion       string            // default "v1"
-	ClaudeVersion     string            // injected; CLI fills via claudeVersionString()
-	SkillDirs         map[string]string // nil → defaultSkillDirs()
-	Judge             insights.Judge    // nil → NewClaudeJudgePinned(pin) — Task 11/12
+	Scope             string                      // "l2" (default) | "full"
+	Population        string                      // "scoring" (default) | "as_consumed"
+	Samples           int                         // default 3
+	L1Sample          bool                        // Task 11
+	PoolVersion       string                      // default "v1"
+	ClaudeVersion     string                      // injected; CLI fills via claudeVersionString()
+	SkillDirs         map[string]string           // nil → defaultSkillDirs()
+	Judge             insights.Judge              // nil → NewClaudeJudgePinned(pin)
+	Synth             synthesis.GlobalSynthesizer // nil → NewClaudeGlobalSynthesizerPinned(pin)
 }
 
 type SampleOutput struct {
@@ -37,14 +43,16 @@ type SampleOutput struct {
 	VerifiedKey string `json:"verified_key"`
 }
 
+// BucketOutputs is one repo's contribution to the run: its population and the
+// bundle built from it. Samples live on the record, not here — v2 synthesizes
+// every bundle in one cross-repo call, so a sample is global.
 type BucketOutputs struct {
-	Bucket        string         `json:"bucket"`
-	Population    []string       `json:"population"`
-	GapFallbacks  []string       `json:"gap_fallbacks,omitempty"`
-	PoolSliceHash string         `json:"pool_slice_hash"` // provenance: which pool content fed this bucket
-	BundleKey     string         `json:"bundle_key"`      // cache key — the scoring plan fetches the bundle for id→session mapping
-	BundleHash    string         `json:"bundle_hash"`
-	Samples       []SampleOutput `json:"samples"`
+	Bucket        string   `json:"bucket"`
+	Population    []string `json:"population"`
+	GapFallbacks  []string `json:"gap_fallbacks,omitempty"`
+	PoolSliceHash string   `json:"pool_slice_hash"` // provenance: which pool content fed this bucket
+	BundleKey     string   `json:"bundle_key"`      // cache key — the scoring plan fetches the bundle for id→session mapping
+	BundleHash    string   `json:"bundle_hash"`
 }
 
 type L1SampleResult struct { // populated by Task 11
@@ -71,17 +79,23 @@ type RunRecord struct { // the spec's reproducibility record
 	SkillHashes        map[string]string `json:"skill_hashes"`
 	CodeVersions       map[string]string `json:"code_versions"` // "facts", "synthesis", "eval"
 	Buckets            []BucketOutputs   `json:"buckets"`
-	L1Sample           *L1SampleResult   `json:"l1_sample,omitempty"`
-	CacheHits          int               `json:"cache_hits"`
-	CacheMisses        int               `json:"cache_misses"`
-	Warnings           []string          `json:"warnings,omitempty"`
-	RecordPath         string            `json:"-"`
+	// SampleOutputs are the global L2 samples — one cross-repo synthesis each,
+	// over every bucket's bundle at once (v2). Samples above is the requested
+	// count; this is what the run actually produced.
+	SampleOutputs []SampleOutput  `json:"sample_outputs"`
+	L1Sample      *L1SampleResult `json:"l1_sample,omitempty"`
+	CacheHits     int             `json:"cache_hits"`
+	CacheMisses   int             `json:"cache_misses"`
+	Warnings      []string        `json:"warnings,omitempty"`
+	RecordPath    string          `json:"-"`
 }
 
+// VerifiedOutput is one L2 sample as scoring reads it: the verified v2 snapshot
+// next to the raw model output it was built from (the raw shape is what a
+// fabrication/validation probe has to read).
 type VerifiedOutput struct {
-	Synthesis RepoSynthesis    `json:"synthesis"`
-	Raw       RawSynthesis     `json:"raw"` // spec enabler 1: RawSynthesis next to RepoSynthesis
-	Report    ValidationReport `json:"report"`
+	Snapshot insights.GlobalSynthesisJSON `json:"snapshot"`
+	Raw      insights.RawGlobalSynthesis  `json:"raw"`
 }
 
 // defaultSkillDirs materializes the in-repo skills package to a scratch dir and
@@ -113,8 +127,9 @@ func defaultSkillDirs() (map[string]string, func(), error) {
 
 // RunOutcome runs the pipeline stages over the frozen corpus with the
 // content-addressed cache; only changed stages cost anything. It produces
-// verified outputs (RepoSynthesis + RawSynthesis per sample) in the cache and
-// a reproducibility record listing every hash the spec requires.
+// verified outputs (one global v2 snapshot + its raw model output per sample)
+// in the cache and a reproducibility record listing every hash the spec
+// requires.
 func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 	if opts.Samples == 0 {
 		opts.Samples = 3
@@ -147,7 +162,7 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 		RanAt: time.Now().UTC(), Scope: opts.Scope, Population: opts.Population,
 		PoolVersion: opts.PoolVersion, Samples: opts.Samples,
 		SchemaHashes: map[string]string{"l1": insights.SchemaHash(), "l2": synthesis.SchemaHash()},
-		// Task 8-10: the L2 model is a config key under v2 (synthesis_model), so
+		// Task 10: the L2 model is a config key under v2 (synthesis_model), so
 		// the record names the default rather than a pinned constant; plan Task
 		// 10 threads the configured id through the env pin.
 		Models:       map[string]string{"l1": insights.AnalysisModel, "l2": insights.DefaultSynthesisModel},
@@ -226,6 +241,16 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 	if judge == nil {
 		judge = insights.NewClaudeJudgePinned(pin.ConfigDir, pin.WorkDir)
 	}
+	// The eval config is deliberately minimal: dotfiles_repo is omitted (the
+	// graceful-degradation path doubles as the reproducibility answer — spec
+	// §Eval adaptation), so the verifier's recency arbitration is skipped rather
+	// than reading unfrozen git history. Task 10 points the rest of the config
+	// (asset corpus) at the frozen snapshot.
+	cfg := insights.Config{SynthesisModel: rec.Models["l2"]}
+	synth := opts.Synth
+	if synth == nil {
+		synth = synthesis.NewClaudeGlobalSynthesizerPinned(cfg, pin.ConfigDir, pin.WorkDir)
+	}
 
 	poolDir := filepath.Join(opts.DataDir, "baseline-pool", opts.PoolVersion)
 	buckets := make([]string, 0, len(bench.Buckets))
@@ -235,6 +260,7 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 	sort.Strings(buckets)
 
 	consecutiveFailures := 0
+	bundles := map[string]synthesis.EvidenceBundle{}
 	for _, bucket := range buckets {
 		bp := bench.Buckets[bucket]
 		ids := bp.Scoring
@@ -305,20 +331,18 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 			return rec, err
 		}
 		bundleHash := sha256hex(bundleJSON)
+		bundles[bucket] = bundle
 
-		bo := BucketOutputs{Bucket: bucket, Population: ids, GapFallbacks: facts.GapFallbacks,
-			PoolSliceHash: facts.PoolSliceHash, BundleKey: bundleKey, BundleHash: bundleHash}
+		rec.Buckets = append(rec.Buckets, BucketOutputs{Bucket: bucket, Population: ids,
+			GapFallbacks: facts.GapFallbacks, PoolSliceHash: facts.PoolSliceHash,
+			BundleKey: bundleKey, BundleHash: bundleHash})
+	}
 
-		// Task 8-10: the L2 stage ran the v1 per-repo synthesizer and Finalize,
-		// which the v2 pipeline replaced with one cross-repo run plus a Go
-		// verifier (plan Task 7). Sampling a global synthesis per bucket is not
-		// a mechanical port — carding, corroboration and the cache keys are all
-		// re-derived in plan Tasks 8-10 — so the stage fails closed rather than
-		// scoring a shape the pipeline no longer produces. --l1-sample returns
-		// above this point and is unaffected; --scope full is not — it re-judges
-		// the first bucket's sessions (real spend, cached) before dying here.
-		rec.Buckets = append(rec.Buckets, bo)
-		return rec, fmt.Errorf("bucket %s: the L2 eval stage is being rebuilt for the v2 global synthesis (plan Tasks 8-10)", bucket)
+	if !opts.L1Sample {
+		if err := runGlobalSamples(ctx, &rec, cache, synth, bundles, pin, cfg, bench.FrozenAt,
+			opts.Samples, synthCV, &consecutiveFailures); err != nil {
+			return rec, err
+		}
 	}
 
 	rec.RecordPath = filepath.Join(opts.CacheDir, "run-records",
@@ -327,6 +351,114 @@ func RunOutcome(ctx context.Context, opts OutcomeOptions) (RunRecord, error) {
 		return rec, err
 	}
 	return rec, nil
+}
+
+// bundleSetHash identifies the exact evidence the model is shown: every repo's
+// key and bundle bytes. v2 synthesizes all of them in one call, so a change in
+// ANY bucket re-keys every sample — there is no per-bucket sample to key
+// separately any more.
+func bundleSetHash(bundles map[string]synthesis.EvidenceBundle) (string, error) {
+	keys := make([]string, 0, len(bundles))
+	for k := range bundles {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := []string{"bundle-set"}
+	for _, k := range keys {
+		raw, err := json.Marshal(bundles[k])
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, k, sha256hex(raw))
+	}
+	return cacheKey(parts...), nil
+}
+
+// runGlobalSamples takes opts.Samples independent draws of the one cross-repo
+// synthesis, verifies each, and records the cache keys scoring reads. Sampling
+// is global because the pipeline is: a sample is one GlobalSynthesis over every
+// bucket's bundle, not one synthesis per repo.
+//
+// A sample that fails (LLM error, or model output the verifier rejects) is
+// warned about and dropped, never half-recorded: scoring fails closed on a
+// record with no samples rather than scoring whatever survived.
+func runGlobalSamples(ctx context.Context, rec *RunRecord, cache *Cache, synth synthesis.GlobalSynthesizer,
+	bundles map[string]synthesis.EvidenceBundle, pin EnvPin, cfg insights.Config, generatedAt time.Time,
+	samples int, synthCV string, consecutiveFailures *int) error {
+	if len(bundles) == 0 {
+		return fmt.Errorf("no bundles built — nothing to synthesize (fail-closed)")
+	}
+	setHash, err := bundleSetHash(bundles)
+	if err != nil {
+		return err
+	}
+	for s := 0; s < samples; s++ {
+		// Task 10: the raw key gains the frozen asset-corpus hash — the v2
+		// model reads the CLAUDE.mds/skills/settings, so a raw result is only
+		// valid for the corpus it saw.
+		rawKey := cacheKey("l2", setHash, pin.SkillHashes[skills.SynthesisSkill],
+			synthesis.SchemaHash(), rec.Models["l2"], pin.EnvHash, strconv.Itoa(s))
+		var raw insights.RawGlobalSynthesis
+		hit, err := cache.Get("l2", rawKey, &raw)
+		if err != nil {
+			return err
+		}
+		fresh := !hit
+		if hit {
+			rec.CacheHits++
+		} else {
+			rctx, cancel := context.WithTimeout(ctx, globalSynthesisTimeout)
+			raw, err = synth.SynthesizeGlobal(rctx, bundles)
+			cancel()
+			if err != nil {
+				*consecutiveFailures++
+				rec.Warnings = append(rec.Warnings, fmt.Sprintf("sample %d: L2 failed: %v", s, err))
+				if *consecutiveFailures >= consecutiveLLMFailureLimit {
+					return fmt.Errorf("parked after %d consecutive LLM failures (see warnings)", *consecutiveFailures)
+				}
+				continue
+			}
+			*consecutiveFailures = 0
+			rec.CacheMisses++
+			if err := cache.Put("l2", rawKey, raw); err != nil {
+				return err
+			}
+		}
+
+		rawJSON, err := json.Marshal(raw)
+		if err != nil {
+			return err
+		}
+		verKey := cacheKey("verify", sha256hex(rawJSON), setHash, rec.ConfigSnapshotHash, synthCV)
+		var vo VerifiedOutput
+		hit, err = cache.Get("verify", verKey, &vo)
+		if err != nil {
+			return err
+		}
+		if hit {
+			rec.CacheHits++
+		} else {
+			rec.CacheMisses++
+			// generatedAt is the benchmark's freeze instant, not now: the
+			// verified output is content-addressed, so a re-verify of the same
+			// raw output must reproduce the same bytes.
+			snap, err := synthesis.VerifyGlobal(ctx, raw, bundles, cfg, generatedAt)
+			if err != nil {
+				// Verification is deterministic — a rejected sample is model
+				// output the contract refuses, not a transient failure, so it
+				// does not count toward the consecutive-failure park.
+				rec.Warnings = append(rec.Warnings, fmt.Sprintf("sample %d: verification rejected the synthesis: %v", s, err))
+				continue
+			}
+			vo = VerifiedOutput{Snapshot: snap, Raw: raw}
+			if err := cache.Put("verify", verKey, vo); err != nil {
+				return err
+			}
+		}
+		rec.SampleOutputs = append(rec.SampleOutputs, SampleOutput{SampleIndex: s, Fresh: fresh,
+			RawKey: rawKey, VerifiedKey: verKey})
+	}
+	return nil
 }
 
 // stripGaps removes ids with no frozen transcript from a full-scope

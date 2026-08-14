@@ -8,15 +8,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rkparsons/agent-insights/internal/insights"
 	"github.com/rkparsons/agent-insights/internal/synthesis"
 )
 
-// tier1Fixture builds a record + cache with bundle/verify entries: 3 samples,
-// the first freshCount fresh. emptyLast makes the last sample's synthesis empty.
+// tier1Fixture builds a record + cache with bundle/verify entries: 3 global
+// samples, the first freshCount fresh. emptyLast makes the last sample's
+// synthesis empty (no findings at all).
 func tier1Fixture(t *testing.T, freshCount int, emptyLast bool) (RunRecord, *Cache) {
 	t.Helper()
 	cache := NewCache(t.TempDir())
-	bundle := synthesis.EvidenceBundle{Repo: "tmux-ctrl",
+	bundle := synthesis.EvidenceBundle{Repo: "alpha",
 		Friction: []synthesis.FrictionItem{{ID: "F1", OneLine: "line", SessionID: "s1"}}}
 	if err := cache.Put("bundle", "bk1", bundle); err != nil {
 		t.Fatal(err)
@@ -24,29 +26,32 @@ func tier1Fixture(t *testing.T, freshCount int, emptyLast bool) (RunRecord, *Cac
 	rec := RunRecord{Scope: "l2", Population: "scoring", PoolVersion: "v1",
 		Models: map[string]string{"l1": "ml1", "l2": "ml2"}, EnvHash: "e1",
 		ManifestHash: "mh", BenchmarkHash: "bh", ConfigSnapshotHash: "ch",
-		CodeVersions: map[string]string{"facts": "f1"}, SkillHashes: map[string]string{}}
-	b := BucketOutputs{Bucket: "tmux-ctrl", Population: []string{"s1", "s2"}, BundleKey: "bk1", BundleHash: "bh1"}
+		CodeVersions: map[string]string{"facts": "f1"}, SkillHashes: map[string]string{},
+		Buckets: []BucketOutputs{{Bucket: "alpha", Population: []string{"s1", "s2"},
+			BundleKey: "bk1", BundleHash: "bh1"}}}
 	for i := 0; i < 3; i++ {
-		vo := VerifiedOutput{Synthesis: RepoSynthesis{Repo: "tmux-ctrl",
-			Themes: []Theme{{Title: "T", Kind: "friction", SessionIDs: []string{"s1"}}}}}
+		vo := VerifiedOutput{Snapshot: insights.GlobalSynthesisJSON{SchemaVersion: 2,
+			Findings: []insights.FindingJSON{{Rank: 1, Title: "T", Statement: "verify first",
+				EvidenceIDs: []string{"alpha/F1"}, Repos: []string{"alpha"}}}}}
 		if emptyLast && i == 2 {
-			vo = VerifiedOutput{Synthesis: RepoSynthesis{Repo: "tmux-ctrl"}}
+			vo = VerifiedOutput{Snapshot: insights.GlobalSynthesisJSON{SchemaVersion: 2}}
 		}
 		key := fmt.Sprintf("vk%d", i)
 		if err := cache.Put("verify", key, vo); err != nil {
 			t.Fatal(err)
 		}
-		b.Samples = append(b.Samples, SampleOutput{SampleIndex: i, Fresh: i < freshCount, VerifiedKey: key})
+		rec.SampleOutputs = append(rec.SampleOutputs, SampleOutput{SampleIndex: i,
+			Fresh: i < freshCount, VerifiedKey: key})
 	}
-	rec.Buckets = []BucketOutputs{b}
 	return rec, cache
 }
 
-// Task 8-10: the tier-1 gates (churn over fresh sample pairs, fail-closed on an
+// Task 9: the tier-1 gates (churn over fresh sample pairs, fail-closed on an
 // empty synthesis, fabrication rate, recall misses) were computed by the v1
 // EvaluateRun over per-repo themes, removed with the pipeline in plan Task 7.
 // ComputeTier1 reports nothing measured until the probes are recast against
 // findings/dropped in plan Task 9; this test is the checklist for that rework.
+// The fixture above is already v2-shaped (global samples, snapshot outputs).
 func TestComputeTier1ChurnAndEmptyFailClosed(t *testing.T) {
 	t.Skip("tier-1 probes recast in plan Task 9")
 }

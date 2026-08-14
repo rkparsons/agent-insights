@@ -2,13 +2,13 @@ package eval
 
 import "time"
 
-// Task 8-10: the v1 per-repo synthesis shapes, moved here when the pipeline
-// dropped them (plan Task 7). The eval harness still reads them from its own
-// frozen ground truth and its verify-stage cache, and its rubric anchors are
-// still theme-indexed — all of which plan Tasks 8-10 re-source against the v2
-// GlobalSynthesis. Nothing outside internal/eval produces these any more, and
-// they die with that rework; they are data definitions only, so no v1 pipeline
-// behavior survives here.
+// The v1 per-repo synthesis shapes, moved here when the pipeline dropped them
+// (plan Task 7). What survives is exactly what frozen v1 ground truth is
+// written in: the eval harness still reads those reports for historical
+// records and for the as_consumed control's pre-strip anchors (rubric.go's
+// PreStripAnchors). The v1 model-output shapes died with the v1 L2 eval stage
+// (plan Task 8) — scoring reads insights.GlobalSynthesisJSON now. These are
+// data definitions only; no v1 pipeline behavior survives here.
 
 type Theme struct {
 	Title           string         `json:"title"`
@@ -57,33 +57,4 @@ type RepoSynthesis struct {
 	Themes          []Theme          `json:"themes"`
 	Recommendations []Recommendation `json:"recommendations"`
 	Meta            Meta             `json:"meta"`
-}
-
-type RawTheme struct {
-	Title       string   `json:"title"`
-	Kind        string   `json:"kind"`
-	Summary     string   `json:"summary"`
-	EvidenceIDs []string `json:"evidence_ids"`
-	SignalRefs  []string `json:"signal_refs,omitempty"`
-	CitedQuotes []string `json:"cited_quotes"`
-}
-
-type RawRec struct {
-	Type        string   `json:"type"`
-	Title       string   `json:"title"`
-	Statement   string   `json:"statement"`
-	EvidenceIDs []string `json:"evidence_ids"`
-	ThemeRefs   []int    `json:"theme_refs"`
-	CitedQuotes []string `json:"cited_quotes"`
-	Audience    string   `json:"audience,omitempty"`
-}
-
-type RawSynthesis struct {
-	Themes          []RawTheme `json:"themes"`
-	Recommendations []RawRec   `json:"recommendations"`
-}
-
-type ValidationReport struct {
-	RawQuoteDropRate float64
-	HardErrors       []string
 }

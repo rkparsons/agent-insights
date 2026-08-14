@@ -40,7 +40,7 @@ func probeRubrics() []Rubric {
 		{ID: "C-01", Part: "regression", Surface: "either", Repos: []string{"alpha"}, Hash: "h1",
 			Statement:       "verify diagnoses against real evidence before asserting",
 			RequiredNuances: []string{"search logs first"}},
-		{ID: "C-04", Part: "regression", Surface: "either", Repos: []string{"tmux-ctrl"}, Hash: "h2",
+		{ID: "C-04", Part: "regression", Surface: "either", Repos: []string{"beta"}, Hash: "h2",
 			Statement:                "match process weight to task difficulty",
 			RequiredNuances:          []string{"gate on difficulty"},
 			ForbiddenGeneralizations: []string{"never dispatch parallel subagents"}},

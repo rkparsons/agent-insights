@@ -97,39 +97,11 @@ func validateStatusCoverage(rubrics []Rubric, statuses map[string]string) error 
 	return nil
 }
 
-// bucketData is one bucket's scoring material: per-sample items + one-lines.
-type bucketData struct {
-	outputs  BucketOutputs
-	items    map[int][]ScoredItem
-	oneLines map[string]string
-}
-
-// itemsForSample concatenates the named buckets' items at one sample index
-// (a bucket missing that index contributes nothing).
-func itemsForSample(buckets map[string]bucketData, repos []string, sampleIndex int) []ScoredItem {
-	var out []ScoredItem
-	for _, b := range repos {
-		if bd, ok := buckets[b]; ok {
-			out = append(out, bd.items[sampleIndex]...)
-		}
-	}
-	return out
-}
-
-func sortedBucketNames(buckets map[string]bucketData) []string {
-	names := make([]string, 0, len(buckets))
-	for n := range buckets {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	return names
-}
-
 // loadScoreableRecord resolves the record (explicit path or newest) and fails
 // closed on non-scoreable shapes: an --l1-sample run writes a SUCCESSFUL
 // record with zero buckets, which would otherwise score as a vacuous PASS,
-// land in runs/, and poison later delta baselines; a skipped-samples bucket
-// exits outcome with 0, so the fail-closed duty lives here (phase-2 seam).
+// land in runs/, and poison later delta baselines; a run whose every global
+// sample failed exits outcome with 0, so the fail-closed duty lives here.
 func loadScoreableRecord(opts ScoreOptions) (RunRecord, string, error) {
 	var rec RunRecord
 	recPath := opts.RecordPath
@@ -145,10 +117,8 @@ func loadScoreableRecord(opts ScoreOptions) (RunRecord, string, error) {
 	if len(rec.Buckets) == 0 || rec.L1Sample != nil {
 		return RunRecord{}, "", fmt.Errorf("record %s has no scoreable buckets (l1-sample or empty record) — run a full `insights eval outcome` first", recPath)
 	}
-	for _, b := range rec.Buckets {
-		if len(b.Samples) == 0 {
-			return RunRecord{}, "", fmt.Errorf("bucket %s has zero samples — scoring fails closed, never vacuously passes", b.Bucket)
-		}
+	if len(rec.SampleOutputs) == 0 {
+		return RunRecord{}, "", fmt.Errorf("record %s has zero global samples — scoring fails closed, never vacuously passes; re-run `insights eval outcome`", recPath)
 	}
 	return rec, recPath, nil
 }
@@ -169,12 +139,20 @@ type scoreSession struct {
 	envHash    string
 	m          Matcher
 	probes     []ProbeResult
-	buckets    map[string]bucketData
-	oneLines   map[string]map[string]string
+	// items is the sample's whole global card set — findings and dropped
+	// entries from every repo at once, keyed by sample index.
+	items      map[int][]ScoredItem
+	population []string          // union of every bucket's population (anchor denominator)
+	oneLines   map[string]string // session id → pool one-line, across every bucket
 	truths     map[string]RepoSynthesis
 	repeats    int
 	warnings   []string
-	hardErrors []string // per-sample synthesis hard-error tallies, gate input
+	// hardErrors is the pre-spend refusal channel. Task 9: v1 filled it from
+	// Finalize's ValidationReport; under v2 a hard verifier failure produces no
+	// sample at all (outcome warns and drops it), so the equivalent signal is
+	// meta.validation_notes plus the dropped-sample count — wired in with the
+	// probe recast. The gate below stays so that wiring is a one-line change.
+	hardErrors []string
 }
 
 func newScoreSession(ctx context.Context, opts ScoreOptions, scratchStamp time.Time) (*scoreSession, func(), error) {
@@ -206,7 +184,7 @@ func newScoreSession(ctx context.Context, opts ScoreOptions, scratchStamp time.T
 
 	// Cached material loads before any matcher spend so pre-spend gates (hard
 	// synthesis errors) fire without costing a probe read.
-	if err = s.loadBuckets(); err != nil {
+	if err = s.loadSamples(); err != nil {
 		return nil, nil, err
 	}
 	if len(s.hardErrors) > 0 {
@@ -259,9 +237,14 @@ func newScoreSession(ctx context.Context, opts ScoreOptions, scratchStamp time.T
 	return s, cleanup, nil
 }
 
-func (s *scoreSession) loadBuckets() error {
-	s.buckets = map[string]bucketData{}
-	s.oneLines = map[string]map[string]string{}
+// loadSamples reads the record's cached material: every bucket's bundle (for
+// the id→session index and the card one-lines) and every global sample's
+// verified snapshot, carded into one item set per sample.
+func (s *scoreSession) loadSamples() error {
+	s.items = map[int][]ScoredItem{}
+	s.oneLines = map[string]string{}
+	bundles := map[string]synthesis.EvidenceBundle{}
+	var population []string
 	for _, b := range s.rec.Buckets {
 		var bundle synthesis.EvidenceBundle
 		hit, err := s.cache.Get("bundle", b.BundleKey, &bundle)
@@ -271,23 +254,25 @@ func (s *scoreSession) loadBuckets() error {
 		if !hit {
 			return fmt.Errorf("bucket %s: bundle missing from cache — re-run `insights eval outcome`", b.Bucket)
 		}
-		bd := bucketData{outputs: b, items: map[int][]ScoredItem{}, oneLines: sessionOneLines(bundle)}
-		for _, smp := range b.Samples {
-			var vo VerifiedOutput
-			hit, err := s.cache.Get("verify", smp.VerifiedKey, &vo)
-			if err != nil {
-				return err
-			}
-			if !hit {
-				return fmt.Errorf("bucket %s sample %d: verified output missing from cache — re-run `insights eval outcome`", b.Bucket, smp.SampleIndex)
-			}
-			if n := len(vo.Report.HardErrors); n > 0 {
-				s.hardErrors = append(s.hardErrors, fmt.Sprintf("%s sample %d: %d hard error(s), first: %s", b.Bucket, smp.SampleIndex, n, vo.Report.HardErrors[0]))
-			}
-			bd.items[smp.SampleIndex] = BuildScoredItems(b.Bucket, vo, bundle)
+		bundles[b.Bucket] = bundle
+		population = append(population, b.Population...)
+		// Session ids are unique across repos, so the one-line vocabulary is a
+		// single global map — a card no longer knows which bucket it came from.
+		for id, line := range sessionOneLines(bundle) {
+			s.oneLines[id] = line
 		}
-		s.buckets[b.Bucket] = bd
-		s.oneLines[b.Bucket] = bd.oneLines
+	}
+	s.population = sortedSet(population)
+	for _, smp := range s.rec.SampleOutputs {
+		var vo VerifiedOutput
+		hit, err := s.cache.Get("verify", smp.VerifiedKey, &vo)
+		if err != nil {
+			return err
+		}
+		if !hit {
+			return fmt.Errorf("sample %d: verified output missing from cache — re-run `insights eval outcome`", smp.SampleIndex)
+		}
+		s.items[smp.SampleIndex] = BuildGlobalScoredItems(vo.Snapshot, bundles)
 	}
 	return nil
 }
@@ -296,10 +281,6 @@ func (s *scoreSession) loadBuckets() error {
 // (maxSamples > 0 keeps only the first ones — dev loop) and aggregates its
 // verdict. Returns the effective anchors for card building.
 func (s *scoreSession) scoreTarget(ctx context.Context, r Rubric, maxSamples int) (TargetResult, []string, error) {
-	bd, haveBucket := s.buckets[r.Repos[0]]
-	if !haveBucket {
-		s.warnings = append(s.warnings, fmt.Sprintf("%s: expected bucket %s not in record — scored absent", r.ID, r.Repos[0]))
-	}
 	var preStrip []string
 	var err error
 	if s.truths != nil && r.AnchorTheme != "" {
@@ -307,18 +288,17 @@ func (s *scoreSession) scoreTarget(ctx context.Context, r Rubric, maxSamples int
 			return TargetResult{}, nil, err
 		}
 	}
-	anchors, capAnchors := AnchorSets(r, bd.outputs.Population, preStrip)
+	anchors, capAnchors := AnchorSets(r, s.population, preStrip)
 	if len(r.AnchorSessionIDs) > 0 && len(anchors) == 0 {
 		s.warnings = append(s.warnings, fmt.Sprintf("%s: no effective anchors in the active population — corroboration degraded to no-anchor", r.ID))
 	}
-	sampleOuts := bd.outputs.Samples
+	sampleOuts := s.rec.SampleOutputs
 	if maxSamples > 0 && maxSamples < len(sampleOuts) {
 		sampleOuts = sampleOuts[:maxSamples]
 	}
 	var samples []SampleScore
 	for _, so := range sampleOuts {
-		items := itemsForSample(s.buckets, r.Repos, so.SampleIndex)
-		ss, err := scoreTargetSample(ctx, s.cache, s.m, s.envHash, r, items, anchors, capAnchors, s.adj, so.SampleIndex, s.repeats)
+		ss, err := scoreTargetSample(ctx, s.cache, s.m, s.envHash, r, s.items[so.SampleIndex], anchors, capAnchors, s.adj, so.SampleIndex, s.repeats)
 		if err != nil {
 			return TargetResult{}, nil, err
 		}
@@ -371,26 +351,19 @@ func ScoreRun(ctx context.Context, opts ScoreOptions) (Verdict, ScoreArtifacts, 
 	}
 
 	var negatives []NegativeViolation
-	allBuckets := sortedBucketNames(s.buckets)
+	idxs := make([]int, 0, len(s.items))
+	for i := range s.items {
+		idxs = append(idxs, i)
+	}
+	sort.Ints(idxs)
 	for _, r := range s.rubrics {
 		if r.Part != "negative" {
 			continue
 		}
-		idxSet := map[int]bool{}
-		for _, bd := range s.buckets {
-			for idx := range bd.items {
-				idxSet[idx] = true
-			}
-		}
-		idxs := make([]int, 0, len(idxSet))
-		for i := range idxSet {
-			idxs = append(idxs, i)
-		}
-		sort.Ints(idxs)
 		var vioIdx []int
 		var refs []string
 		for _, idx := range idxs {
-			violated, matched, err := scoreNegativeSample(ctx, s.cache, s.m, s.envHash, r, itemsForSample(s.buckets, allBuckets, idx), opts.Repeats)
+			violated, matched, err := scoreNegativeSample(ctx, s.cache, s.m, s.envHash, r, s.items[idx], opts.Repeats)
 			if err != nil {
 				return Verdict{}, none, err
 			}

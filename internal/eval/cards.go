@@ -54,9 +54,11 @@ func sessionOneLines(b synthesis.EvidenceBundle) map[string]string {
 }
 
 // BuildCards renders every pending card. Membership triggers (anchor
-// shortfall / size-cap breach) get the added/missing sessions as one_lines;
-// no card may contain a session id — that is a build error, never a warning.
-func BuildCards(results []TargetResult, anchors map[string][]string, oneLines map[string]map[string]string) ([]Card, error) {
+// shortfall / size-cap breach / a dropped entry that matched) get the
+// added/missing sessions as one_lines; no card may contain a session id — that
+// is a build error, never a warning. oneLines is global: scoring is no longer
+// per bucket, and session ids are unique across repos.
+func BuildCards(results []TargetResult, anchors map[string][]string, oneLines map[string]string) ([]Card, error) {
 	var cards []Card
 	for _, res := range results {
 		for _, p := range res.Pending {
@@ -69,21 +71,18 @@ func BuildCards(results []TargetResult, anchors map[string][]string, oneLines ma
 			} else {
 				c.KeyHash = cacheKey("card", p.TargetID, p.Trigger)
 			}
-			if p.Trigger == CorroborationMismatch || p.Trigger == CorroborationSizeCap || p.Trigger == CorroborationCrossBucket {
-				lines := oneLines[bucketOf(p.Ref)]
+			if p.Trigger == CorroborationMismatch || p.Trigger == CorroborationSizeCap || p.Trigger == CorroborationDropped {
 				anchorSet := stringSet(anchors[p.TargetID])
 				itemSet := stringSet(p.SessionIDs)
 				var added, missing []string
 				for _, id := range sortedSet(p.SessionIDs) {
 					if !anchorSet[id] {
-						added = append(added, lineFor(lines, id))
+						added = append(added, lineFor(oneLines, id))
 					}
 				}
-				if p.Trigger != CorroborationCrossBucket { // cross-bucket sets are anchor-disjoint by construction
-					for _, id := range sortedSet(anchors[p.TargetID]) {
-						if !itemSet[id] {
-							missing = append(missing, lineFor(lines, id))
-						}
+				for _, id := range sortedSet(anchors[p.TargetID]) {
+					if !itemSet[id] {
+						missing = append(missing, lineFor(oneLines, id))
 					}
 				}
 				c.AddedOneLines = capWithSuffix(added)

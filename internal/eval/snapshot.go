@@ -141,13 +141,13 @@ func copyTree(srcRoot, dstRoot string, keep func(rel string) bool) (int, error) 
 	return copyTreeVisited(resolved, dstRoot, keep, visited)
 }
 
-// CopyGroundTruth freezes the live synthesis artifacts (the JSONs whose
-// Theme.SessionIDs are the only valid anchor source) into ground-truth/.
+// CopyGroundTruth freezes the live synthesis artifacts into ground-truth/: the
+// v2 global snapshots under global/ (the anchor source under the v2 contract)
+// and any v1 per-repo reports still on disk beside them, which stay readable
+// for historical records. loadGroundTruth reads the latter and skips global/;
+// loadGlobalGroundTruth reads the former — so the snapshot dir is never carded
+// as a phantom repo bucket.
 //
-// Task 8-10: the sweep takes every JSON under synthesis.Dir(), which now also
-// holds the v2 global snapshots — loadGroundTruth walks every subdir, so those
-// would card as a phantom "global" bucket once a v2 run has stored one. Plan
-// Task 8 re-sources ground truth from the global snapshot and this goes away.
 // Failed-run model output is NOT a concern here: it never passed the verifier's
 // privacy scan and so lives outside Dir() entirely (synthesis.diagnosticsDir).
 func CopyGroundTruth(dataDir string) (int, error) {

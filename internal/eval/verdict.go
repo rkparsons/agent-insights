@@ -100,15 +100,14 @@ func ComposeVerdict(in VerdictInputs, cache *Cache) (Verdict, []PendingCard, err
 		v.Provenance["skill_hash_"+k] = h
 	}
 	for _, b := range in.Record.Buckets {
-		fresh := 0
-		for _, s := range b.Samples {
-			if s.Fresh {
-				fresh++
-			}
-		}
 		v.Buckets = append(v.Buckets, VerdictBucket{Bucket: b.Bucket, Sessions: len(b.Population),
-			GapFallbacks: len(b.GapFallbacks), Samples: len(b.Samples), FreshSamples: fresh,
-			BundleHash: b.BundleHash})
+			GapFallbacks: len(b.GapFallbacks), BundleHash: b.BundleHash})
+	}
+	v.Samples = len(in.Record.SampleOutputs)
+	for _, s := range in.Record.SampleOutputs {
+		if s.Fresh {
+			v.FreshSamples++
+		}
 	}
 
 	t1, reasons, t1Warnings, err := ComputeTier1(in.Record, cache)

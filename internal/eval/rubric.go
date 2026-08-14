@@ -24,16 +24,21 @@ type Rubric struct {
 	RequiredNuances          []string `yaml:"required_nuances"`
 	ForbiddenGeneralizations []string `yaml:"forbidden_generalizations"`
 	AnchorSessionIDs         []string `yaml:"anchor_session_ids"`
-	// SourceThemeSessionIDs is the effective pre-QA source-theme id set (the
+	// SourceThemeSessionIDs is the effective pre-QA source id set (the
 	// freeze-time, post-meta-strip anchors, before any anchor-QA removal): the
 	// size-cap denominator, immutable across QA passes so removals never
-	// tighten the cap.
+	// tighten the cap. Under v2 it is the combined set across every repo the
+	// source finding cites, which is what keeps a merged finding from being
+	// capped against one repo's share of it.
 	SourceThemeSessionIDs []string `yaml:"source_theme_session_ids,omitempty"`
-	AnchorTheme           string   `yaml:"anchor_theme,omitempty"` // "<bucket>/<theme-index>" in frozen ground truth (pre-strip anchor source)
-	Surface               string   `yaml:"surface"`
-	PassAt                string   `yaml:"pass_at"`
-	SeedStatus            string   `yaml:"seed_status,omitempty"`
-	Notes                 string   `yaml:"notes,omitempty"`
+	// AnchorTheme is the v1 "<bucket>/<theme-index>" pointer into frozen
+	// ground truth, read only by the as_consumed pre-strip control. Optional:
+	// v2 anchors come from a global finding, which has no theme index.
+	AnchorTheme string `yaml:"anchor_theme,omitempty"`
+	Surface     string `yaml:"surface"`
+	PassAt      string `yaml:"pass_at"`
+	SeedStatus  string `yaml:"seed_status,omitempty"`
+	Notes       string `yaml:"notes,omitempty"`
 	// Hash is the sha256 of the rubric file bytes: adjudication keys and
 	// per-rubric matcher payloads re-key when the file changes.
 	Hash string `yaml:"-"`
@@ -73,12 +78,18 @@ func parseRubric(name string, raw []byte) (Rubric, error) {
 			return fail("gap rubrics carry no anchors (nothing persisted for misses)")
 		}
 		if len(r.AnchorSessionIDs) > 0 {
-			bucket, _, err := parseAnchorTheme(r.AnchorTheme)
-			if err != nil {
-				return fail("anchor_theme: " + err.Error())
-			}
-			if bucket != r.Repos[0] {
-				return fail("anchor_theme bucket must be repos[0] (the anchor source bucket)")
+			// anchor_theme is the v1 ground-truth pointer the as_consumed
+			// control reads (PreStripAnchors). v2 anchors are finding-level and
+			// may span repos, so it is optional — but when present it still has
+			// to name a real v1 theme in its own bucket.
+			if r.AnchorTheme != "" {
+				bucket, _, err := parseAnchorTheme(r.AnchorTheme)
+				if err != nil {
+					return fail("anchor_theme: " + err.Error())
+				}
+				if bucket != r.Repos[0] {
+					return fail("anchor_theme bucket must be repos[0] (the anchor source bucket)")
+				}
 			}
 			if len(r.SourceThemeSessionIDs) == 0 {
 				return fail("source_theme_session_ids required with anchors (anchor-QA size-cap denominator)")

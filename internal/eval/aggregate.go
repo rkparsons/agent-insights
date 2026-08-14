@@ -53,7 +53,7 @@ type PendingCard struct {
 	Trigger     string
 	Key         AdjKey
 	Adjudicable bool
-	Ref         string // item ref ("<bucket>/theme/<i>"), for one-line bucket resolution
+	Ref         string // local provenance: which item ("finding/<rank>" | "dropped/<i>") triggered this card
 	ItemText    string
 	Granularity string
 	Note        string
@@ -104,7 +104,7 @@ func AggregateTarget(r Rubric, status string, samples []SampleScore, effectiveAn
 	tv := TargetVerdict{ID: r.ID, Part: r.Part, Tier: r.Tier, Status: status,
 		PassAt: r.PassAt, EffectiveAnchors: effectiveAnchors, Granularity: "absent"}
 	if len(samples) == 0 {
-		// Unscoreable target (e.g. expected bucket missing from the record):
+		// Unscoreable target (e.g. a record whose samples produced no items):
 		// absent takes full status semantics — fail-closed, a HIGH miss must
 		// never degrade to a warning just because nothing could be scored.
 		switch status {
@@ -168,7 +168,7 @@ func AggregateTarget(r Rubric, status string, samples []SampleScore, effectiveAn
 	}
 
 	// Side matches are collected across ALL samples (deduped by key): the spec
-	// cards every non-expected-bucket match, not just the majority sample's.
+	// cards every dropped match, not just the majority sample's.
 	seenSide := map[string]bool{}
 	for _, s := range samples {
 		for _, sm := range s.SideMatches {
@@ -178,9 +178,15 @@ func AggregateTarget(r Rubric, status string, samples []SampleScore, effectiveAn
 				continue
 			}
 			seenSide[k.Hash()] = true
+			note := "matcher-matched but uncounted (" + sm.Corroboration + ")"
+			if sm.Corroboration == CorroborationDropped {
+				// Accepting this card dismisses the prompt; it never converts
+				// the drop into a hit (score.go: dropped is never counted).
+				note = "the model dropped this evidence — " + sm.DropReason +
+					" — but it matches the rubric: a recall miss unless the drop is right"
+			}
 			addKeyed(sm.Corroboration, k, PendingCard{Adjudicable: true, Ref: sm.Ref, ItemText: sm.Text,
-				Granularity: sm.Granularity, SessionIDs: sm.SessionIDs,
-				Note: "matcher-matched but uncounted (" + sm.Corroboration + ")"})
+				Granularity: sm.Granularity, SessionIDs: sm.SessionIDs, Note: note})
 		}
 	}
 	if deciding != nil {

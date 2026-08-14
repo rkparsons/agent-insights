@@ -3,57 +3,108 @@ package eval
 import (
 	"fmt"
 	"sort"
-	"strings"
 
+	"github.com/rkparsons/agent-insights/internal/insights"
 	"github.com/rkparsons/agent-insights/internal/synthesis"
 )
 
-// ScoredItem is one produced theme/recommendation prepared for scoring: the
-// matcher sees ID/Bucket/Surface/Text; SessionIDs and Quotes stay Go-side for
-// corroboration and cards.
+// surfaceFinding is the v2 pipeline's only produced surface. v1's
+// theme/recommendation split died with the per-repo synthesis; the constant
+// survives because the matcher-integrity probes still shape their synthetic
+// items by the rubric's (v1-vocabulary) surface field.
+const surfaceFinding = "finding"
+
+// ScoredItem is one produced finding — or one dropped entry — prepared for
+// scoring: the matcher sees ID/Repos/Surface/Text; SessionIDs and Quotes stay
+// Go-side for corroboration and cards.
+//
+// Repos is a list, not a bucket: a v2 finding may legitimately merge evidence
+// from several repos, and that merge is exactly what the contract rewards.
 type ScoredItem struct {
 	ID         string
-	Bucket     string
-	Surface    string // "theme" | "recommendation"
+	Repos      []string // repos whose evidence the item cites, sorted
+	Surface    string   // "finding" (v2 pipeline) | "theme"/"recommendation" (probes only)
+	Dropped    bool     // the model dropped this evidence instead of acting on it
+	DropReason string   // dropped only: the model's stated reason, for the card
 	Text       string
 	SessionIDs []string // deduped, sorted
 	Quotes     []string // verified quotes, capped for cards
 }
 
-// BuildScoredItems flattens one bucket-sample's verified output. Theme session
-// sets come from the persisted Theme.SessionIDs; recommendation session sets
-// are recovered from Raw.EvidenceIDs × bundle, because Recommendation persists
-// only counts (synthesize.go).
-func BuildScoredItems(bucket string, vo VerifiedOutput, bundle synthesis.EvidenceBundle) []ScoredItem {
-	var items []ScoredItem
-	for i, t := range vo.Synthesis.Themes {
-		items = append(items, ScoredItem{
-			ID:         fmt.Sprintf("%s/theme/%d", bucket, i),
-			Bucket:     bucket,
-			Surface:    "theme",
-			Text:       t.Title + ". " + t.Summary,
-			SessionIDs: sortedSet(t.SessionIDs),
-			Quotes:     capStrings(t.Quotes, 2),
-		})
-	}
-	evidence := evidenceSessionIndex(bundle)
-	for i, r := range vo.Synthesis.Recommendations {
-		var ids []string
-		if i < len(vo.Raw.Recommendations) {
-			for _, eid := range vo.Raw.Recommendations[i].EvidenceIDs {
-				ids = append(ids, evidence[eid]...)
-			}
+// BuildGlobalScoredItems flattens one v2 snapshot into the sample's global card
+// set: one item per finding (however many repos it spans) plus one per dropped
+// entry, so a good finding wrongly dropped is scorable as a recall miss rather
+// than invisible. Session sets are recovered from the cited namespaced evidence
+// ids × bundles — the same derivation the verifier's Go-owned fields use — since
+// the snapshot persists counts, not ids.
+func BuildGlobalScoredItems(snap insights.GlobalSynthesisJSON, bundles map[string]synthesis.EvidenceBundle) []ScoredItem {
+	evidence := globalEvidenceIndex(bundles)
+	items := make([]ScoredItem, 0, len(snap.Findings)+len(snap.Dropped))
+	for _, f := range snap.Findings {
+		sessions, repos := evidence.resolve(f.EvidenceIDs)
+		if len(f.Repos) > 0 {
+			repos = sortedSet(f.Repos) // Go-owned on the snapshot; prefer it
 		}
 		items = append(items, ScoredItem{
-			ID:         fmt.Sprintf("%s/rec/%d", bucket, i),
-			Bucket:     bucket,
-			Surface:    "recommendation",
-			Text:       r.Statement,
-			SessionIDs: sortedSet(ids),
-			Quotes:     capStrings(r.Quotes, 2),
+			// Rank identifies a finding to a human reading a card, and
+			// VerifyGlobal guarantees ranks are a gapless 1..N permutation over
+			// the rank-sorted array, so it is also unique.
+			ID:         fmt.Sprintf("finding/%d", f.Rank),
+			Repos:      repos,
+			Surface:    surfaceFinding,
+			Text:       f.Title + ". " + f.Statement,
+			SessionIDs: sessions,
+			Quotes:     capStrings(f.Quotes, 2),
+		})
+	}
+	for i, d := range snap.Dropped {
+		sessions, repos := evidence.resolve(d.EvidenceIDs)
+		items = append(items, ScoredItem{
+			ID:         fmt.Sprintf("dropped/%d", i),
+			Repos:      repos,
+			Surface:    surfaceFinding,
+			Dropped:    true,
+			DropReason: d.Reason,
+			Text:       d.Summary,
+			SessionIDs: sessions,
 		})
 	}
 	return items
+}
+
+// evidenceIndex maps every namespaced bundle id ("<repo>/F3") to its repo and
+// session id(s); G signals fan out to their member sessions.
+type evidenceIndex map[string]evidenceRef
+
+type evidenceRef struct {
+	repo     string
+	sessions []string
+}
+
+// resolve turns a citation list into the item's deduped session set and the
+// repos it draws from. Unknown ids contribute nothing (the verifier already
+// hard-fails dangling citations; a cached snapshot must not panic on one).
+func (idx evidenceIndex) resolve(ids []string) (sessions, repos []string) {
+	var s, r []string
+	for _, id := range ids {
+		ref, ok := idx[id]
+		if !ok {
+			continue
+		}
+		r = append(r, ref.repo)
+		s = append(s, ref.sessions...)
+	}
+	return sortedSet(s), sortedSet(r)
+}
+
+func globalEvidenceIndex(bundles map[string]synthesis.EvidenceBundle) evidenceIndex {
+	idx := evidenceIndex{}
+	for repo, b := range bundles {
+		for id, sessions := range evidenceSessionIndex(b) {
+			idx[repo+"/"+id] = evidenceRef{repo: repo, sessions: sessions}
+		}
+	}
+	return idx
 }
 
 // evidenceSessionIndex maps every typed bundle id (F/P/S/G) to its session
@@ -75,9 +126,9 @@ func evidenceSessionIndex(b synthesis.EvidenceBundle) map[string][]string {
 	return out
 }
 
-// BuildMatchPayload assembles the matcher stdin for one rubric over items
-// already restricted to the rubric's buckets, filtered to its surface. Nil
-// slices are normalized so the payload hash is byte-stable.
+// BuildMatchPayload assembles the matcher stdin for one rubric over the
+// sample's global item set. Nil slices are normalized so the payload hash is
+// byte-stable.
 func BuildMatchPayload(r Rubric, items []ScoredItem) MatchPayload {
 	nuances := r.RequiredNuances
 	if nuances == nil {
@@ -95,12 +146,23 @@ func BuildMatchPayload(r Rubric, items []ScoredItem) MatchPayload {
 		if !surfaceAllowed(r, it.Surface) {
 			continue
 		}
-		p.Items = append(p.Items, MatchItem{ID: it.ID, Bucket: it.Bucket, Surface: it.Surface, Text: it.Text})
+		repos := it.Repos
+		if repos == nil {
+			repos = []string{}
+		}
+		p.Items = append(p.Items, MatchItem{ID: it.ID, Repos: repos, Surface: it.Surface, Text: it.Text})
 	}
 	return p
 }
 
+// surfaceAllowed filters probe items by the rubric's v1 surface value. A v2
+// finding is never filtered: the pipeline produces one surface, so honoring a
+// frozen rubric's "theme"/"recommendation" here would empty every payload and
+// score every target absent.
 func surfaceAllowed(r Rubric, surface string) bool {
+	if surface == surfaceFinding {
+		return true
+	}
 	switch r.Surface {
 	case "theme", "recommendation":
 		return r.Surface == surface
@@ -144,12 +206,4 @@ func allTrue(bs []bool) bool {
 		}
 	}
 	return true
-}
-
-// bucketOf extracts the bucket prefix of an item ref ("alpha/theme/3" → "alpha").
-func bucketOf(ref string) string {
-	if i := strings.Index(ref, "/"); i > 0 {
-		return ref[:i]
-	}
-	return ref
 }

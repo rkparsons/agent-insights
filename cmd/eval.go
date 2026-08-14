@@ -183,15 +183,17 @@ func runEvalOutcome(args []string) {
 	fmt.Fprintf(os.Stderr, "outcome: scope=%s population=%s pool=%s samples=%d · cache %d hits / %d misses\n",
 		rec.Scope, rec.Population, rec.PoolVersion, rec.Samples, rec.CacheHits, rec.CacheMisses)
 	for _, b := range rec.Buckets {
-		fresh := 0
-		for _, s := range b.Samples {
-			if s.Fresh {
-				fresh++
-			}
-		}
-		fmt.Fprintf(os.Stderr, "outcome: %s · %d sessions (%d gap-fallback) · %d samples (%d fresh)\n",
-			b.Bucket, len(b.Population), len(b.GapFallbacks), len(b.Samples), fresh)
+		fmt.Fprintf(os.Stderr, "outcome: %s · %d sessions (%d gap-fallback)\n",
+			b.Bucket, len(b.Population), len(b.GapFallbacks))
 	}
+	fresh := 0
+	for _, s := range rec.SampleOutputs {
+		if s.Fresh {
+			fresh++
+		}
+	}
+	fmt.Fprintf(os.Stderr, "outcome: %d global samples (%d fresh) over %d repo bundle(s)\n",
+		len(rec.SampleOutputs), fresh, len(rec.Buckets))
 	if rec.L1Sample != nil {
 		fmt.Fprintf(os.Stderr, "outcome: l1-sample · %d judged (%d cached)\n", rec.L1Sample.Analyzed, rec.L1Sample.Hits)
 	}

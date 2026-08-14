@@ -9,45 +9,15 @@ import (
 	"time"
 )
 
-// buildScoreFixture mirrors buildOutcomeFixture with the bucket named
-// tmux-ctrl so the synthetic rubric fixture's M1 (repos [tmux-ctrl, ...])
-// sees items, and with statuses seeded (scoring fail-closes on missing
-// statuses).
+// buildScoreFixture is buildOutcomeFixture with statuses seeded (scoring
+// fail-closes on missing statuses).
 func buildScoreFixture(t *testing.T) (string, OutcomeOptions) {
 	t.Helper()
-	withFakeCredentials(t)
-	data, _ := buildCorpusFixture(t)
-	pool := filepath.Join(data, "baseline-pool", "v1")
-	writePoolAnalysis(t, pool, "s1", "/Users/dev/Developer/tmux-ctrl", 3)
-	writePoolAnalysis(t, pool, "s2", "/Users/dev/Developer/tmux-ctrl", 4)
-	b := Benchmark{
-		FrozenAt: time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC),
-		Buckets: map[string]BucketPopulations{
-			"tmux-ctrl": {RepoPath: "/Users/dev/Developer/tmux-ctrl",
-				AsConsumed: []string{"s1", "s2"}, Scoring: []string{"s1", "s2"}, Resolved: true},
-		},
-		Statuses: map[string]string{},
-	}
-	if err := writeJSON(filepath.Join(data, "benchmark.json"), b); err != nil {
-		t.Fatal(err)
-	}
-	writeMinimalRubricSet(t, data)
-	mustWriteFile(t, filepath.Join(data, "config-snapshot", "global", "CLAUDE.md"), "frozen")
-	mustWriteFile(t, filepath.Join(data, "config-snapshot", "global", "settings.json"), "{}")
-	mustWriteFile(t, filepath.Join(data, "config-snapshot", "repos", "tmux-ctrl", "CLAUDE.md"), "repo rules")
+	data, opts := buildOutcomeFixture(t)
 	if _, err := SeedStatuses(data); err != nil {
 		t.Fatal(err)
 	}
-	skillL2, skillL1 := t.TempDir(), t.TempDir()
-	mustWriteFile(t, filepath.Join(skillL2, "SKILL.md"), "l2 skill v1")
-	mustWriteFile(t, filepath.Join(skillL1, "SKILL.md"), "l1 skill v1")
-	return data, OutcomeOptions{
-		DataDir: data, CacheDir: t.TempDir(), ClaudeVersion: "1.0.0 (test)",
-		SkillDirs: map[string]string{
-			"analyzing-agent-sessions":       skillL1,
-			"synthesizing-workflow-insights": skillL2,
-		},
-	}
+	return data, opts
 }
 
 // scriptedMatcher: probes always behave (near-miss stays unmatched); target
@@ -74,16 +44,10 @@ func (s *scriptedMatcher) Match(_ context.Context, p MatchPayload) (MatchResult,
 	return MatchResult{}, nil
 }
 
-// runScoreFixture produces a scoreable run record for the score-path tests.
-//
-// Task 8-10: a scoreable record needs the L2 stage, which plan Task 7 removed
-// with the v1 per-repo synthesis; the global replacement and its carding land
-// in plan Tasks 8-9. Every test built on this fixture skips here rather than
-// being deleted — together they are the coverage checklist the rework has to
-// satisfy.
+// runScoreFixture produces a scoreable run record for the score-path tests:
+// one global synthesis per sample over the alpha+beta bundles.
 func runScoreFixture(t *testing.T) (OutcomeOptions, RunRecord) {
 	t.Helper()
-	t.Skip("scoreable records need the v2 L2 stage (plan Tasks 8-9)")
 	_, opts := buildScoreFixture(t)
 	rec, err := RunOutcome(context.Background(), opts)
 	if err != nil {
@@ -93,8 +57,9 @@ func runScoreFixture(t *testing.T) (OutcomeOptions, RunRecord) {
 }
 
 func m1Match() MatchResult {
-	// M1 has exactly 2 required nuances (writeMinimalRubricSet's M1.yaml)
-	return MatchResult{Matches: []ItemMatch{{ItemID: "tmux-ctrl/theme/0", Granularity: "full",
+	// M1 has exactly 2 required nuances (writeMinimalRubricSet's M1.yaml); the
+	// fixture's one finding merges alpha and beta, and is scored once.
+	return MatchResult{Matches: []ItemMatch{{ItemID: "finding/1", Granularity: "full",
 		NuanceResults: []bool{true, true}, ForbiddenFormsMatched: []int{}}}}
 }
 
@@ -107,7 +72,7 @@ func TestScoreRunEndToEndFreshBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.HardFail { // every tmux-ctrl HIGH must_pass target is absent here
+	if !v.HardFail { // every HIGH must_pass target is absent from the fixture synthesis
 		t.Fatal("all-miss fixture must hard-fail")
 	}
 	if v.PartB["M1"] != "full" {

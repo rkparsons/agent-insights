@@ -73,9 +73,22 @@ func RunFreeze(dataDir string, cfg insights.Config) (FreezeReport, error) {
 		return rep, fmt.Errorf("corpus: %w", err)
 	}
 
-	truths, err := loadGroundTruth(filepath.Join(dataDir, "ground-truth"))
+	gtDir := filepath.Join(dataDir, "ground-truth")
+	truths, err := loadGroundTruth(gtDir)
 	if err != nil {
 		return rep, fmt.Errorf("read frozen ground truth: %w", err)
+	}
+	// A frozen v2 snapshot outranks the v1 per-repo reports: it names the
+	// buckets and their analyzed counts (BuildBenchmark). The v1 truths stay
+	// loaded regardless — historical records and the as_consumed control's
+	// pre-strip anchors still read them.
+	globalTruth, hasGlobal, err := loadGlobalGroundTruth(gtDir)
+	if err != nil {
+		return rep, fmt.Errorf("read frozen global ground truth: %w", err)
+	}
+	var global *insights.GlobalSynthesisJSON
+	if hasGlobal {
+		global = &globalTruth
 	}
 
 	existingBenchmark, hasBenchmark, err := loadBenchmark(dataDir)
@@ -88,7 +101,7 @@ func RunFreeze(dataDir string, cfg insights.Config) (FreezeReport, error) {
 	if reuseBenchmark {
 		rep.Benchmark = existingBenchmark
 	} else {
-		rep.Benchmark, problems = BuildBenchmark(frozenAt, analyses, truths, cfg)
+		rep.Benchmark, problems = BuildBenchmark(frozenAt, analyses, truths, global, cfg)
 	}
 
 	v1Dir := filepath.Join(dataDir, "baseline-pool", "v1")

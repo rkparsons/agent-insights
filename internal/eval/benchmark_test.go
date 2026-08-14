@@ -35,7 +35,7 @@ func TestBuildBenchmarkPopulations(t *testing.T) {
 			// reversed From/To, as the pre-sort-fix reports print
 			Window: Window{From: "2026-06-28", To: "2026-06-24", AnalyzedCount: 3}},
 	}
-	b, problems := BuildBenchmark(gen, analyses, truths, insights.Config{})
+	b, problems := BuildBenchmark(gen, analyses, truths, nil, insights.Config{})
 	if len(problems) != 0 {
 		t.Fatalf("problems: %v", problems)
 	}
@@ -68,7 +68,7 @@ func TestBuildBenchmarkRepoPathStripsWorktree(t *testing.T) {
 	truths := map[string]RepoSynthesis{
 		"myrepo": {GeneratedAt: gen, Window: Window{From: "2026-06-24", To: "2026-06-24", AnalyzedCount: 1}},
 	}
-	b, problems := BuildBenchmark(gen, analyses, truths, insights.Config{})
+	b, problems := BuildBenchmark(gen, analyses, truths, nil, insights.Config{})
 	if len(problems) != 0 {
 		t.Fatalf("problems: %v", problems)
 	}
@@ -87,7 +87,7 @@ func TestBuildBenchmarkPostGenerationFallback(t *testing.T) {
 	truths := map[string]RepoSynthesis{
 		"myrepo": {GeneratedAt: gen, Window: Window{From: "2026-06-24", To: "2026-06-24", AnalyzedCount: 1}},
 	}
-	b, problems := BuildBenchmark(gen, analyses, truths, insights.Config{})
+	b, problems := BuildBenchmark(gen, analyses, truths, nil, insights.Config{})
 	if len(problems) != 0 {
 		t.Fatalf("problems: %v", problems)
 	}
@@ -104,7 +104,7 @@ func TestBuildBenchmarkUnresolvedMismatch(t *testing.T) {
 	truths := map[string]RepoSynthesis{
 		"myrepo": {GeneratedAt: gen, Window: Window{From: "2026-06-24", To: "2026-06-24", AnalyzedCount: 5}},
 	}
-	b, problems := BuildBenchmark(gen, analyses, truths, insights.Config{})
+	b, problems := BuildBenchmark(gen, analyses, truths, nil, insights.Config{})
 	if len(problems) != 1 {
 		t.Fatalf("problems = %v", problems)
 	}
@@ -211,6 +211,108 @@ func TestLoadGroundTruth(t *testing.T) {
 	// Verify only two entries
 	if len(got) != 2 {
 		t.Fatalf("got %d entries, want 2: %v", len(got), got)
+	}
+}
+
+// The v2 global snapshot dir is ground truth, not a repo bucket: loading the
+// v1 (per-repo, theme-shaped) truths must skip it, and the v2 loader must pick
+// the newest snapshot out of it.
+func TestGroundTruthSeparatesGlobalFromRepoDirs(t *testing.T) {
+	dir := t.TempDir()
+	old := insights.GlobalSynthesisJSON{SchemaVersion: 2,
+		GeneratedAt: time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC),
+		Repos:       []insights.RepoStatsJSON{{Key: "alpha", AnalyzedCount: 1}}}
+	newer := insights.GlobalSynthesisJSON{SchemaVersion: 2,
+		GeneratedAt: time.Date(2026, 8, 12, 9, 0, 0, 0, time.UTC),
+		Repos: []insights.RepoStatsJSON{
+			{Key: "alpha", Window: insights.WindowBoundsJSON{From: "2026-08-01", To: "2026-08-10"}, AnalyzedCount: 2},
+			{Key: "beta", Window: insights.WindowBoundsJSON{From: "2026-08-02", To: "2026-08-09"}, AnalyzedCount: 1},
+		}}
+	for _, s := range []insights.GlobalSynthesisJSON{old, newer} {
+		name := s.GeneratedAt.Format("2006-01-02T15-04-05Z") + ".json"
+		raw, err := json.Marshal(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(dir, "global"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "global", name), raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// a v1 repo dir beside it stays readable (historical records)
+	v1 := RepoSynthesis{Repo: "alpha", GeneratedAt: time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC),
+		Window: Window{From: "2026-06-24", To: "2026-07-01", AnalyzedCount: 4}}
+	raw, err := json.Marshal(v1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "alpha", "2026-07-02.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	truths, err := loadGroundTruth(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, phantom := truths["global"]; phantom {
+		t.Fatalf("the v2 snapshot dir must never card as a repo bucket: %v", truths)
+	}
+	if len(truths) != 1 || truths["alpha"].Window.AnalyzedCount != 4 {
+		t.Fatalf("v1 ground truth must stay readable: %+v", truths)
+	}
+
+	global, ok, err := loadGlobalGroundTruth(dir)
+	if err != nil || !ok {
+		t.Fatalf("global ground truth: ok=%v err=%v", ok, err)
+	}
+	if len(global.Repos) != 2 || !global.GeneratedAt.Equal(newer.GeneratedAt) {
+		t.Fatalf("newest snapshot wins: %+v", global)
+	}
+}
+
+// A v2 freeze reconstructs its buckets from the global snapshot's per-repo
+// stats — one bucket per repo the snapshot names, not one per ground-truth dir.
+func TestBuildBenchmarkFromGlobalSnapshot(t *testing.T) {
+	gen := time.Date(2026, 8, 12, 9, 0, 0, 0, time.UTC)
+	day := func(d int) time.Time { return time.Date(2026, 8, d, 9, 0, 0, 0, time.UTC) }
+	analyses := []insights.AgentSessionAnalysis{
+		analysisFor("a1", "/Users/dev/Developer/alpha", "", day(2)),
+		analysisFor("a2", "/Users/dev/Developer/alpha/.worktrees/wt", "", day(3)),
+		analysisFor("b1", "/Users/dev/Developer/beta", "", day(4)),
+		// meta session: excluded from scoring, kept in as_consumed
+		analysisFor("b2", "/Users/dev/Developer/beta/.worktrees/insights-generation",
+			"/Users/dev/Developer/beta/.worktrees/insights-generation", day(5)),
+	}
+	global := insights.GlobalSynthesisJSON{SchemaVersion: 2, GeneratedAt: gen,
+		Repos: []insights.RepoStatsJSON{
+			{Key: "alpha", Window: insights.WindowBoundsJSON{From: "2026-08-03", To: "2026-08-02"}, AnalyzedCount: 2},
+			{Key: "beta", Window: insights.WindowBoundsJSON{From: "2026-08-04", To: "2026-08-05"}, AnalyzedCount: 2},
+		}}
+	b, problems := BuildBenchmark(gen, analyses, nil, &global, insights.Config{})
+	if len(problems) != 0 {
+		t.Fatalf("problems: %v", problems)
+	}
+	if len(b.Buckets) != 2 {
+		t.Fatalf("buckets: %+v", b.Buckets)
+	}
+	alpha := b.Buckets["alpha"]
+	if !slices.Equal(alpha.AsConsumed, []string{"a1", "a2"}) || !alpha.Resolved {
+		t.Fatalf("alpha: %+v", alpha)
+	}
+	if alpha.RepoPath != "/Users/dev/Developer/alpha" {
+		t.Fatalf("worktree path must be stripped: %q", alpha.RepoPath)
+	}
+	if alpha.WindowFrom != "2026-08-02" || alpha.WindowTo != "2026-08-03" {
+		t.Fatalf("window not normalized: %+v", alpha)
+	}
+	beta := b.Buckets["beta"]
+	if !slices.Equal(beta.AsConsumed, []string{"b1", "b2"}) || !slices.Equal(beta.Scoring, []string{"b1"}) {
+		t.Fatalf("beta populations: %+v", beta)
 	}
 }
 

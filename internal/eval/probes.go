@@ -59,7 +59,7 @@ func RunProbes(ctx context.Context, cache *Cache, m Matcher, envHash string, rub
 		if err != nil {
 			return nil, fmt.Errorf("probe %s: %w", p.class, err)
 		}
-		item := ScoredItem{ID: "probe/" + p.class, Bucket: "probe", Surface: p.surface, Text: text}
+		item := ScoredItem{ID: "probe/" + p.class, Repos: []string{"probe"}, Surface: p.surface, Text: text}
 		payload := BuildMatchPayload(r, []ScoredItem{item})
 		if len(payload.Items) != 1 {
 			return nil, fmt.Errorf("probe %s: item filtered out (rubric surface %q vs probe surface %q)", p.class, r.Surface, p.surface)
