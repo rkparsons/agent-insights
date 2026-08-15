@@ -263,20 +263,20 @@ func TestVerify2_GoOwnedOverwrite(t *testing.T) {
 	if got.LastSeen != "2026-06-11" {
 		t.Errorf("last_seen = %q, want 2026-06-11 (max cited session date)", got.LastSeen)
 	}
-	if want := ActedKey("hook", f.Statement); got.ActedKey != want {
+	if want := ActedKey("hook", false, f.Statement); got.ActedKey != want {
 		t.Errorf("acted_key = %q, want %q", got.ActedKey, want)
 	}
 }
 
 func TestVerify2_ActedKeyIsRepoFree(t *testing.T) {
 	statement := "Run the smoke test before calling a task done."
-	if ActedKey("hook", statement) == ActedKey("setting", statement) {
+	if ActedKey("hook", false, statement) == ActedKey("setting", false, statement) {
 		t.Error("acted key must vary with asset type")
 	}
-	if k := ActedKey("hook", statement); k != ActedKey("hook", "  RUN the smoke  test before calling a task done. ") {
+	if k := ActedKey("hook", false, statement); k != ActedKey("hook", false, "  RUN the smoke  test before calling a task done. ") {
 		t.Errorf("acted key must normalize whitespace and case, got %q", k)
 	}
-	if k := ActedKey("hook", statement); len(k) != 16 {
+	if k := ActedKey("hook", false, statement); len(k) != 16 {
 		t.Errorf("acted key = %q, want 16 hex chars", k)
 	}
 }
@@ -572,6 +572,9 @@ func TestVerify2_PlacementRecency(t *testing.T) {
 		}
 		if len(out.Meta.ValidationNotes) != 0 {
 			t.Errorf("validation_notes = %v, want none", out.Meta.ValidationNotes)
+		}
+		if want := ActedKey("placement_fix", true, out.Findings[0].Statement); out.Findings[0].ActedKey != want {
+			t.Errorf("acted_key = %q, want escalation-scoped %q", out.Findings[0].ActedKey, want)
 		}
 	})
 

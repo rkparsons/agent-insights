@@ -14,13 +14,22 @@ import (
 
 func actedPath() string { return filepath.Join(insights.InsightsDir(), "insights-acted.json") }
 
-// ActedKey is the acted-store key for a finding: a hash over its asset type
-// and normalized statement, with no source repo — a cross-repo finding has
-// none. Reworded findings get a new key and resurface; that is the accepted
-// limitation, unchanged from v1.
-func ActedKey(assetType, statement string) string {
+// ActedKey is the acted-store key for a finding: a hash over its asset type,
+// whether it escalates an existing rule, and its normalized statement, with no
+// source repo — a cross-repo finding has none. The non-escalated input is
+// byte-identical to the pre-v3 two-arg formula, so keys stored before
+// escalation became orthogonal to asset type stay valid. The escalated bit is
+// load-bearing: acting on a plain rule must not filter out a later escalation
+// of the same statement — the escalation exists because the rule is not
+// working. Reworded findings get a new key and resurface; that is the
+// accepted limitation, unchanged from v1.
+func ActedKey(assetType string, escalated bool, statement string) string {
 	norm := strings.Join(strings.Fields(strings.ToLower(statement)), " ")
-	sum := sha256.Sum256([]byte(assetType + "\x00" + norm))
+	sep := "\x00"
+	if escalated {
+		sep = "\x00esc\x00"
+	}
+	sum := sha256.Sum256([]byte(assetType + sep + norm))
 	return hex.EncodeToString(sum[:])[:16]
 }
 

@@ -7,8 +7,8 @@ import (
 )
 
 func TestActedKey_NormalizesStatement(t *testing.T) {
-	a := ActedKey("habit", "Verify claims  before  asserting")
-	b := ActedKey("habit", "verify claims before asserting") // case/space-normalized same
+	a := ActedKey("habit", false, "Verify claims  before  asserting")
+	b := ActedKey("habit", false, "verify claims before asserting") // case/space-normalized same
 	if a != b {
 		t.Error("normalization: differently-spaced/cased identical statements must share a key")
 	}
@@ -18,7 +18,7 @@ func TestActedKey_NormalizesStatement(t *testing.T) {
 }
 
 func TestActedKey_TypeScoped(t *testing.T) {
-	if ActedKey("new_skill", "address the foo friction") == ActedKey("hook", "address the foo friction") {
+	if ActedKey("new_skill", false, "address the foo friction") == ActedKey("hook", false, "address the foo friction") {
 		t.Error("asset type must scope the key: same normalized statement, different type must not collide")
 	}
 }
@@ -27,7 +27,7 @@ func TestActedKey_TypeScoped(t *testing.T) {
 // passed back in on the command line (`insights acted <key>`) and compared as
 // opaque strings by every consumer.
 func TestActedKey_LengthAndCharset(t *testing.T) {
-	k := ActedKey("hook", "Run the smoke test before calling a task done.")
+	k := ActedKey("hook", false, "Run the smoke test before calling a task done.")
 	if len(k) != 16 {
 		t.Fatalf("key %q, want 16 chars", k)
 	}
@@ -44,7 +44,7 @@ func TestActedRoundTrip(t *testing.T) {
 	if err != nil || len(m) != 0 {
 		t.Fatalf("empty load = (%v,%v), want ({},nil)", m, err)
 	}
-	k := ActedKey("habit", "do the thing")
+	k := ActedKey("habit", false, "do the thing")
 	if err := MarkActed(k); err != nil {
 		t.Fatalf("MarkActed: %v", err)
 	}
@@ -56,8 +56,8 @@ func TestActedRoundTrip(t *testing.T) {
 
 func TestUnmarkActed_RemovesKeyPreservingOthers(t *testing.T) {
 	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
-	keep := ActedKey("habit", "keep me")
-	drop := ActedKey("habit", "roll me back")
+	keep := ActedKey("habit", false, "keep me")
+	drop := ActedKey("habit", false, "roll me back")
 	if err := MarkActed(keep); err != nil {
 		t.Fatalf("MarkActed keep: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestUnmarkActed_RemovesKeyPreservingOthers(t *testing.T) {
 
 func TestUnmarkActed_AbsentKeyIsNoop(t *testing.T) {
 	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
-	if err := UnmarkActed(ActedKey("habit", "never marked")); err != nil {
+	if err := UnmarkActed(ActedKey("habit", false, "never marked")); err != nil {
 		t.Errorf("UnmarkActed on absent key = %v, want nil (no-op)", err)
 	}
 }
@@ -92,8 +92,8 @@ func TestUnmarkActed_AbsentKeyIsNoop(t *testing.T) {
 // so both land.
 func TestMarkActed_ConcurrentWritesBothLand(t *testing.T) {
 	t.Setenv("AGENT_INSIGHTS_DIR", t.TempDir())
-	k1 := ActedKey("habit", "concurrent one")
-	k2 := ActedKey("habit", "concurrent two")
+	k1 := ActedKey("habit", false, "concurrent one")
+	k2 := ActedKey("habit", false, "concurrent two")
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
@@ -114,5 +114,27 @@ func TestMarkActed_ConcurrentWritesBothLand(t *testing.T) {
 	}
 	if !m[k1] || !m[k2] {
 		t.Fatalf("both concurrent keys should land: %v", m)
+	}
+}
+
+// TestActedKey_EscalationScoped: the escalated bit must scope the key — acting
+// on a plain rule must not swallow a later escalation of the same statement
+// (the escalation exists because the rule is not working).
+func TestActedKey_EscalationScoped(t *testing.T) {
+	s := "Open a draft PR before requesting review."
+	if ActedKey("repo_doc", false, s) == ActedKey("repo_doc", true, s) {
+		t.Error("same type and statement with and without escalation must not collide")
+	}
+}
+
+// TestActedKey_NonEscalatedFormulaUnchanged pins the non-escalated hash input
+// to the pre-v3 two-arg formula's output: keys already stored in
+// insights-acted.json must stay valid across the v3 contract change.
+func TestActedKey_NonEscalatedFormulaUnchanged(t *testing.T) {
+	if k := ActedKey("hook", false, "Run the smoke test before calling a task done."); k != "21951a94294cb17f" {
+		t.Errorf("key = %q, want pre-v3 digest 21951a94294cb17f", k)
+	}
+	if k := ActedKey("habit", false, "do the thing"); k != "2f98ce8bffc00b2f" {
+		t.Errorf("key = %q, want pre-v3 digest 2f98ce8bffc00b2f", k)
 	}
 }

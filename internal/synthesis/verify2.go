@@ -421,7 +421,7 @@ func (v *verifier) fillGoOwned(f *insights.FindingJSON) {
 	f.Repos = sortedKeys(repos)
 	f.SessionCount = len(sessions)
 	f.LastSeen = lastSeen
-	f.ActedKey = ActedKey(f.Asset.Type, f.Statement)
+	f.ActedKey = ActedKey(f.Asset.Type, f.EscalatedFrom != nil, f.Statement)
 }
 
 func sortedKeys(set map[string]bool) []string {
