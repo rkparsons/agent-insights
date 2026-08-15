@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["schema_version", "findings", "dropped"],
   "properties": {
-    "schema_version": { "type": "integer", "enum": [2] },
+    "schema_version": { "type": "integer", "enum": [3] },
     "findings": {
       "type": "array",
       "maxItems": 10,
@@ -74,7 +74,7 @@
         "already_adopted": { "$ref": "#/$defs/Adopted" },
         "escalated_from": {
           "$ref": "#/$defs/EscalatedFrom",
-          "description": "placement_fix only: the existing rule being escalated."
+          "description": "Present iff this finding escalates an existing rule (never on habit): the pre-existing rule being strengthened. The asset is then the enforcement/placement change, typed by its own ladder rung."
         }
       }
     },
@@ -85,7 +85,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["claude_md_rule", "repo_doc", "new_skill", "hook", "setting", "habit", "placement_fix"]
+          "enum": ["claude_md_rule", "repo_doc", "new_skill", "hook", "setting", "habit"]
         },
         "target": {
           "type": "string",

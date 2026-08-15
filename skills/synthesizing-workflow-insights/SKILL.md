@@ -21,7 +21,7 @@ write one JSON file.
   git history when available.
 - Write one `RawGlobalSynthesis` JSON to `./synthesis.json` — a file, not stdout.
   The exact shape is this skill's `schema.json`:
-  `{"schema_version": 2, "findings": [...], "dropped": [...]}`. Omit `meta` — Go
+  `{"schema_version": 3, "findings": [...], "dropped": [...]}`. Omit `meta` — Go
   stamps it.
 
 ## Conduct — read-only run
@@ -43,8 +43,8 @@ write one JSON file.
 - **Reference evidence by id only.** Every finding and every dropped entry cites bundle ids (`F*/P*/S*/G*`) in their namespaced form exactly as the bundle files carry them. Never invent an id.
 - **No evidence counts.** Do not write counts, rates, "N sessions", "X times", or percentages describing the evidence in any `title`, `statement`, `rank_rationale`, `asset.content`, or `dropped` summary/reason. Go computes all numbers. A bound that is part of the recommended practice itself (e.g. "at most four options") is content, not a count: keep it exactly as the evidence states it.
 - **Quotes must be copied verbatim** from a cited item's `quote` field (or a cited signal's `detail` line) into `quotes` — at most three per finding. Do not paraphrase: a quote that is not byte-for-byte in a cited item's quote pool is dropped by the verifier.
-- **Grounding is typed.** Each `asset.type` may cite only the evidence kinds the grounding table below allows; one out-of-kind id fails the entire synthesis closed.
-- **Every path is `~`-relative.** Write `~/.claude/CLAUDE.md`, `~/Developer/<repo>/docs/x.md` — never an absolute home path (`/Users/<name>/…`, `/home/<name>/…`, `$HOME/…`), and never in ANY field: `asset.target`, `already_adopted.source_path`, `escalated_from.source_path`, and equally the free text of `statement`, `asset.content`, `rank_rationale`, `title`, and `dropped` summaries/reasons. Structured path fields are rewritten for you; free text is NOT — one absolute home path in prose fails the entire synthesis closed. The manifest names every asset location with an absolute home path, not a `~`-relative one: to write a structured path field, rewrite only the leading home directory to `~` and keep every later segment exactly as the manifest (or the file itself) has it — never shorten, drop, re-guess, or otherwise "normalize" any segment after the home prefix. For example, the manifest's `/Users/dev/.claude/CLAUDE.md` becomes `~/.claude/CLAUDE.md` — not `~/CLAUDE.md`. Two kinds of copied text are the exceptions, because both stay byte-for-byte: a quote — so when the only verbatim form of a quote carries an absolute home path, quote a different line instead — and an excerpt (`already_adopted.excerpt`, `escalated_from.excerpt`), which you copy exactly as the source file has it, absolute paths and all. Never "tidy" a path inside an excerpt: that makes it no longer verbatim, which downgrades an `already_adopted` verdict and fails a `placement_fix` closed. Go rewrites excerpts for you, after it has checked them against the file.
+- **Grounding is typed.** Each finding may cite only the evidence kinds the grounding table below allows for it (the escalation row when `escalated_from` is present, else its `asset.type`'s row); one out-of-kind id fails the entire synthesis closed.
+- **Every path is `~`-relative.** Write `~/.claude/CLAUDE.md`, `~/Developer/<repo>/docs/x.md` — never an absolute home path (`/Users/<name>/…`, `/home/<name>/…`, `$HOME/…`), and never in ANY field: `asset.target`, `already_adopted.source_path`, `escalated_from.source_path`, and equally the free text of `statement`, `asset.content`, `rank_rationale`, `title`, and `dropped` summaries/reasons. Structured path fields are rewritten for you; free text is NOT — one absolute home path in prose fails the entire synthesis closed. The manifest names every asset location with an absolute home path, not a `~`-relative one: to write a structured path field, rewrite only the leading home directory to `~` and keep every later segment exactly as the manifest (or the file itself) has it — never shorten, drop, re-guess, or otherwise "normalize" any segment after the home prefix. For example, the manifest's `/Users/dev/.claude/CLAUDE.md` becomes `~/.claude/CLAUDE.md` — not `~/CLAUDE.md`. Two kinds of copied text are the exceptions, because both stay byte-for-byte: a quote — so when the only verbatim form of a quote carries an absolute home path, quote a different line instead — and an excerpt (`already_adopted.excerpt`, `escalated_from.excerpt`), which you copy exactly as the source file has it, absolute paths and all. Never "tidy" a path inside an excerpt: that makes it no longer verbatim, which downgrades an `already_adopted` verdict and fails an escalation closed. Go rewrites excerpts for you, after it has checked them against the file.
 - **Empty arrays are valid** and common. Do not manufacture findings.
 
 ## Statement fidelity (findings)
@@ -79,7 +79,9 @@ evidence, in this order:
 
 `habit` sits outside the ladder: a practice no file or automation can carry.
 `asset.target` and `asset.content` are omitted for `habit` — its deliverable is
-its statement. `placement_fix` is reserved for escalations (below).
+its statement. An escalation (below) is not a type of its own: its finding
+carries `escalated_from` and its asset takes whichever rung the fix itself
+sits on.
 
 ## Grounding table
 
@@ -90,7 +92,7 @@ its statement. `placement_fix` is reserved for escalations (below).
 | `hook`, `setting` | `F*`, `G*` |
 | `new_skill` | retyping-kind `G*` (`retyped_directives`/`retyped_kickoffs`), `P*` |
 | `habit` | `F*`, `S*` |
-| `placement_fix` | `P*`, `F*` — plus `escalated_from` citing the existing rule |
+| any type with `escalated_from` | `P*`, `F*` — the violations/restatements of the existing rule |
 
 `G*` signals are directly citable where the table allows them (their member
 sessions carry the support). `dropped` entries may cite ids of any kind. The
@@ -101,8 +103,8 @@ re-check every id against it before writing the file.
 
 - **Check before you propose.** Before emitting any finding, look for the proposed asset at the manifest's asset locations — Read/Grep the actual files. Recommending a rule that already exists is the failure mode this contract exists to prevent.
 - `already_adopted` answers exactly one question: **is the proposed asset already in place at its target?** `yes` requires `source_path` plus a verbatim `excerpt` copied from that file — Go verifies the excerpt appears byte-for-byte, and a paraphrase downgrades the verdict to `unknown`. `no` means you checked the target and it is absent. `unknown` means you could not check.
-- **Escalation.** When a practice is already covered by an existing rule in the manifest's assets AND the bundles show it being violated or re-stated, the finding is a `placement_fix`: its asset is the enforcement or placement change — copy the rule into the checked-in file that reaches subagents, add the clause the existing rule lacks, add a mechanical guard, require task briefs to carry the line — never a restatement of the rule. Put the existing rule's `source_path` and verbatim `excerpt` in `escalated_from`.
-- For a `placement_fix`, `already_adopted` is about the fix itself (is the rule already copied to the proposed location? is the guard already present?), never about the pre-existing rule — that one lives in `escalated_from`.
+- **Escalation.** When a practice is already covered by an existing rule in the manifest's assets AND the bundles show it being violated or re-stated, the finding is an escalation: its asset is the enforcement or placement change — copy the rule into the checked-in file that reaches subagents (`repo_doc`), add the clause the existing rule lacks (`claude_md_rule` or `repo_doc`), add a mechanical guard (`hook`/`setting`), require task briefs to carry the line (`claude_md_rule`) — never a restatement of the rule. Type the asset by the rung the fix itself sits on (the ladder's preference order applies to escalations too), and put the existing rule's `source_path` and verbatim `excerpt` in `escalated_from`. Never type an escalation `habit`: its asset is a concrete change, and a habit has none.
+- For an escalated finding, `already_adopted` is about the fix itself (is the rule already copied to the proposed location? is the guard already present?), never about the pre-existing rule — that one lives in `escalated_from`.
 - **Recency is not yours to judge.** You cannot see session dates, so never argue that violations postdate the rule. Propose the escalation on coverage + violations alone; Go compares the rule's git-change date against the cited sessions' dates and removes the finding itself when the rule never had a chance to work.
 
 ## Ranking
@@ -138,9 +140,9 @@ title names the practice; every evidenced qualifier stays in `statement`
 Re-verify, in order:
 
 1. Ranks form a 1..N permutation, N ≤ 10.
-2. Every cited id exists in a bundle file, in namespaced form, and obeys the grounding table for its finding's `asset.type`.
+2. Every cited id exists in a bundle file, in namespaced form, and obeys the grounding table for its finding (the escalation row when `escalated_from` is present, else its `asset.type`'s row).
 3. Every quote is byte-for-byte from a cited item's `quote` field or a cited signal's `detail` line, at most three per finding.
 4. No counts, rates, or percentages describing evidence anywhere in free text — titles, statements, rationales, asset content, dropped summaries and reasons.
 5. Every path anywhere in the file is `~`-relative — no `/Users/…`, `/home/…` or `$HOME/…` in any target, source path, statement, asset content, rationale, title, or dropped summary/reason. `quotes` and the two `excerpt` fields are the exceptions: they stay byte-for-byte, paths included.
-6. Every `claude_md_rule`/`repo_doc` has `audience`; every `placement_fix` has `escalated_from`; every `already_adopted` `yes` has `source_path` and a verbatim `excerpt`.
-7. `schema_version` is `2` and the file parses as JSON.
+6. Every `claude_md_rule`/`repo_doc` has `audience`; every `escalated_from` has `source_path` and a verbatim `excerpt` and its finding's `asset.type` is not `habit`; every `already_adopted` `yes` has `source_path` and a verbatim `excerpt`.
+7. `schema_version` is `3` and the file parses as JSON.
