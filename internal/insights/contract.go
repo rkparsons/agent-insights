@@ -4,7 +4,7 @@ package insights
 // (StatusJSON and GlobalSynthesisJSON, `show --json`'s payload). This is the cross-repo
 // contract: a standalone agent-insights binary will vendor these shapes, so
 // field names and json tags here are load-bearing. Bump on a breaking change.
-const ContractVersion = 2
+const ContractVersion = 3
 
 // StatusJSON is `insights status --json`'s stdout payload.
 type StatusJSON struct {

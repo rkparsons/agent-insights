@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "generated_at": "2026-08-10T00:00:00Z",
   "window": { "from": "2026-07-27", "to": "2026-08-10" },
   "repos": [
@@ -42,10 +42,11 @@
       "statement": "Open a draft PR before requesting review.",
       "rank_rationale": "Already documented but still violated after the rule shipped.",
       "asset": {
-        "type": "placement_fix",
+        "type": "repo_doc",
         "target": "~/dev/alpha/CLAUDE.md",
         "content": "Open a draft PR before requesting review."
       },
+      "audience": "both",
       "evidence_ids": ["alpha/P5", "alpha/F9"],
       "already_adopted": { "verdict": "no" },
       "escalated_from": {

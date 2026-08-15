@@ -87,7 +87,7 @@ func seedStore(t *testing.T, repoKey string, n int) string {
 // store's bundle: one habit citing the first friction item, quoting it verbatim.
 func validRaw() insights.RawGlobalSynthesis {
 	return insights.RawGlobalSynthesis{
-		SchemaVersion: 2,
+		SchemaVersion: 3,
 		Findings: []insights.RawFinding{{
 			Rank: 1, Title: "Run the tests first", Statement: "Run the test suite before reporting a task done.",
 			RankRationale:  "The same rework appears across sessions.",
@@ -129,8 +129,8 @@ func TestRunSynthesizeWritesOneGlobalSnapshot(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("LoadLatestGlobal = (ok=%v, err=%v)", ok, err)
 	}
-	if snap.SchemaVersion != 2 || len(snap.Findings) != 1 || snap.Findings[0].SessionCount != 1 {
-		t.Errorf("stored snapshot = %+v, want the verified v2 payload with Go-owned counts", snap)
+	if snap.SchemaVersion != 3 || len(snap.Findings) != 1 || snap.Findings[0].SessionCount != 1 {
+		t.Errorf("stored snapshot = %+v, want the verified v3 payload with Go-owned counts", snap)
 	}
 	if snap.Meta.Model != insights.DefaultSynthesisModel {
 		t.Errorf("meta.model = %q, want the configured synthesis model", snap.Meta.Model)

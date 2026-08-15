@@ -68,7 +68,7 @@ func buildFixtureWorld(t *testing.T) string {
 // (synthesis/global), the shape a v2 freeze anchors on.
 func writeLiveGlobalSnapshot(t *testing.T, repos []insights.RepoStatsJSON, generatedAt time.Time) string {
 	t.Helper()
-	snap := insights.GlobalSynthesisJSON{SchemaVersion: 2, GeneratedAt: generatedAt, Repos: repos}
+	snap := insights.GlobalSynthesisJSON{SchemaVersion: 3, GeneratedAt: generatedAt, Repos: repos}
 	raw, err := json.Marshal(snap)
 	if err != nil {
 		t.Fatal(err)

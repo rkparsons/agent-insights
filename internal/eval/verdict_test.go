@@ -30,11 +30,11 @@ func tier1Fixture(t *testing.T, freshCount int, emptyLast bool) (RunRecord, *Cac
 		Buckets: []BucketOutputs{{Bucket: "alpha", Population: []string{"s1", "s2"},
 			BundleKey: "bk1", BundleHash: "bh1"}}}
 	for i := 0; i < 3; i++ {
-		vo := VerifiedOutput{Snapshot: insights.GlobalSynthesisJSON{SchemaVersion: 2,
+		vo := VerifiedOutput{Snapshot: insights.GlobalSynthesisJSON{SchemaVersion: 3,
 			Findings: []insights.FindingJSON{{Rank: 1, Title: "T", Statement: "verify first",
 				EvidenceIDs: []string{"alpha/F1"}, Repos: []string{"alpha"}}}}}
 		if emptyLast && i == 2 {
-			vo = VerifiedOutput{Snapshot: insights.GlobalSynthesisJSON{SchemaVersion: 2}}
+			vo = VerifiedOutput{Snapshot: insights.GlobalSynthesisJSON{SchemaVersion: 3}}
 		}
 		key := fmt.Sprintf("vk%d", i)
 		if err := cache.Put("verify", key, vo); err != nil {

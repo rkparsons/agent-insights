@@ -66,7 +66,7 @@ func driftFinding() insights.RawFinding {
 // fixture drifted, not the note wording.
 func verifyForDrift(t *testing.T, f insights.RawFinding) VerifiedOutput {
 	t.Helper()
-	raw := insights.RawGlobalSynthesis{SchemaVersion: 2, Findings: []insights.RawFinding{f}}
+	raw := insights.RawGlobalSynthesis{SchemaVersion: 3, Findings: []insights.RawFinding{f}}
 	snap, err := synthesis.VerifyGlobal(context.Background(), raw, driftBundles(),
 		insights.Config{SynthesisModel: "test-model"}, driftGeneratedAt)
 	if err != nil {

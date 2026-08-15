@@ -12,7 +12,7 @@ import (
 func TestBuildShowJSONReturnsTheSnapshot(t *testing.T) {
 	snap := globalFixture(time.Date(2026, 8, 13, 0, 0, 0, 0, time.UTC), "test-model")
 	show := BuildShowJSON(snap, true)
-	if show.SchemaVersion != 2 || show.Meta.Model != "test-model" || len(show.Findings) != 1 {
+	if show.SchemaVersion != 3 || show.Meta.Model != "test-model" || len(show.Findings) != 1 {
 		t.Fatalf("show payload = %+v, want the stored snapshot itself", show)
 	}
 	if show.Findings[0].ActedKey != snap.Findings[0].ActedKey {
@@ -42,9 +42,9 @@ func TestBuildShowJSONNeverRun(t *testing.T) {
 // consumer can name the skew instead of silently mis-rendering it.
 func TestBuildShowJSONPreservesStoredSchemaVersion(t *testing.T) {
 	snap := globalFixture(time.Date(2026, 8, 13, 0, 0, 0, 0, time.UTC), "m")
-	snap.SchemaVersion = 3
-	if show := BuildShowJSON(snap, true); show.SchemaVersion != 3 {
-		t.Errorf("schema_version = %d, want the stored 3", show.SchemaVersion)
+	snap.SchemaVersion = 2
+	if show := BuildShowJSON(snap, true); show.SchemaVersion != 2 {
+		t.Errorf("schema_version = %d, want the stored 2", show.SchemaVersion)
 	}
 }
 

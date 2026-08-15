@@ -63,10 +63,10 @@ func probeBundle(repo string) synthesis.EvidenceBundle {
 
 func findingSnapshot(evidence ...string) VerifiedOutput {
 	return VerifiedOutput{
-		Snapshot: insights.GlobalSynthesisJSON{SchemaVersion: 2,
+		Snapshot: insights.GlobalSynthesisJSON{SchemaVersion: 3,
 			Findings: []insights.FindingJSON{{Rank: 1, Title: "T", Statement: "state the goal first",
 				EvidenceIDs: evidence}}},
-		Raw: insights.RawGlobalSynthesis{SchemaVersion: 2,
+		Raw: insights.RawGlobalSynthesis{SchemaVersion: 3,
 			Findings: []insights.RawFinding{{Rank: 1, Title: "T", Statement: "state the goal first",
 				EvidenceIDs: evidence}}},
 	}
@@ -283,7 +283,7 @@ func TestComputeTier1ChurnAndEmptyFailClosed(t *testing.T) {
 
 	// a sample that produced nothing at all fails closed
 	emptyRec, emptyCache := tier1Case(t, map[string]synthesis.EvidenceBundle{"alpha": b},
-		[]VerifiedOutput{first, {Snapshot: insights.GlobalSynthesisJSON{SchemaVersion: 2}}}, 2)
+		[]VerifiedOutput{first, {Snapshot: insights.GlobalSynthesisJSON{SchemaVersion: 3}}}, 2)
 	_, emptyReasons, _, _, err := ComputeTier1(emptyRec, emptyCache, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -445,8 +445,8 @@ func TestComputeTier1MissingCacheEntriesFailClosed(t *testing.T) {
 // snapshot alike, each citing its own evidence.
 func findingsSnapshot(findings ...insights.FindingJSON) VerifiedOutput {
 	vo := VerifiedOutput{
-		Snapshot: insights.GlobalSynthesisJSON{SchemaVersion: 2, Findings: findings},
-		Raw:      insights.RawGlobalSynthesis{SchemaVersion: 2},
+		Snapshot: insights.GlobalSynthesisJSON{SchemaVersion: 3, Findings: findings},
+		Raw:      insights.RawGlobalSynthesis{SchemaVersion: 3},
 	}
 	for _, f := range findings {
 		vo.Raw.Findings = append(vo.Raw.Findings, insights.RawFinding{Rank: f.Rank, Title: f.Title,

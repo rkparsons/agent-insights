@@ -40,7 +40,7 @@ const maxFindings = 10
 const maxQuotes = 3
 
 // rawSchemaVersion is the only raw contract this verifier understands.
-const rawSchemaVersion = 2
+const rawSchemaVersion = 3
 
 // dateLayout is the bundle's session-date format (see sessionDate), the only
 // granularity the recency arbitration has on either side of its comparison.
@@ -100,7 +100,7 @@ func verifyGlobal(raw insights.RawGlobalSynthesis, bundles map[string]EvidenceBu
 		return insights.GlobalSynthesisJSON{}, fmt.Errorf("verification failed: %s", strings.Join(v.hard, "; "))
 	}
 	return insights.GlobalSynthesisJSON{
-		SchemaVersion: 2,
+		SchemaVersion: insights.ContractVersion,
 		GeneratedAt:   generatedAt,
 		Window:        windowOf(bundles),
 		Repos:         repoStats(bundles),

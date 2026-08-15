@@ -14,7 +14,7 @@ import (
 // below set to their zero value instead.
 func fullyPopulatedGlobalSynthesis() GlobalSynthesisJSON {
 	return GlobalSynthesisJSON{
-		SchemaVersion: 2,
+		SchemaVersion: 3,
 		GeneratedAt:   time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC),
 		Window:        WindowBoundsJSON{From: "2026-07-27", To: "2026-08-10"},
 		Repos: []RepoStatsJSON{
@@ -27,7 +27,7 @@ func fullyPopulatedGlobalSynthesis() GlobalSynthesisJSON {
 				Statement:     "Open a draft PR before requesting review.",
 				RankRationale: "Already documented but still violated after the rule shipped.",
 				Asset: AssetJSON{
-					Type:    "placement_fix",
+					Type:    "repo_doc",
 					Target:  "~/dev/alpha/CLAUDE.md",
 					Content: "Open a draft PR before requesting review.",
 				},

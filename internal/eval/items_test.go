@@ -28,7 +28,7 @@ func globalFixture() (insights.GlobalSynthesisJSON, map[string]synthesis.Evidenc
 		},
 	}
 	snap := insights.GlobalSynthesisJSON{
-		SchemaVersion: 2,
+		SchemaVersion: 3,
 		Findings: []insights.FindingJSON{
 			{Rank: 1, Title: "Verify first", Statement: "verify before asserting",
 				EvidenceIDs: []string{"alpha/F1", "beta/F1", "alpha/F1", "alpha/F9"},

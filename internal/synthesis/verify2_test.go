@@ -72,7 +72,7 @@ func v2Finding() insights.RawFinding {
 }
 
 func v2Raw(findings ...insights.RawFinding) insights.RawGlobalSynthesis {
-	return insights.RawGlobalSynthesis{SchemaVersion: 2, Findings: findings}
+	return insights.RawGlobalSynthesis{SchemaVersion: rawSchemaVersion, Findings: findings}
 }
 
 func v2Config() insights.Config {
@@ -328,8 +328,8 @@ func TestVerify2_Envelope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
-	if out.SchemaVersion != 2 {
-		t.Errorf("schema_version = %d, want 2", out.SchemaVersion)
+	if out.SchemaVersion != insights.ContractVersion {
+		t.Errorf("schema_version = %d, want %d", out.SchemaVersion, insights.ContractVersion)
 	}
 	if !out.GeneratedAt.Equal(v2GeneratedAt) {
 		t.Errorf("generated_at = %v, want %v", out.GeneratedAt, v2GeneratedAt)
@@ -908,7 +908,7 @@ func TestVerify2_AbsorbedSchemaConstraints(t *testing.T) {
 	})
 
 	t.Run("wrong schema version fails", func(t *testing.T) {
-		for _, version := range []int{0, 1, 3} {
+		for _, version := range []int{0, 2, 4} {
 			raw := v2Raw(v2Finding())
 			raw.SchemaVersion = version
 			if _, err := verifyFixture(t, raw); err == nil {

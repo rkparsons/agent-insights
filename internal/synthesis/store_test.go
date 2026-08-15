@@ -13,7 +13,7 @@ import (
 
 func globalFixture(generatedAt time.Time, model string) insights.GlobalSynthesisJSON {
 	return insights.GlobalSynthesisJSON{
-		SchemaVersion: 2,
+		SchemaVersion: 3,
 		GeneratedAt:   generatedAt,
 		Window:        insights.WindowBoundsJSON{From: "2026-07-27", To: "2026-08-10"},
 		Repos: []insights.RepoStatsJSON{

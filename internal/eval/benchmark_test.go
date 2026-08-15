@@ -220,10 +220,10 @@ func TestLoadGroundTruth(t *testing.T) {
 // the newest snapshot out of it.
 func TestGroundTruthSeparatesGlobalFromRepoDirs(t *testing.T) {
 	dir := t.TempDir()
-	old := insights.GlobalSynthesisJSON{SchemaVersion: 2,
+	old := insights.GlobalSynthesisJSON{SchemaVersion: 3,
 		GeneratedAt: time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC),
 		Repos:       []insights.RepoStatsJSON{{Key: "alpha", AnalyzedCount: 1}}}
-	newer := insights.GlobalSynthesisJSON{SchemaVersion: 2,
+	newer := insights.GlobalSynthesisJSON{SchemaVersion: 3,
 		GeneratedAt: time.Date(2026, 8, 12, 9, 0, 0, 0, time.UTC),
 		Repos: []insights.RepoStatsJSON{
 			{Key: "alpha", Window: insights.WindowBoundsJSON{From: "2026-08-01", To: "2026-08-10"}, AnalyzedCount: 2},
@@ -289,7 +289,7 @@ func TestBuildBenchmarkFromGlobalSnapshot(t *testing.T) {
 		analysisFor("b2", "/Users/dev/Developer/beta/.worktrees/insights-generation",
 			"/Users/dev/Developer/beta/.worktrees/insights-generation", day(5)),
 	}
-	global := insights.GlobalSynthesisJSON{SchemaVersion: 2, GeneratedAt: gen,
+	global := insights.GlobalSynthesisJSON{SchemaVersion: 3, GeneratedAt: gen,
 		Repos: []insights.RepoStatsJSON{
 			{Key: "alpha", Window: insights.WindowBoundsJSON{From: "2026-08-03", To: "2026-08-02"}, AnalyzedCount: 2},
 			{Key: "beta", Window: insights.WindowBoundsJSON{From: "2026-08-04", To: "2026-08-05"}, AnalyzedCount: 2},

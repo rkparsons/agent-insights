@@ -359,7 +359,7 @@ func TestStatusDueReposReflectsGlobalGate(t *testing.T) {
 
 	// A fresh snapshot resets both terms of the gate: nothing is due, so
 	// nothing contributes.
-	if _, err := synthesis.StoreGlobal(insights.GlobalSynthesisJSON{SchemaVersion: 2, GeneratedAt: time.Now().UTC()}); err != nil {
+	if _, err := synthesis.StoreGlobal(insights.GlobalSynthesisJSON{SchemaVersion: 3, GeneratedAt: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
 	status, err = buildStatusJSON(cfg)

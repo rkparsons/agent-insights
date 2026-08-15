@@ -85,7 +85,7 @@ func (f *fakeGlobalSynth) SynthesizeGlobal(_ context.Context, bundles map[string
 // the fixture stays valid without inventing files.
 func mergedRaw() insights.RawGlobalSynthesis {
 	return insights.RawGlobalSynthesis{
-		SchemaVersion: 2,
+		SchemaVersion: 3,
 		Findings: []insights.RawFinding{{
 			Rank: 1, Title: "State the goal before editing",
 			Statement:     "open every session by writing the goal down",
