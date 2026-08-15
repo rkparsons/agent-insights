@@ -194,6 +194,48 @@ func TestVerify2_KindGrounding_Fails(t *testing.T) {
 		{"habit cites friction and success", typedFinding("habit", "alpha/F1", "alpha/S1"), false},
 		{"habit cites prefs", typedFinding("habit", "alpha/P1"), true},
 		{"unknown asset type", typedFinding("blog_post", "alpha/P1"), true},
+		{"placement_fix is no longer a type", typedFinding("placement_fix", "alpha/P1", "alpha/F1"), true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := verifyFixture(t, v2Raw(c.finding))
+			if c.wantErr && err == nil {
+				t.Fatal("want fail-closed error, got nil")
+			}
+			if !c.wantErr && err != nil {
+				t.Fatalf("want no error, got %v", err)
+			}
+		})
+	}
+}
+
+// TestVerify2_EscalatedGrounding: a finding with escalated_from grounds on the
+// violations/restatements of the existing rule (P*/F*) regardless of its
+// deliverable type — and habit cannot be escalated at all.
+func TestVerify2_EscalatedGrounding(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	rulePath := writeHomeFile(t, home, "dotfiles/claude/CLAUDE.md",
+		"Run the smoke test before calling a task done.\n")
+	from := &insights.EscalatedFromJSON{
+		SourcePath: rulePath, Excerpt: "Run the smoke test before calling a task done.",
+	}
+	esc := func(assetType string, ids ...string) insights.RawFinding {
+		f := typedFinding(assetType, ids...)
+		f.EscalatedFrom = from
+		return f
+	}
+
+	cases := []struct {
+		name    string
+		finding insights.RawFinding
+		wantErr bool
+	}{
+		{"escalated hook cites prefs and friction", esc("hook", "alpha/P1", "alpha/F1"), false},
+		{"escalated hook cites a signal", esc("hook", "alpha/F1", "alpha/G2"), true},
+		{"escalated repo_doc cites prefs and friction", esc("repo_doc", "alpha/P1", "alpha/F2"), false},
+		{"escalated new_skill cites a retyping signal", esc("new_skill", "alpha/G1", "alpha/P1"), true},
+		{"escalated habit fails closed", esc("habit", "alpha/F1"), true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -508,7 +550,7 @@ func stubRuleDate(t *testing.T, day string) RuleDateFunc {
 	return func(string) (time.Time, bool) { return d, true }
 }
 
-func TestVerify2_PlacementRecency(t *testing.T) {
+func TestVerify2_EscalationRecency(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	dotfiles := filepath.Join(home, "dotfiles")
@@ -519,22 +561,26 @@ func TestVerify2_PlacementRecency(t *testing.T) {
 	}
 
 	// The cited evidence's latest session date is 2026-06-05 (alpha/F2).
-	placement := func(from *insights.EscalatedFromJSON) insights.RawGlobalSynthesis {
-		f := typedFinding("placement_fix", "alpha/P1", "alpha/F2")
+	escalation := func(from *insights.EscalatedFromJSON) insights.RawGlobalSynthesis {
+		f := typedFinding("repo_doc", "alpha/P1", "alpha/F2")
 		f.EscalatedFrom = from
 		return v2Raw(f)
 	}
 	withDotfiles := insights.Config{SynthesisModel: "test-model", DotfilesRepo: dotfiles}
 
-	t.Run("missing escalated_from fails", func(t *testing.T) {
-		if _, err := verifyFixture(t, placement(nil)); err == nil {
-			t.Fatal("want fail-closed error, got nil")
+	t.Run("no escalated_from means no escalation checks", func(t *testing.T) {
+		out, err := verifyGlobal(v2Raw(typedFinding("repo_doc", "alpha/P1", "alpha/F2")), v2Bundles(), withDotfiles, v2GeneratedAt, stubRuleDate(t, "2026-07-01"))
+		if err != nil {
+			t.Fatalf("verify: %v", err)
+		}
+		if len(out.Findings) != 1 {
+			t.Errorf("findings = %d, want the plain finding kept untouched by recency", len(out.Findings))
 		}
 	})
 
 	t.Run("excerpt absent from the rule file fails", func(t *testing.T) {
 		bogus := &insights.EscalatedFromJSON{SourcePath: rulePath, Excerpt: "Never open a draft PR at all."}
-		if _, err := verifyFixture(t, placement(bogus)); err == nil {
+		if _, err := verifyFixture(t, escalation(bogus)); err == nil {
 			t.Fatal("want fail-closed error, got nil")
 		}
 	})
@@ -544,13 +590,13 @@ func TestVerify2_PlacementRecency(t *testing.T) {
 			SourcePath: filepath.Join(dotfiles, "claude", "absent.md"),
 			Excerpt:    "Always open a draft PR before requesting review.",
 		}
-		if _, err := verifyFixture(t, placement(absent)); err == nil {
+		if _, err := verifyFixture(t, escalation(absent)); err == nil {
 			t.Fatal("want fail-closed error, got nil")
 		}
 	})
 
 	t.Run("rule newer than every cited session removes the finding", func(t *testing.T) {
-		out, err := verifyGlobal(placement(existingRule), v2Bundles(), withDotfiles, v2GeneratedAt, stubRuleDate(t, "2026-07-01"))
+		out, err := verifyGlobal(escalation(existingRule), v2Bundles(), withDotfiles, v2GeneratedAt, stubRuleDate(t, "2026-07-01"))
 		if err != nil {
 			t.Fatalf("verify: %v", err)
 		}
@@ -563,7 +609,7 @@ func TestVerify2_PlacementRecency(t *testing.T) {
 	})
 
 	t.Run("a cited session postdating the rule keeps it", func(t *testing.T) {
-		out, err := verifyGlobal(placement(existingRule), v2Bundles(), withDotfiles, v2GeneratedAt, stubRuleDate(t, "2026-05-01"))
+		out, err := verifyGlobal(escalation(existingRule), v2Bundles(), withDotfiles, v2GeneratedAt, stubRuleDate(t, "2026-05-01"))
 		if err != nil {
 			t.Fatalf("verify: %v", err)
 		}
@@ -573,13 +619,13 @@ func TestVerify2_PlacementRecency(t *testing.T) {
 		if len(out.Meta.ValidationNotes) != 0 {
 			t.Errorf("validation_notes = %v, want none", out.Meta.ValidationNotes)
 		}
-		if want := ActedKey("placement_fix", true, out.Findings[0].Statement); out.Findings[0].ActedKey != want {
+		if want := ActedKey("repo_doc", true, out.Findings[0].Statement); out.Findings[0].ActedKey != want {
 			t.Errorf("acted_key = %q, want escalation-scoped %q", out.Findings[0].ActedKey, want)
 		}
 	})
 
 	t.Run("no dotfiles repo skips the recency check", func(t *testing.T) {
-		out, err := verifyGlobal(placement(existingRule), v2Bundles(), v2Config(), v2GeneratedAt, stubRuleDate(t, "2026-07-01"))
+		out, err := verifyGlobal(escalation(existingRule), v2Bundles(), v2Config(), v2GeneratedAt, stubRuleDate(t, "2026-07-01"))
 		if err != nil {
 			t.Fatalf("verify: %v", err)
 		}
@@ -593,7 +639,7 @@ func TestVerify2_PlacementRecency(t *testing.T) {
 
 	t.Run("undatable rule keeps the finding with a note", func(t *testing.T) {
 		undatable := func(string) (time.Time, bool) { return time.Time{}, false }
-		out, err := verifyGlobal(placement(existingRule), v2Bundles(), withDotfiles, v2GeneratedAt, undatable)
+		out, err := verifyGlobal(escalation(existingRule), v2Bundles(), withDotfiles, v2GeneratedAt, undatable)
 		if err != nil {
 			t.Fatalf("verify: %v", err)
 		}
@@ -606,7 +652,7 @@ func TestVerify2_PlacementRecency(t *testing.T) {
 	})
 
 	t.Run("removal compacts the remaining ranks", func(t *testing.T) {
-		stale := typedFinding("placement_fix", "alpha/P1", "alpha/F2")
+		stale := typedFinding("repo_doc", "alpha/P1", "alpha/F2")
 		stale.Rank = 1
 		stale.EscalatedFrom = existingRule
 		survivor := v2Finding()
@@ -678,7 +724,7 @@ func TestVerify2_PathNormalization(t *testing.T) {
 	ruleLine := "Write scratch files under " + home + "/scratch."
 	rulePath := writeHomeFile(t, home, "dotfiles/claude/CLAUDE.md", ruleLine+"\n")
 
-	f := typedFinding("placement_fix", "alpha/P1", "alpha/F2")
+	f := typedFinding("repo_doc", "alpha/P1", "alpha/F2")
 	f.Asset.Target = filepath.Join(home, "Developer", "alpha", "CLAUDE.md")
 	f.AlreadyAdopted = insights.AdoptedJSON{
 		Verdict: "yes", SourcePath: filepath.Join(home, ".claude", "absent.md"), Excerpt: "not there",
@@ -779,7 +825,7 @@ func TestVerify2_DoesNotMutateRaw(t *testing.T) {
 	t.Setenv("HOME", home)
 	rulePath := writeHomeFile(t, home, "dotfiles/CLAUDE.md", "Open a draft PR before requesting review.\n")
 
-	f := typedFinding("placement_fix", "alpha/P1", "alpha/F2")
+	f := typedFinding("repo_doc", "alpha/P1", "alpha/F2")
 	f.Asset.Target = filepath.Join(home, "Developer", "alpha", "CLAUDE.md")
 	f.Quotes = []string{"a quote nobody in the evidence ever said"}
 	f.EscalatedFrom = &insights.EscalatedFromJSON{
@@ -831,8 +877,8 @@ func TestVerify2_EscalatedFromCompleteness(t *testing.T) {
 	t.Setenv("HOME", home)
 	rulePath := writeHomeFile(t, home, "dotfiles/CLAUDE.md", "Open a draft PR before requesting review.\n")
 
-	placement := func(from insights.EscalatedFromJSON) insights.RawGlobalSynthesis {
-		f := typedFinding("placement_fix", "alpha/P1", "alpha/F2")
+	escalated := func(from insights.EscalatedFromJSON) insights.RawGlobalSynthesis {
+		f := typedFinding("repo_doc", "alpha/P1", "alpha/F2")
 		f.EscalatedFrom = &from
 		return v2Raw(f)
 	}
@@ -840,8 +886,8 @@ func TestVerify2_EscalatedFromCompleteness(t *testing.T) {
 		name string
 		raw  insights.RawGlobalSynthesis
 	}{
-		{"empty excerpt", placement(insights.EscalatedFromJSON{SourcePath: rulePath})},
-		{"empty source path", placement(insights.EscalatedFromJSON{Excerpt: "Open a draft PR before requesting review."})},
+		{"empty excerpt", escalated(insights.EscalatedFromJSON{SourcePath: rulePath})},
+		{"empty source path", escalated(insights.EscalatedFromJSON{Excerpt: "Open a draft PR before requesting review."})},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

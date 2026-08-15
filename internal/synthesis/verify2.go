@@ -168,8 +168,13 @@ var groundingKinds = map[string]string{
 	"setting":        "FG",
 	"new_skill":      "GP",
 	"habit":          "FS",
-	"placement_fix":  "PF",
 }
+
+// escalationGroundingKinds overrides the type's row for any finding carrying
+// escalated_from: an escalation is evidenced by the existing rule being
+// violated or re-stated (P*/F*), never by mechanical signals — whatever rung
+// its fix sits on.
+const escalationGroundingKinds = "PF"
 
 // retypingSignalKinds are the only signals a new_skill may cite: the skill
 // ladder reserves its most expensive rung for a retyped ritual.
@@ -196,7 +201,7 @@ func (v *verifier) finding(i int, rf insights.RawFinding) (f insights.FindingJSO
 	}
 	v.checkAsset(where, rf.Asset)
 	v.checkCitations(where, rf.EvidenceIDs)
-	v.checkGrounding(where, rf.Asset.Type, rf.EvidenceIDs)
+	v.checkGrounding(where, rf.Asset.Type, rf.EscalatedFrom != nil, rf.EvidenceIDs)
 	v.checkAudience(where, rf.Asset.Type, rf.Audience)
 	v.checkNoNumbers(where, map[string]string{
 		"title": rf.Title, "statement": rf.Statement, "rank_rationale": rf.RankRationale,
@@ -234,33 +239,36 @@ func (v *verifier) normalizePaths(f *insights.FindingJSON) {
 	}
 }
 
-// checkEscalation verifies a placement_fix's escalated_from — the existing
-// rule must be real and quoted verbatim — and then arbitrates recency, which
-// the model is forbidden to judge because it never sees session dates. keep is
-// false when the rule postdates every cited violation: it never had a chance
-// to work, so escalating it is premature.
+// checkEscalation verifies an escalated finding's escalated_from — the
+// existing rule must be real and quoted verbatim — and then arbitrates
+// recency, which the model is forbidden to judge because it never sees
+// session dates. A finding without escalated_from is not an escalation and is
+// skipped. keep is false when the rule postdates every cited violation: it
+// never had a chance to work, so escalating it is premature.
 func (v *verifier) checkEscalation(where string, f *insights.FindingJSON) (keep bool) {
-	if f.Asset.Type != "placement_fix" {
-		return true
-	}
 	from := f.EscalatedFrom
 	if from == nil {
-		v.fail(where + " placement_fix is missing escalated_from")
+		return true
+	}
+	if f.Asset.Type == "habit" {
+		// An escalation's asset is a concrete enforcement or placement change;
+		// a habit has no asset to carry one.
+		v.fail(where + " habit cannot carry escalated_from")
 		return true
 	}
 	if from.SourcePath == "" || from.Excerpt == "" {
 		// An empty excerpt is "in" every file, so this must fail before the
 		// verbatim check rather than downgrade the way an adopted verdict does:
 		// an unevidenced escalation is the fail-closed class.
-		v.fail(where + " placement_fix escalated_from is missing source_path or excerpt")
+		v.fail(where + " escalated_from is missing source_path or excerpt")
 		return true
 	}
 	switch found, err := excerptInFile(from.SourcePath, from.Excerpt, v.home); {
 	case err != nil:
-		v.fail(fmt.Sprintf("%s placement_fix escalated_from is unverifiable: cannot read %s", where, v.tilde(from.SourcePath)))
+		v.fail(fmt.Sprintf("%s escalated_from is unverifiable: cannot read %s", where, v.tilde(from.SourcePath)))
 		return true
 	case !found:
-		v.fail(fmt.Sprintf("%s placement_fix escalated_from excerpt is not verbatim in %s", where, v.tilde(from.SourcePath)))
+		v.fail(fmt.Sprintf("%s escalated_from excerpt is not verbatim in %s", where, v.tilde(from.SourcePath)))
 		return true
 	}
 
@@ -487,11 +495,14 @@ func (v *verifier) checkCitations(where string, ids []string) {
 // checkGrounding enforces the skill's grounding table. Dangling ids are
 // skipped here — checkCitations already failed the run over them, and a second
 // reason for the same id adds noise, not information.
-func (v *verifier) checkGrounding(where, assetType string, ids []string) {
+func (v *verifier) checkGrounding(where, assetType string, escalated bool, ids []string) {
 	allowed, ok := groundingKinds[assetType]
 	if !ok {
 		v.fail(fmt.Sprintf("%s has unknown asset type %q", where, v.modelText(assetType)))
 		return
+	}
+	if escalated {
+		allowed = escalationGroundingKinds
 	}
 	for _, id := range ids {
 		item, known := v.items[id]

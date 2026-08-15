@@ -81,8 +81,8 @@ func TestGlobalSynthesisJSONRoundTrip(t *testing.T) {
 	}
 }
 
-// TestGlobalFindingOmitsEscalatedFromWhenNil guards the placement_fix-only
-// escalated_from field: every other asset.type must not emit the key at all.
+// TestGlobalFindingOmitsEscalatedFromWhenNil guards escalated_from's
+// omitempty: a finding that escalates nothing must not emit the key at all.
 func TestGlobalFindingOmitsEscalatedFromWhenNil(t *testing.T) {
 	f := FindingJSON{
 		Asset:          AssetJSON{Type: "habit"},

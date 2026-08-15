@@ -36,23 +36,24 @@ type RepoStatsJSON struct {
 // only for asset.type "habit", whose deliverable is its statement rather than
 // a file, skill, or setting.
 type AssetJSON struct {
-	Type    string `json:"type"`              // claude_md_rule|repo_doc|new_skill|hook|setting|habit|placement_fix
+	Type    string `json:"type"`              // claude_md_rule|repo_doc|new_skill|hook|setting|habit
 	Target  string `json:"target,omitempty"`  // empty allowed for habit
 	Content string `json:"content,omitempty"` // empty allowed for habit
 }
 
 // AdoptedJSON records whether the proposed asset already exists at its
-// target. For a placement_fix, this is about the fix itself, not the
-// pre-existing rule being escalated — that lives in EscalatedFromJSON.
+// target. For an escalated finding this is about the fix itself, not the
+// pre-existing rule being escalated — that one lives in EscalatedFromJSON.
 type AdoptedJSON struct {
 	Verdict    string `json:"verdict"` // yes|no|unknown
 	SourcePath string `json:"source_path,omitempty"`
 	Excerpt    string `json:"excerpt,omitempty"`
 }
 
-// EscalatedFromJSON cites the existing rule a placement_fix escalates.
+// EscalatedFromJSON cites the existing rule an escalated finding
+// strengthens; its presence is what marks a finding as an escalation.
 // Recency (has a cited violation happened since this rule was written) is
-// arbitrated by Go, never the model — see the verifier (Task 5).
+// arbitrated by Go, never the model — see the verifier.
 type EscalatedFromJSON struct {
 	SourcePath string `json:"source_path"`
 	Excerpt    string `json:"excerpt"`
@@ -72,7 +73,7 @@ type FindingJSON struct {
 	EvidenceIDs    []string           `json:"evidence_ids"`       // "repo/F3" form
 	Quotes         []string           `json:"quotes,omitempty"`   // ≤3
 	AlreadyAdopted AdoptedJSON        `json:"already_adopted"`
-	EscalatedFrom  *EscalatedFromJSON `json:"escalated_from,omitempty"` // placement_fix only
+	EscalatedFrom  *EscalatedFromJSON `json:"escalated_from,omitempty"` // set iff the finding escalates an existing rule; never on habit
 	// Go-owned:
 	Repos        []string `json:"repos"`
 	SessionCount int      `json:"session_count"`
