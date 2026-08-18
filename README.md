@@ -30,7 +30,7 @@ analysis pool (~/.config/agent-insights/analyses) — outlives the ~30d transcri
    │  [Go]  citation + grounding verification → quote guard → recount → rank →
    │        adopted/escalation checks → path normalization → privacy scan
    ▼
-GlobalSynthesis snapshot (schema_version 2; one JSON source of truth per run)
+GlobalSynthesis snapshot (schema_version 3; one JSON source of truth per run)
 ```
 
 Full design write-up: [`evals/insights-pipeline-strategy.md`](evals/insights-pipeline-strategy.md).
